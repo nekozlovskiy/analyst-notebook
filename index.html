@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тетрадь аналитика — курс подготовки к Junior Data Analyst</title>
+<meta name="description" content="Интерактивный курс подготовки к позиции Junior Data Analyst и Product Analyst: SQL, Python, статистика, продуктовые метрики.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+
+<script>
+/* тема ставится до первой отрисовки, чтобы страница не мигала */
+(function () {
+  try {
+    var s = JSON.parse(localStorage.getItem("da.state.v1") || "{}");
+    document.documentElement.setAttribute("data-theme", (s.theme && s.theme.v) || "light");
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "light");
+  }
+})();
+</script>
+</head>
+
+<body>
+<div id="app"></div>
+
+<script src="lessons.js"></script>
+<script src="content-core.js"></script>
+<script src="content-m1.js"></script>
+<script src="content-m2.js"></script>
+<script src="content-m3.js"></script>
+<script src="content-m4.js"></script>
+<script src="content-m5.js"></script>
+<script src="content-m6.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

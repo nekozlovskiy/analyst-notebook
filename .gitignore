@@ -1,0 +1,7 @@
+# Локальные настройки Claude Code — у каждого свои
+.claude/settings.local.json
+
+# Служебное
+__pycache__/
+*.pyc
+.DS_Store
