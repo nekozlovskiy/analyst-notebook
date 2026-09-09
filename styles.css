@@ -304,14 +304,20 @@ button:disabled { cursor: not-allowed; }
 }
 
 @media (min-width: 1400px) {
-  .hero-in.has-margin { position: relative; }
-  .hero-in.has-margin > .aside {
+  .hero-in.has-margin,
+  .market.has-margin { position: relative; }
+  .hero-in.has-margin > .aside,
+  .market.has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
     margin: 0; padding-left: 0; border-left: 0;
     text-align: right;
   }
+  /* Обложка сама является обёрткой, а блок со статистикой лежит
+     внутри неё, поэтому его левый край сдвинут на отступ обёртки.
+     Компенсируем, иначе две реплики стоят на разной вертикали. */
+  .market.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
 }
 
 /* Маркер. Ставится только на то, что спрашивают на собеседовании:

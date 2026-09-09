@@ -618,7 +618,9 @@ function renderHome(app) {
   /* ---------- на чём построена программа ---------- */
   const mk = Course.data.market;
   const lead = mk[0], rest = mk.slice(1);
-  let mkHtml = '<section class="market rise"><h2>На чём построена программа</h2>' +
+  let mkHtml = '<section class="market rise has-margin">' +
+    '<div class="aside"><p>цифры из вакансий, а не из моей головы</p></div>' +
+    "<h2>На чём построена программа</h2>" +
     '<p class="note">Частота требований в вакансиях Junior Data Analyst и Product Analyst ' +
     "по данным hh.ru и Habr Career за сентябрь 2026. Навыки, которые встречаются реже 10 процентов, " +
     "в курс не входят.</p>" +
@@ -979,7 +981,8 @@ function renderLesson(app, id) {
   /* ---------- тренажёр ---------- */
   let drillsHtml = "";
   if (hasDrills) {
-    drillsHtml = '<section class="block rise" id="s-drills">' +
+    drillsHtml = '<section class="block rise has-margin" id="s-drills">' +
+      (L.sayDrills ? '<div class="aside"><p>' + esc(L.sayDrills) + "</p></div>" : "") +
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
       "Ещё " + C.drills.length + " " + plural(C.drills.length, "задача", "задачи", "задач") +
@@ -1066,7 +1069,8 @@ function renderLesson(app, id) {
       '<div class="theory">' + C.theory + "</div>" +
     "</section>" +
 
-    '<section class="block rise" id="s-task">' +
+    '<section class="block rise has-margin" id="s-task">' +
+      (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
       '<div class="block-h"><h2>Основная задача</h2></div>' +
 
       '<div class="ticket">' +
