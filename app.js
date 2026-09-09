@@ -281,7 +281,7 @@ const Progress = {
         return;
       }
       const added = Store.merge(data);
-      Router.render();
+      Router.render(true);
       const total = Course.doneCount(Course.flat);
       Progress.toast(added
         ? "Прогресс перенесён: добавилось " + added + " " +
@@ -302,7 +302,7 @@ const Progress = {
     if (!confirm("Начать курс заново? Прогресс, весь написанный код и заметки будут удалены.")) return;
     Store.replace(null);
     Router.go("#");
-    Router.render();
+    Router.render(true);
   },
 
   openMenu: function () {
@@ -1556,14 +1556,34 @@ function renderLesson(app, id) {
 
 const Router = {
   cleanup: [],
+  current: null,          /* какой урок сейчас отрисован (null — главная) */
 
   go: function (hash) {
     const h = hash || "#";
-    if (location.hash === h) Router.render();
+    if (location.hash === h) Router.render(true);
     else location.hash = h;
   },
 
-  render: function () {
+  /* force — перерисовать, даже если адрес не менялся (например, после
+     переноса прогресса, когда поменялись отметки о пройденном).      */
+  render: function (force) {
+    const id = location.hash.replace(/^#\/?/, "").trim();
+    const lesson = id ? Course.byId(id) : null;
+
+    /* Хэш — не только адрес урока. Навигация по секциям внутри урока
+       (#s-task, #s-quiz) работает обычными якорями, и такой переход
+       перерисовывать нельзя: браузер уже прокрутил куда надо, а полная
+       перерисовка вместо этого показала бы «урок ещё не открыт».
+       Отличаем по наличию элемента с таким id на странице.          */
+    if (!force && id && !lesson && document.getElementById(id)) return;
+
+    /* Возврат к адресу урока, который и так открыт (например, кнопкой
+       «назад» после перехода по якорю), — просто подъём наверх.      */
+    if (!force && lesson && Router.current === id) {
+      window.scrollTo(0, 0);
+      return;
+    }
+
     Router.cleanup.forEach(function (f) { try { f(); } catch (e) {} });
     Router.cleanup = [];
 
@@ -1573,10 +1593,10 @@ const Router = {
     const app = document.getElementById("app");
     app.innerHTML = "";
 
-    const id = location.hash.replace(/^#\/?/, "").trim();
     if (id) renderLesson(app, id);
     else renderHome(app);
 
+    Router.current = lesson ? id : null;
     window.scrollTo(0, 0);
   }
 };
@@ -1592,7 +1612,7 @@ document.addEventListener("DOMContentLoaded", function () {
   Theme.init();
   acceptDroppedProgress();
   Router.render();
-  window.addEventListener("hashchange", Router.render);
+  window.addEventListener("hashchange", function () { Router.render(); });
 });
 
 })();
