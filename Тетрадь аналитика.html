@@ -1399,19 +1399,23 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 @media (max-width: 520px) {
   .links { grid-template-columns: 1fr; }
-  /* срок модуля уходит на свою строку под названием, а не распирает её */
-  .toc-mh { flex-wrap: wrap; }
-  /* отступ внутренний: с внешним строка на всю ширину плюс 40px
-     оказывалась длиннее ряда и распирала страницу */
-  .toc-mw { flex-basis: 100%; margin-left: 0; padding-left: 40px; }
+  /* Оглавление на телефоне — сеткой: номер в своей колонке, название
+     переносится внутри своей, срок модуля и вид практики — строкой ниже.
+     С переносом флекса элементы разлетались по строкам как попало. */
+  .toc-mh { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 14px; }
+  .toc-mw { grid-column: 2; margin: 4px 0 0; }
   /* у кнопки темы остаётся значок, подпись читает экранный диктор */
   .hdr #themeBtn { padding: 0; width: 36px; justify-content: center; }
   .hdr #themeBtn .bl {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap;
   }
+  .toc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; column-gap: 10px; }
+  .toc-n  { grid-row: 1; grid-column: 1; }
+  .toc-tt { grid-row: 1; grid-column: 2; }
+  .toc-c  { grid-row: 1; grid-column: 3; }
+  .toc-k  { grid-row: 2; grid-column: 2; margin-top: 2px; font-size: 12.5px; }
   .toc-lead { display: none; }
-  .toc-line { flex-wrap: wrap; }
   .hero h1 { font-size: 32px; }
   .hero p.lede { font-size: 18px; }
 }
@@ -59931,8 +59935,11 @@ const Stats = {
     const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak(), today = Stats.today();
     const time = mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
                            : hrs + " " + plural(hrs, "час", "часа", "часов");
+    /* время упоминаем, только если оно есть: после переноса прогресса
+       без времени «0 минут за курсом» звучало бы как упрёк */
     const head = done
-      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total + " и " + time + " за курсом."
+      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total +
+        (mins ? " и " + time + " за курсом." : ".")
       : mins ? time + " за курсом, первый урок вот-вот." : "Первый урок ещё впереди.";
     const run =
       today && streak >= 2 ? streak + " " + plural(streak, "день", "дня", "дней") + " подряд — не сбавляйте."

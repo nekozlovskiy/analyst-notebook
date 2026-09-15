@@ -1369,19 +1369,23 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 @media (max-width: 520px) {
   .links { grid-template-columns: 1fr; }
-  /* срок модуля уходит на свою строку под названием, а не распирает её */
-  .toc-mh { flex-wrap: wrap; }
-  /* отступ внутренний: с внешним строка на всю ширину плюс 40px
-     оказывалась длиннее ряда и распирала страницу */
-  .toc-mw { flex-basis: 100%; margin-left: 0; padding-left: 40px; }
+  /* Оглавление на телефоне — сеткой: номер в своей колонке, название
+     переносится внутри своей, срок модуля и вид практики — строкой ниже.
+     С переносом флекса элементы разлетались по строкам как попало. */
+  .toc-mh { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 14px; }
+  .toc-mw { grid-column: 2; margin: 4px 0 0; }
   /* у кнопки темы остаётся значок, подпись читает экранный диктор */
   .hdr #themeBtn { padding: 0; width: 36px; justify-content: center; }
   .hdr #themeBtn .bl {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap;
   }
+  .toc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; column-gap: 10px; }
+  .toc-n  { grid-row: 1; grid-column: 1; }
+  .toc-tt { grid-row: 1; grid-column: 2; }
+  .toc-c  { grid-row: 1; grid-column: 3; }
+  .toc-k  { grid-row: 2; grid-column: 2; margin-top: 2px; font-size: 12.5px; }
   .toc-lead { display: none; }
-  .toc-line { flex-wrap: wrap; }
   .hero h1 { font-size: 32px; }
   .hero p.lede { font-size: 18px; }
 }

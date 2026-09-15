@@ -526,8 +526,11 @@ const Stats = {
     const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak(), today = Stats.today();
     const time = mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
                            : hrs + " " + plural(hrs, "час", "часа", "часов");
+    /* время упоминаем, только если оно есть: после переноса прогресса
+       без времени «0 минут за курсом» звучало бы как упрёк */
     const head = done
-      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total + " и " + time + " за курсом."
+      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total +
+        (mins ? " и " + time + " за курсом." : ".")
       : mins ? time + " за курсом, первый урок вот-вот." : "Первый урок ещё впереди.";
     const run =
       today && streak >= 2 ? streak + " " + plural(streak, "день", "дня", "дней") + " подряд — не сбавляйте."
