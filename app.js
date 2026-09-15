@@ -284,7 +284,7 @@ const Theme = {
     const b = $("#themeBtn");
     if (b) {
       b.innerHTML = (t === "dark" ? ICON.sun : ICON.moon) +
-        "<span>" + (t === "dark" ? "Светлая" : "Тёмная") + "</span>";
+        '<span class="bl">' + (t === "dark" ? "Светлая" : "Тёмная") + "</span>";
       b.setAttribute("aria-label", "Переключить на " + (t === "dark" ? "светлую" : "тёмную") + " тему");
       b.setAttribute("title", "Переключить тему");
     }
@@ -446,11 +446,11 @@ function mountHeader(crumbHtml) {
   const hdr = el("header", { class: "hdr" });
   hdr.innerHTML =
     '<div class="hdr-in">' +
-      '<a class="brand" href="#"><span class="mark">DA</span><span>Тетрадь аналитика</span></a>' +
+      '<a class="brand" href="#"><span class="mark">' + ICON.mark + '</span><span>Тетрадь аналитика</span></a>' +
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
       '<button class="iconbtn" id="progBtn" type="button" title="Прогресс курса">' +
-        '<span class="mono">' + done + " / " + total + "</span></button>" +
+        '<span class="pb-n">' + done + " из " + total + "</span></button>" +
       '<button class="iconbtn" id="themeBtn" type="button">Тёмная</button>' +
     "</div>" +
     '<div class="hdr-bar" id="hdrBar"></div>';
@@ -478,8 +478,8 @@ function mountHeader(crumbHtml) {
 function refreshBar() {
   const bar = $("#hdrBar");
   if (bar) bar.style.width = Math.round(Course.doneCount(Course.flat) / Course.flat.length * 100) + "%";
-  const pb = $("#progBtn .mono");
-  if (pb) pb.textContent = Course.doneCount(Course.flat) + " / " + Course.flat.length;
+  const pb = $("#progBtn .pb-n");
+  if (pb) pb.textContent = Course.doneCount(Course.flat) + " из " + Course.flat.length;
 }
 
 Store.onChange(function () {
@@ -491,62 +491,6 @@ Store.onChange(function () {
    Главная: карта курса
    ============================================================ */
 
-/* Появление блоков при прокрутке. Смысл движения — показать, что
-   страница длинная и содержимое идёт порциями.
-
-   Намеренно не IntersectionObserver: при переходе по якорю блок
-   перескакивает из-под экрана наверх, не пересекая границу, и
-   наблюдатель молчит — контент остаётся невидимым навсегда.
-   Проверка по координате такого состояния не допускает.
-   При prefers-reduced-motion всё показывается сразу.              */
-function revealOnScroll(root) {
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let pending = Array.prototype.slice.call((root || document).querySelectorAll(".rise"));
-
-  if (reduce) {
-    pending.forEach(function (n) { n.classList.add("in"); });
-    return;
-  }
-  pending.forEach(function (n, i) { n.style.transitionDelay = Math.min(i, 3) * 55 + "ms"; });
-
-  let ticking = false;
-  function sweep() {
-    ticking = false;
-    const line = window.innerHeight * 0.94;
-    pending = pending.filter(function (n) {
-      if (n.getBoundingClientRect().top > line) return true;
-      n.classList.add("in");
-      return false;
-    });
-    if (!pending.length) stop();
-  }
-  function onScroll() {
-    if (!ticking) { ticking = true; requestAnimationFrame(sweep); }
-  }
-  function stop() {
-    window.removeEventListener("scroll", onScroll);
-    window.removeEventListener("resize", onScroll);
-  }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", onScroll);
-  sweep();
-  Router.cleanup.push(stop);
-}
-
-/* Счётчик, который добегает до значения. Движение здесь несёт смысл:
-   число — это прогресс, и он должен читаться как накопленный. */
-function countUp(node, to, suffix) {
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || to <= 0) { node.textContent = to + (suffix || ""); return; }
-  const dur = Math.min(900, 260 + to * 22);
-  const t0 = performance.now();
-  (function step(t) {
-    const k = Math.min(1, (t - t0) / dur);
-    const eased = 1 - Math.pow(1 - k, 3);
-    node.textContent = Math.round(to * eased) + (suffix || "");
-    if (k < 1) requestAnimationFrame(step);
-  })(t0);
-}
 
 /* ============================================================
    Ваш путь: где остановились, сколько времени, серия дней
@@ -571,6 +515,54 @@ const Stats = {
     while (active(d) && n < 3650) { n++; d = addDays(d, -1); }
     return n;
   },
+  today: function () { return ((Store.all().days || {})[isoDay()] || 0) >= 60; },
+
+  /* Фраза наставника о том, как идут дела. Серия считается со вчера,
+     если сегодня ещё не садились, — поэтому «сегодня» и «вчера»
+     различаем отдельно, иначе фраза соврёт. */
+  phrase: function () {
+    const done = Course.doneCount(Course.flat), total = Course.flat.length;
+    if (done === total) return "Все " + total + " уроков пройдены. Дальше — повторение и собеседования.";
+    const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak(), today = Stats.today();
+    const time = mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
+                           : hrs + " " + plural(hrs, "час", "часа", "часов");
+    const head = done
+      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total + " и " + time + " за курсом."
+      : mins ? time + " за курсом, первый урок вот-вот." : "Первый урок ещё впереди.";
+    const run =
+      today && streak >= 2 ? streak + " " + plural(streak, "день", "дня", "дней") + " подряд — не сбавляйте."
+      : today ? "Сегодня уже занимались — хорошее начало серии."
+      : streak >= 2 ? "Серия — " + streak + " " + plural(streak, "день", "дня", "дней") + ", сегодня её легко продолжить."
+      : streak === 1 ? "Вчера занимались — сегодня самое время продолжить."
+      : "Сегодня хороший день, чтобы продолжить.";
+    return head + " " + run;
+  },
+
+  /* Календарь занятий: двенадцать недель точками, по неделе в столбце,
+     понедельник сверху. Размер точки — сколько занимались в тот день. */
+  calendar: function () {
+    const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+                    "августа", "сентября", "октября", "ноября", "декабря"];
+    const days = Store.all().days || {}, today = isoDay();
+    const wd = (fromIso(today).getDay() + 6) % 7;           /* 0 — понедельник */
+    const start = addDays(today, -(7 * 11 + wd));
+    let h = '<div class="cal" role="img" aria-label="Календарь занятий за двенадцать недель">';
+    for (let w = 0; w < 12; w++) {
+      h += '<span class="cal-w">';
+      for (let d = 0; d < 7; d++) {
+        const day = addDays(start, w * 7 + d);
+        if (day > today) { h += '<i class="cal-d none"></i>'; continue; }
+        const sec = days[day] || 0, dt = fromIso(day);
+        const lvl = sec >= 3600 ? 3 : sec >= 1200 ? 2 : sec >= 60 ? 1 : 0;
+        const tip = dt.getDate() + " " + MONTHS[dt.getMonth()] +
+          (sec >= 60 ? ", " + Math.round(sec / 60) + " мин" : "");
+        h += '<i class="cal-d l' + lvl + (day === today ? " today" : "") + '" title="' + tip + '"></i>';
+      }
+      h += "</span>";
+    }
+    return h + "</div>";
+  },
+
   /* Куда вернуться: к последнему открытому уроку, если он не пройден,
      иначе к следующему непройденному. Новичку карточка не нужна. */
   resume: function () {
@@ -731,7 +723,6 @@ function renderHome(app) {
   mountHeader("");
 
   const done = Course.doneCount(Course.flat);
-  const total = Course.flat.length;
 
   /* обложка: каждая клетка — урок */
   let mapHtml = "";
@@ -741,7 +732,7 @@ function renderHome(app) {
       const cls = "cell" + (d ? " done" : "") + (l.ready ? "" : " locked");
       const title = l.num + " " + l.title + (l.ready ? (d ? ", пройден" : "") : ", скоро");
       return l.ready
-        ? '<a class="' + cls + '" href="#' + l.id + '" title="' + esc(title) + '"></a>'
+        ? '<a class="' + cls + '" href="#' + l.id + '" title="' + esc(title) + '">' + (d ? penTick(l.id) : "") + "</a>"
         : '<span class="' + cls + '" title="' + esc(title) + '"></span>';
     }).join("");
     mapHtml += '<div class="map-mod"><div class="map-mod-h">' + m.num + ". " + esc(m.title) +
@@ -762,28 +753,12 @@ function renderHome(app) {
       "</a>"
     : "";
 
-  /* Пока занятий не было, цифры рассказывают о курсе. Как только они
-     начались — о человеке: сколько сделано, сколько времени отдано
-     и сколько дней подряд. */
-  function stat(n, label, suffix) {
-    return '<div><div class="st-n" data-count="' + n + '"' +
-      (suffix ? ' data-suffix="' + suffix + '"' : "") + ">0</div>" +
-      '<div class="st-l">' + label + "</div></div>";
-  }
-  let statsHtml = stat(done, plural(done, "урок пройден", "урока пройдено", "уроков пройдено"));
-  if (Stats.started()) {
-    const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak();
-    statsHtml +=
-      (mins < 60
-        ? stat(mins, plural(mins, "минута", "минуты", "минут") + " за курсом")
-        : stat(hrs, plural(hrs, "час", "часа", "часов") + " за курсом")) +
-      stat(streak, plural(streak, "день подряд", "дня подряд", "дней подряд"));
-  } else {
-    statsHtml +=
-      stat(Course.ready.length, plural(Course.ready.length, "урок открыт", "урока открыто", "уроков открыто") +
-        " из " + total) +
-      stat(2, "на один урок", " ч");
-  }
+  /* Как дела — не рядом цифр с подписями, а фразой наставника и календарём
+     занятий: смысл тот же, но это разговор, а не панель показателей.
+     Новичку это не нужно — о курсе уже сказано выше. */
+  const paceHtml = Stats.started()
+    ? '<div class="pace"><p class="pace-say">' + esc(Stats.phrase()) + "</p>" + Stats.calendar() + "</div>"
+    : "";
 
   const hero = el("section", { class: "hero" });
   hero.innerHTML =
@@ -795,7 +770,7 @@ function renderHome(app) {
         "заканчивается задачей, которую вы решаете прямо в браузере.</p>" +
       resumeHtml +
       '<div class="map">' + mapHtml + "</div>" +
-      '<div class="hero-stats">' + statsHtml + "</div>" +
+      paceHtml +
       /* Пустой курс — единственный момент, когда перенос вообще уместен:
          дальше эта строка только мешала бы. */
       (done === 0
@@ -812,9 +787,6 @@ function renderHome(app) {
   const carry = $("#carryBtn", hero);
   if (carry) carry.addEventListener("click", Progress.load);
 
-  Array.prototype.forEach.call(hero.querySelectorAll(".st-n"), function (n) {
-    countUp(n, +n.dataset.count, n.dataset.suffix || "");
-  });
 
   const main = el("main", { class: "wrap" });
 
@@ -822,67 +794,48 @@ function renderHome(app) {
   const review = Review.section();
   if (review) main.appendChild(review);
 
-  /* ---------- программа: модули карточками ---------- */
-  const mods = el("section", { class: "modules" });
-  mods.innerHTML = '<div class="sec-title">Программа курса</div><div class="mod-grid" id="modGrid"></div>';
-  const grid = $("#modGrid", mods);
-
+  /* ---------- программа: оглавление тетради ---------- */
+  /* Не карточки, а оглавление: номер, название, отточие, вид практики
+     и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
+  const toc = el("section", { class: "toc" });
+  let tocHtml = '<div class="sec-title">Оглавление</div>';
   Course.data.modules.forEach(function (m) {
-    const d = Course.doneCount(m.lessons);
-    const t = m.lessons.length;
-    const dflt = d < t && m.lessons.some(function (l) { return l.ready; });
-    const openState = Store.get("seen", "open-" + m.id, dflt) ? "1" : "0";
-
-    const node = el("article", { class: "mod rise" });
-    node.setAttribute("open-state", openState);
-
-    let lessons = "";
+    const d = Course.doneCount(m.lessons), t = m.lessons.length;
+    tocHtml +=
+      '<section class="toc-mod">' +
+        '<header class="toc-mh">' +
+          '<span class="toc-mn">' + m.num + "</span>" +
+          '<h3 class="toc-mt">' + esc(m.title) + "</h3>" +
+          '<span class="toc-mw">' + (d === t ? "пройден" : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
+        "</header>" +
+        '<p class="toc-ms">' + esc(m.sub) + "</p>" +
+        (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
+        '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
       const isDone = Course.isDone(l.id);
-      const inner =
-        '<span class="les-n">' + l.num + "</span>" +
-        '<span class="les-t">' + esc(l.title) + "</span>" +
-        '<span class="les-d">' + esc(l.desc) + "</span>" +
-        '<span class="les-tail">' +
-          '<span class="tag ' + l.kind + '">' + (l.kind === "text" ? "разбор" : l.kind) + "</span>" +
-          (isDone ? '<span class="tick" title="пройден">&#10003;</span>' : "") +
-        "</span>";
-      lessons += l.ready
-        ? '<a class="les" href="#' + l.id + '">' + inner + "</a>"
-        : '<div class="les soon">' + inner + "</div>";
-    });
-
-    node.innerHTML =
-      '<button class="mod-head" type="button" aria-expanded="' + (openState === "1") + '">' +
-        '<span class="mod-top">' +
-          '<span class="mod-num">' + m.num + "</span>" +
-          '<span class="mod-weeks">' + esc(m.weeks) + "</span>" +
-          '<span class="chev">' + ICON.arrow + "</span>" +
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const row =
+        '<span class="toc-line">' +
+          '<span class="toc-n">' + l.num + "</span>" +
+          '<span class="toc-tt">' + esc(l.title) + "</span>" +
+          '<span class="toc-lead" aria-hidden="true"></span>' +
+          '<span class="toc-k">' + kind + "</span>" +
+          '<span class="toc-c">' + (isDone ? penTick(l.id) + '<span class="sr">пройден</span>' : "") + "</span>" +
         "</span>" +
-        '<span class="mod-title">' + esc(m.title) + "</span>" +
-        '<span class="mod-sub">' + esc(m.sub) + "</span>" +
-        (m.say ? '<span class="mod-say">' + esc(m.say) + "</span>" : "") +
-        '<span class="mod-foot">' +
-          '<span class="mod-track"><i data-fill="' + (t ? d / t * 100 : 0) + '"></i></span>' +
-          '<span class="mod-count">' + d + " / " + t + "</span>" +
-        "</span>" +
-      "</button>" +
-      '<div class="mod-body">' + lessons + "</div>";
-
-    $(".mod-head", node).addEventListener("click", function () {
-      const now = node.getAttribute("open-state") === "1" ? "0" : "1";
-      node.setAttribute("open-state", now);
-      this.setAttribute("aria-expanded", now === "1");
-      Store.set("seen", "open-" + m.id, now === "1");
+        '<span class="toc-d">' + esc(l.desc) + "</span>";
+      tocHtml += "<li>" + (l.ready
+        ? '<a class="toc-l' + (isDone ? " done" : "") + '" href="#' + l.id + '">' + row + "</a>"
+        : '<span class="toc-l soon">' + row + "</span>") + "</li>";
     });
-    grid.appendChild(node);
+    tocHtml += "</ol></section>";
   });
-  main.appendChild(mods);
+  toc.innerHTML = tocHtml;
+  main.appendChild(toc);
 
   /* ---------- на чём построена программа ---------- */
   const mk = Course.data.market;
   const lead = mk[0], rest = mk.slice(1);
-  let mkHtml = '<section class="market rise has-margin">' +
+  let mkHtml = '<section class="market has-margin">' +
     '<div class="aside"><p>цифры из вакансий, а не из моей головы</p></div>' +
     "<h2>На чём построена программа</h2>" +
     '<p class="note">Частота требований в вакансиях Junior Data Analyst и Product Analyst ' +
@@ -913,13 +866,6 @@ function renderHome(app) {
   app.appendChild(main);
   $("#footProg").addEventListener("click", Progress.openMenu);
 
-  revealOnScroll(app);
-  /* полоски прогресса модулей заполняются после появления карточек */
-  setTimeout(function () {
-    Array.prototype.forEach.call(document.querySelectorAll(".mod-track i"), function (i) {
-      i.style.width = i.dataset.fill + "%";
-    });
-  }, 120);
 }
 
 /* ============================================================
@@ -1162,6 +1108,10 @@ function modal(title, html) {
    ============================================================ */
 
 const ICON = {
+  /* знак в шапке — та же тетрадная клетка с галочкой, что в иконке вкладки */
+  mark:  '<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="mk-p" x="3" y="3" width="58" height="58" rx="13" stroke-width="3"/>' +
+         '<path class="mk-m" d="M20 10v44" stroke-width="3.5" stroke-linecap="round"/>' +
+         '<path class="mk-k" d="M27 34.5l7.5 7.5L50 22" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   play:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
   bulb:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
@@ -1173,6 +1123,21 @@ const ICON = {
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>'
 };
+
+/* Галочка ручкой. Каждая чуть своя: наклон, размах и начало штриха
+   выводятся из id урока, поэтому от перерисовки к перерисовке одна и та
+   же галочка не «пляшет». pathLength="1" нужен, чтобы её можно было
+   дорисовать анимацией в момент решения задачи. */
+function penTick(key, cls) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const rot = (h % 17) - 8;
+  const sx = (0.92 + (h % 7) * 0.025).toFixed(3);
+  const y0 = (12.2 + ((h >> 4) % 4) * 0.35).toFixed(2);
+  return '<svg class="pen-tick' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true" ' +
+    'style="transform:rotate(' + rot + "deg) scaleX(" + sx + ')">' +
+    '<path pathLength="1" d="M3.5 ' + y0 + ' C5.6 13.8 7.3 16.1 8.9 18.6 C12.1 12.3 15.9 7.5 21 4"/></svg>';
+}
 
 /* план по умолчанию, если урок не задал свой */
 function defaultPlan(C) {
@@ -1279,7 +1244,7 @@ function renderLesson(app, id) {
   /* ---------- тренажёр ---------- */
   let drillsHtml = "";
   if (hasDrills) {
-    drillsHtml = '<section class="block rise has-margin" id="s-drills">' +
+    drillsHtml = '<section class="block has-margin" id="s-drills">' +
       (L.sayDrills ? '<div class="aside"><p>' + esc(L.sayDrills) + "</p></div>" : "") +
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
@@ -1311,7 +1276,7 @@ function renderLesson(app, id) {
   /* ---------- самопроверка ---------- */
   let quizHtml = "";
   if (hasQuiz) {
-    quizHtml = '<section class="block rise" id="s-quiz">' +
+    quizHtml = '<section class="block" id="s-quiz">' +
       '<div class="block-h"><h2>Самопроверка</h2></div>' +
       '<p class="block-intro">Отвечайте не глядя в теорию. Разбор откроется сразу после ответа, ' +
       "а завтра эти вопросы вернутся на главную — повторить.</p>" +
@@ -1335,7 +1300,7 @@ function renderLesson(app, id) {
   /* ---------- ссылки ---------- */
   let linksHtml = "";
   if (hasLinks) {
-    linksHtml = '<section class="block rise" id="s-links">' +
+    linksHtml = '<section class="block" id="s-links">' +
       '<div class="block-h"><h2>Что почитать дальше</h2></div>' +
       '<p class="block-intro">Материалы открываются в новой вкладке. Помеченные EN на английском: ' +
       "читать документацию по-английски аналитику всё равно придётся, лучше начать сейчас.</p>" +
@@ -1355,7 +1320,7 @@ function renderLesson(app, id) {
     '<header class="lesson-head has-margin">' +
       (L.say ? '<div class="aside"><p>' + esc(L.say) + "</p></div>" : "") +
       '<div class="kicker"><span>Урок ' + L.num + ", " + esc(kindLabel) + "</span>" +
-        '<button class="timer" id="timer" type="button" title="Клик ставит таймер на паузу">0:00</button></div>' +
+        '<button class="timer" id="timer" type="button" title="Время урока считается само и видно на главной. Клик — пауза">время идёт</button></div>' +
       "<h1>" + esc(L.title) + "</h1>" +
       '<p class="sub">' + esc(C.intro || L.desc) + "</p>" +
       planHtml +
@@ -1363,12 +1328,12 @@ function renderLesson(app, id) {
 
     navHtml +
 
-    '<section class="block rise" id="s-theory">' +
+    '<section class="block" id="s-theory">' +
       '<div class="block-h"><h2>Теория</h2></div>' +
       '<div class="theory">' + C.theory + "</div>" +
     "</section>" +
 
-    '<section class="block rise has-margin" id="s-task">' +
+    '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
       '<div class="block-h"><h2>Основная задача</h2></div>' +
 
@@ -1394,10 +1359,12 @@ function renderLesson(app, id) {
 
       '<div class="actions">' +
         (isText ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
-          "Запустить код<span class=\"k\">Cmd+Enter</span></button>") +
+          "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
         '<button class="btn check" id="checkBtn" type="button">' + ICON.check + "Проверить</button>" +
-        '<button class="btn" id="hintBtn" type="button">' + ICON.bulb + "Подсказка</button>" +
-        '<button class="btn" id="solBtn" type="button" disabled>' + ICON.key + "Решение</button>" +
+        '<button class="btn" id="hintBtn" type="button" aria-label="Подсказка">' + ICON.bulb +
+          '<span class="bl">Подсказка</span></button>' +
+        '<button class="btn" id="solBtn" type="button" aria-label="Решение" disabled>' + ICON.key +
+          '<span class="bl">Решение</span></button>' +
       "</div>" +
 
       '<div class="status" id="status"></div>' +
@@ -1418,7 +1385,7 @@ function renderLesson(app, id) {
 
     drillsHtml + quizHtml + linksHtml +
 
-    '<section class="block rise" id="s-notes">' +
+    '<section class="block" id="s-notes">' +
       '<div class="block-h"><h2>Мои заметки</h2></div>' +
       '<div class="notes-wrap">' +
         '<textarea class="notes" id="notes" placeholder="Что было непонятно, на чём споткнулась, что спросить у наставника..."></textarea>' +
@@ -1430,7 +1397,6 @@ function renderLesson(app, id) {
 
   app.appendChild(main);
 
-  revealOnScroll(main);
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   (function () {
@@ -1510,12 +1476,15 @@ function renderLesson(app, id) {
   }
 
   /* ---------- статус и индикатор загрузки ---------- */
-  function setStatus(kind, title, body) {
+  function setStatus(kind, title, body, drawn) {
     const s = $("#status");
-    const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+    /* галочку ручкой наставник ставит только в момент решения задачи —
+       это единственное движение на странице урока */
+    const ico = drawn ? penTick(id, "draw")
+      : kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
     s.className = "status show " + kind;
-    s.innerHTML = '<span class="s-ico">' + ico + '</span><span class="s-body"><b>' + esc(title) + "</b>" +
-                  (body ? "<br>" + body : "") + "</span>";
+    s.innerHTML = '<span class="s-ico' + (drawn ? " s-pen" : "") + '">' + ico + "</span>" +
+                  '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
   }
   function clearStatus() { $("#status").className = "status"; }
   function loader(on, txt) {
@@ -1683,7 +1652,7 @@ function renderLesson(app, id) {
       ? '<br><span style="color:var(--amber)">Браузер не сохраняет прогресс — выгрузите его ' +
         "в файл кнопкой вверху, иначе результат пропадёт.</span>" : "";
     setStatus("ok", "Задание выполнено", (extra || "") + remind +
-      '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>');
+      '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>', true);
     const nb = $("#nextBtn");
     if (nb) nb.addEventListener("click", function () {
       const n = Course.neighbour(id, 1);
@@ -1838,20 +1807,22 @@ function renderLesson(app, id) {
     let day = isoDay(), daySecs = Store.get("days", day, 0);
     let running = true;
     const btn = $("#timer");
-    function fmt(s) { return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
-    btn.textContent = fmt(secs);
     const tick = setInterval(function () {
       if (!running || document.hidden) return;
-      secs += 1; btn.textContent = fmt(secs);
+      secs += 1;
       const d = isoDay();
       if (d !== day) { Store.set("days", day, daySecs); day = d; daySecs = Store.get("days", day, 0); }
       daySecs += 1;
       if (secs % 10 === 0) { Store.set("time", id, secs); Store.set("days", day, daySecs); }
     }, 1000);
+    /* Секундомер на экране давит, поэтому времени не видно: оно считается
+       само и показывается на главной. Пауза — если отошли от открытого урока. */
     btn.addEventListener("click", function () {
       running = !running;
       btn.classList.toggle("paused", !running);
-      btn.title = running ? "Клик — пауза" : "На паузе. Клик — продолжить";
+      btn.textContent = running ? "время идёт" : "на паузе";
+      btn.title = running ? "Время урока считается само и видно на главной. Клик — пауза"
+                          : "Время не считается. Клик — продолжить";
     });
     Router.cleanup.push(function () {
       clearInterval(tick);

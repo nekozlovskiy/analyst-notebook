@@ -199,6 +199,9 @@ code, kbd, pre, .mono {
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
+/* текст только для экранного диктора */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 ::selection { background: var(--pen-soft); color: var(--ink); }
 
 .io-body, .modal, .theory pre, .drill-body {
@@ -208,13 +211,6 @@ button:disabled { cursor: not-allowed; }
 
 /* ---------- появление блоков при скролле (motion 5) ---------- */
 
-.rise {
-  opacity: 0;
-  transform: translateY(14px);
-  transition: opacity .5s var(--ease-spring), transform .5s var(--ease-spring);
-  will-change: opacity, transform;
-}
-.rise.in { opacity: 1; transform: none; }
 
 /* ============================================================
    3. Шапка
@@ -240,14 +236,13 @@ button:disabled { cursor: not-allowed; }
   letter-spacing: -0.015em;
 }
 .brand:hover { text-decoration: none; }
-.brand .mark {
-  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
-  color: var(--pen); border: 1px solid var(--pen-line);
-  background: var(--pen-soft);
-  border-radius: var(--r); padding: 3px 6px; letter-spacing: .04em;
-  transition: border-color .2s var(--ease);
-}
-.brand:hover .mark { border-color: var(--pen); }
+/* знак — та же тетрадная клетка с галочкой, что в иконке вкладки */
+.brand .mark { display: inline-flex; width: 24px; height: 24px; flex: none; }
+.brand .mark svg { width: 24px; height: 24px; }
+.mk-p { fill: var(--card); stroke: var(--rule-hard); }
+.mk-m { fill: none; stroke: var(--pen-line); }
+.mk-k { fill: none; stroke: var(--pen); }
+.pb-n { font-variant-numeric: tabular-nums; }
 .crumbs {
   font-size: 13.5px; color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -276,17 +271,20 @@ button:disabled { cursor: not-allowed; }
               background-color .2s var(--ease), transform .12s var(--ease);
 }
 .iconbtn:hover { border-color: var(--ink-3); color: var(--ink); background: var(--paper-2); }
+/* кнопки шапки не сжимаются уже своего текста — иначе подпись вылезает */
+.hdr .iconbtn { flex: none; }
 .iconbtn:active { transform: translateY(1px); }
 .iconbtn svg { width: 15px; height: 15px; }
 
+/* Тихий таймер: без секунд на экране — время считается само
+   и видно на главной. Точка показывает, идёт ли учёт. */
 .timer {
-  font-family: var(--mono); font-size: 12.5px; color: var(--ink-3);
-  border: 1px solid var(--rule); border-radius: var(--r);
-  padding: 3px 8px; background: transparent;
-  display: inline-flex; align-items: center; gap: 6px;
-  transition: color .2s var(--ease), border-color .2s var(--ease);
+  font: inherit; font-size: 13px; color: var(--ink-3);
+  border: 0; padding: 0; background: transparent;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: color .2s var(--ease);
 }
-.timer:hover { color: var(--ink-2); border-color: var(--ink-4); }
+.timer:hover { color: var(--ink-2); }
 .timer.paused { opacity: .5; }
 /* точка несёт состояние таймера: идёт или на паузе */
 .timer::before {
@@ -402,31 +400,52 @@ button:disabled { cursor: not-allowed; }
 }
 .map-cells { display: flex; gap: 4px; }
 .cell {
+  position: relative; display: block; padding: 0;
   width: 19px; height: 19px; border-radius: var(--r);
-  border: 1px solid var(--rule-hard);
-  background: color-mix(in srgb, var(--card) 55%, transparent);
-  display: block; padding: 0;
-  transition: background-color .18s var(--ease), border-color .18s var(--ease),
-              transform .18s var(--ease-spring);
+  border: 1.5px solid var(--rule-hard); background: var(--card);
+  transition: border-color .18s var(--ease), background-color .18s var(--ease);
 }
-.cell:hover { border-color: var(--pen); background: var(--pen-soft); transform: translateY(-3px); }
-.cell.done { background: var(--pen); border-color: var(--pen); }
-.cell.done:hover { background: var(--pen-2); }
+.cell:hover { border-color: var(--pen); background: var(--pen-soft); }
+.cell.done { border-color: var(--pen-line); }
+/* галочка чуть вылезает за клетку — так её и ставят ручкой */
+.cell .pen-tick { position: absolute; left: -2px; top: -7px; width: 25px; height: 25px; }
 .cell.locked {
   border-style: dashed; border-color: var(--ink-4);
   opacity: .45; cursor: default; background: transparent;
 }
-.cell.locked:hover { background: transparent; transform: none; border-color: var(--ink-4); }
+.cell.locked:hover { background: transparent; border-color: var(--ink-4); }
 
-.hero-stats {
-  margin-top: 34px; display: flex; gap: 40px; flex-wrap: wrap;
+/* Галочка ручкой наставника — на карте, в оглавлении и в момент решения. */
+.pen-tick {
+  display: block; overflow: visible; fill: none;
+  stroke: var(--pen); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  transform-origin: 45% 70%;
 }
-.hero-stats .st-n {
-  font-size: 30px; font-weight: 600; letter-spacing: -0.03em;
-  color: var(--ink); line-height: 1.1;
-  font-variant-numeric: tabular-nums;
+.pen-tick path { stroke-dasharray: 1; stroke-dashoffset: 0; }
+/* единственное движение урока: галочка дорисовывается, когда задача решена */
+.pen-tick.draw path { animation: pen-draw .6s .08s var(--ease) both; }
+@keyframes pen-draw { from { stroke-dashoffset: 1; } }
+
+/* Как дела — фразой наставника и календарём занятий, а не рядом цифр. */
+.pace { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 22px 44px; }
+.pace-say {
+  margin: 0; flex: 1 1 300px; max-width: 520px;
+  font-family: var(--hand); font-size: 26px; line-height: 1.22; color: var(--pen);
 }
-.hero-stats .st-l { font-size: 13.5px; color: var(--ink-3); margin-top: 3px; }
+/* двенадцать недель точками: неделя — столбец, понедельник сверху,
+   размер точки — сколько занимались в тот день */
+.cal { display: flex; gap: 4px; flex: none; }
+.cal-w { display: flex; flex-direction: column; gap: 4px; }
+.cal-d { width: 11px; height: 11px; display: grid; place-items: center; border-radius: 50%; }
+.cal-d::before { content: ""; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+.cal-d.l1::before { width: 5px; height: 5px; background: var(--pen); }
+.cal-d.l2::before { width: 8px; height: 8px; background: var(--pen); }
+.cal-d.l3::before { width: 11px; height: 11px; background: var(--pen); }
+.cal-d.none::before { background: transparent; }
+.cal-d.today { box-shadow: 0 0 0 1.5px var(--pen-line); }
+
+/* рукописные строки переносятся ровно, без одинокого слова в конце */
+.pace-say, .toc-say, .aside p { text-wrap: balance; }
 
 /* Предложение перенести прогресс — только на пустом курсе. Тон
    спокойный: это подсказка, а не предупреждение. */
@@ -487,10 +506,8 @@ button:disabled { cursor: not-allowed; }
 }
 
 /* ============================================================
-   6. Главная — программа модулей (карточки)
+   6. Главная — оглавление
    ============================================================ */
-
-.modules { padding: 44px 0 20px; }
 
 .sec-title {
   font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
@@ -499,89 +516,38 @@ button:disabled { cursor: not-allowed; }
 }
 .sec-title::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 
-.mod-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-
-.mod {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  background: var(--card); overflow: hidden;
-  transition: border-color .2s var(--ease), box-shadow .2s var(--ease),
-              transform .2s var(--ease-spring);
-}
-.mod:hover { border-color: var(--rule-hard); box-shadow: var(--shadow-2); transform: translateY(-2px); }
-.mod[open-state="1"] { grid-column: 1 / -1; transform: none; }
-
-.mod-head {
-  display: block; width: 100%; text-align: left;
-  background: none; border: 0; padding: 20px 22px; margin: 0;
-  font: inherit; color: inherit;
-}
-.mod-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.mod-num {
-  font-family: var(--mono); font-size: 12px; color: var(--pen);
-  background: var(--pen-soft); border: 1px solid var(--pen-line);
-  border-radius: var(--r); padding: 2px 7px;
-}
-.mod-weeks { font-size: 12.5px; color: var(--ink-3); margin-left: auto; }
-.chev { color: var(--ink-3); transition: transform .22s var(--ease); display: inline-flex; }
-.mod[open-state="1"] .chev { transform: rotate(90deg); }
-
-.mod-title {
-  font-family: var(--serif);
-  font-size: 20px; font-weight: 700; letter-spacing: -0.016em;
-  display: block; margin-bottom: 6px;
-  transition: color .2s var(--ease);
-}
-.mod-head:hover .mod-title { color: var(--pen); }
-.mod-sub { font-size: 14.5px; color: var(--ink-2); line-height: 1.5; display: block; }
-.mod-say {
-  display: block; margin-top: 11px;
-  font-family: var(--hand); font-size: 19px; line-height: 1.25;
+/* Программа — не набор карточек, а оглавление тетради: номер, название,
+   отточие, вид практики и галочка ручкой у пройденных. */
+.toc { padding: 44px 0 20px; }
+.toc-mod { padding: 26px 0 10px; border-top: 1px solid var(--rule-soft); }
+.toc .sec-title + .toc-mod { border-top: 0; padding-top: 0; }
+.toc-mh { display: flex; align-items: baseline; gap: 14px; }
+.toc-mn {
+  flex: none; min-width: 26px;
+  font-family: var(--serif); font-size: 30px; font-weight: 700; line-height: 1;
   color: var(--pen);
 }
+.toc-mt { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.014em; }
+.toc-mw { margin-left: auto; flex: none; font-size: 13.5px; color: var(--ink-3); }
+.toc-ms, .toc-say { margin: 6px 0 0 40px; max-width: 62ch; }
+.toc-ms { font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.toc-say { font-family: var(--hand); font-size: 20px; line-height: 1.2; color: var(--pen); }
 
-.mod-foot {
-  display: flex; align-items: center; gap: 12px; margin-top: 16px;
-  font-size: 13px; color: var(--ink-3);
-}
-.mod-track {
-  flex: 1; height: 4px; background: var(--rule-soft);
-  border-radius: var(--r); overflow: hidden;
-}
-.mod-track i {
-  display: block; height: 100%; background: var(--pen);
-  border-radius: var(--r); width: 0;
-  transition: width .8s var(--ease);
-}
-.mod-count { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
-
-.mod-body { display: none; padding: 0 22px 14px; }
-.mod[open-state="1"] .mod-body { display: block; }
-
-.les {
-  display: flex; align-items: baseline; gap: 14px;
-  padding: 11px 12px; border-radius: var(--r);
-  color: var(--ink); text-decoration: none;
-  border-top: 1px solid var(--rule-soft);
-  transition: background-color .18s var(--ease), transform .18s var(--ease-spring);
-}
-.les:hover { text-decoration: none; background: var(--pen-soft); transform: translateX(3px); }
-.les-n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); min-width: 36px; }
-.les-t { font-weight: 500; font-size: 15.5px; }
-.les-d { color: var(--ink-2); font-size: 14px; }
-.les-tail { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.les.soon { color: var(--ink-3); cursor: default; pointer-events: none; }
-.les.soon .les-t { font-weight: 400; }
-
-.tick { color: var(--green); font-weight: 700; font-size: 13px; }
-
-.tag {
-  font-family: var(--mono); font-size: 10.5px; padding: 2px 6px;
-  border-radius: var(--r); border: 1px solid var(--rule); color: var(--ink-3);
-  letter-spacing: .03em;
-}
-.tag.sql    { color: var(--pen);   border-color: var(--pen-line);   background: var(--pen-soft); }
-.tag.python { color: var(--pen);   border-color: var(--pen-line);   background: var(--pen-soft); }
-.tag.text   { color: var(--ink-3); }
+.toc-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.toc-l { display: block; padding: 8px 0; color: var(--ink); text-decoration: none; }
+.toc-l:hover { text-decoration: none; }
+.toc-line { display: flex; align-items: baseline; gap: 10px; }
+.toc-n { flex: none; min-width: 30px; font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.toc-tt { font-size: 16px; font-weight: 500; transition: color .15s var(--ease); }
+.toc-l:hover .toc-tt { color: var(--pen); }
+.toc-l.done .toc-tt { color: var(--ink-2); }
+/* отточие: пустой элемент стоит на базовой линии строки */
+.toc-lead { flex: 1 1 24px; min-width: 16px; border-bottom: 1.5px dotted var(--ink-4); transform: translateY(-4px); }
+.toc-k { flex: none; font-size: 13px; color: var(--ink-3); }
+.toc-c { flex: none; position: relative; width: 22px; align-self: stretch; }
+.toc-c .pen-tick { position: absolute; left: 0; top: -3px; width: 24px; height: 24px; }
+.toc-d { display: block; margin: 2px 0 0 40px; font-size: 13.5px; line-height: 1.45; color: var(--ink-3); }
+.toc-l.soon { color: var(--ink-3); cursor: default; }
 
 /* ============================================================
    7. Главная — на чём построена программа
@@ -602,7 +568,7 @@ button:disabled { cursor: not-allowed; }
 }
 .mk-hero { padding: 28px 30px; border-right: 1px solid var(--rule); }
 .mk-hero .pct {
-  font-size: 62px; font-weight: 600; color: var(--pen);
+  font-family: var(--serif); font-size: 62px; font-weight: 600; color: var(--pen);
   line-height: 1; letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
@@ -616,7 +582,7 @@ button:disabled { cursor: not-allowed; }
 }
 .mk-row:last-child { border-bottom: 0; }
 .mk-row .pct {
-  font-family: var(--mono); font-size: 15px; color: var(--pen);
+  font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--pen);
   min-width: 48px; font-variant-numeric: tabular-nums;
 }
 .mk-row .what { font-size: 14.5px; font-weight: 500; }
@@ -715,7 +681,25 @@ button:disabled { cursor: not-allowed; }
   line-height: 1.72;
   color: var(--ink);
 }
+/* В тексте — старостильные цифры, как в книге; в таблицах и коде —
+   ровные табличные, чтобы столбцы чисел читались. */
+.theory, .ticket-b, .drill-body, .d-say, .review-intro, .hero p.lede, .lesson-head .sub {
+  font-variant-numeric: oldstyle-nums proportional-nums;
+}
+.theory table, .ticket-b table, .theory pre, .theory code, .drill-body pre, .drill-body code {
+  font-variant-numeric: lining-nums tabular-nums;
+}
 .theory > * { max-width: var(--measure); }
+/* длинный идентификатор в тексте, тикете или тесте переносится,
+   а не растягивает страницу на узком экране; код в pre не трогаем */
+:not(pre) > code, .ticket-b, .q-t, .q-opt { overflow-wrap: anywhere; }
+/* длинная формула прокручивается сама, а не растягивает страницу */
+.theory mjx-container[display="true"] {
+  display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0;
+  /* MathJax задаёт контейнеру min-width прямо в style — без !important
+     формула не даёт себя сжать до ширины экрана */
+  min-width: 0 !important;
+}
 .theory > pre, .theory > table, .theory > .callout,
 .theory > .example, .theory > .cmp, .theory > figure { max-width: 100%; }
 
@@ -832,6 +816,9 @@ button:disabled { cursor: not-allowed; }
 
 /* сравнение «плохо / хорошо» */
 .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 22px; }
+/* без min-width: 0 элемент сетки не сжимается уже своего содержимого —
+   широкий код внутри растягивал страницу вместо собственной прокрутки */
+.cmp > div { min-width: 0; }
 .cmp > div {
   border: 1px solid var(--rule); border-radius: var(--r-lg);
   padding: 16px 18px; background: var(--card);
@@ -1027,6 +1014,8 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .status.ok   .s-ico { background: var(--green); }
 .status.bad  .s-ico { background: var(--red); }
 .status.warn .s-ico { background: var(--amber); }
+.status .s-ico.s-pen { background: none; width: 26px; height: 26px; margin-top: -4px; }
+.status .s-ico.s-pen .pen-tick { width: 26px; height: 26px; }
 [data-theme="dark"] .status .s-ico { color: #0E1218; }
 .status .s-body { color: var(--ink); }
 .status .s-body b { display: block; margin-bottom: 4px; }
@@ -1096,13 +1085,13 @@ table.res td.num { text-align: right; }
 .drill > summary::-webkit-details-marker { display: none; }
 .drill > summary::after {
   content: "+"; margin-left: auto; color: var(--ink-3);
-  font-family: var(--mono); font-size: 18px; line-height: 1;
+  font-family: var(--sans); font-size: 20px; line-height: 1;
   transition: transform .22s var(--ease); flex: none;
 }
 .drill[open] > summary::after { transform: rotate(45deg); }
 .drill > summary:hover { background: var(--paper-2); }
 .drill .d-n {
-  font-family: var(--mono); font-size: 12px; color: var(--pen);
+  font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--pen);
   flex: none; min-width: 26px;
 }
 .drill .d-lvl {
@@ -1158,7 +1147,7 @@ table.res td.num { text-align: right; }
   font-size: 16.5px; font-weight: 500; margin-bottom: 15px;
   display: flex; gap: 13px; align-items: baseline; line-height: 1.5;
 }
-.q-t .q-n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); flex: none; }
+.q-t .q-n { font-size: 12.5px; color: var(--ink-3); flex: none; font-variant-numeric: tabular-nums; }
 .q-t code {
   font-family: var(--mono); font-size: .86em; background: var(--paper-2);
   padding: 2px 5px; border-radius: var(--r);
@@ -1177,7 +1166,7 @@ table.res td.num { text-align: right; }
 .q-opt:hover:not(:disabled) { border-color: var(--pen-line); background: var(--pen-soft); }
 .q-opt:active:not(:disabled) { transform: translateY(1px); }
 .q-opt .mk {
-  font-family: var(--mono); font-size: 12.5px; color: var(--ink-2);
+  font-family: var(--serif); font-size: 14px; font-weight: 700; color: var(--ink-2);
   flex: none; width: 16px; padding-top: 2px;
 }
 .q-opt.right { border-color: var(--green); background: var(--green-soft); }
@@ -1213,19 +1202,15 @@ table.res td.num { text-align: right; }
   border: 1px solid var(--rule); border-radius: var(--r-lg);
   padding: 17px 19px; background: var(--card); color: var(--ink);
   text-decoration: none; display: block;
-  transition: border-color .18s var(--ease), transform .18s var(--ease-spring),
-              box-shadow .18s var(--ease);
+  transition: border-color .18s var(--ease);
 }
-.link-card:hover {
-  text-decoration: none; border-color: var(--pen-line);
-  transform: translateY(-3px); box-shadow: var(--shadow-2);
-}
+.link-card:hover { text-decoration: none; border-color: var(--pen-line); }
 .link-card .lk-src {
   font-size: 12.5px; color: var(--ink-3);
   margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
 }
 .link-card .lk-src .lang {
-  font-family: var(--mono); font-size: 10.5px;
+  font-size: 11px; font-weight: 600;
   border: 1px solid var(--rule); border-radius: var(--r); padding: 1px 5px;
 }
 .link-card .lk-t {
@@ -1366,7 +1351,6 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 @media (max-width: 1024px) {
   .cmp { grid-template-columns: 1fr; }
-  .mod-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 860px) {
@@ -1382,13 +1366,31 @@ textarea.notes::placeholder { color: var(--ink-3); }
   .crumbs { display: none; }
   .warnbar { padding: 10px 18px; }
   .hero-in { padding-block: 42px 32px; }
-  .hero-stats { gap: 26px; }
   .lesson-head { padding: 30px 0 22px; }
   .theory { font-size: 17px; }
+  /* широкие таблицы в тексте прокручиваются сами, а не растягивают страницу */
+  .theory table, .ticket-b table, .drill-body table {
+    display: block; max-width: 100%; overflow-x: auto;
+  }
   .block { padding: 38px 0 0; }
   .block-h h2 { font-size: 22px; }
-  .les { flex-wrap: wrap; }
   .actions .btn { flex: 1 1 auto; justify-content: center; }
+  /* на телефоне кнопки задачи не уезжают вверх вместе с редактором */
+  .actions {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -18px 18px; padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--rule);
+  }
+  .pace-say { font-size: 23px; }
+  /* прилипающая полоса — в одну строку: подсказка и решение иконками,
+     их имена держит aria-label */
+  .actions { flex-wrap: nowrap; gap: 6px; }
+  /* 375 − поля 36 = 339px на четыре кнопки: две с подписью, две иконкой */
+  .actions .btn { padding: 11px 9px; gap: 6px; font-size: 14px; min-width: 0; }
+  .actions .btn .k, .actions .btn .bl { display: none; }
+  .actions #hintBtn, .actions #solBtn { flex: none; width: 46px; padding: 11px 0; }
   .iconbtn.unsaved::after { content: "!"; }
   .plan-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .plan-item { border-right: 0; }
@@ -1397,8 +1399,42 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 @media (max-width: 520px) {
   .links { grid-template-columns: 1fr; }
+  /* срок модуля уходит на свою строку под названием, а не распирает её */
+  .toc-mh { flex-wrap: wrap; }
+  /* отступ внутренний: с внешним строка на всю ширину плюс 40px
+     оказывалась длиннее ряда и распирала страницу */
+  .toc-mw { flex-basis: 100%; margin-left: 0; padding-left: 40px; }
+  /* у кнопки темы остаётся значок, подпись читает экранный диктор */
+  .hdr #themeBtn { padding: 0; width: 36px; justify-content: center; }
+  .hdr #themeBtn .bl {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .toc-lead { display: none; }
+  .toc-line { flex-wrap: wrap; }
   .hero h1 { font-size: 32px; }
   .hero p.lede { font-size: 18px; }
+}
+
+/* Самые узкие телефоны (320px): подписи «Запустить» и «Проверить»
+   важнее значков — значки убираем, чтобы слова поместились. */
+@media (max-width: 360px) {
+  /* на самом узком экране от названия остаётся знак; надпись
+     прячется только визуально — ссылка на главную не теряет имени */
+  .brand > span:last-child {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .actions { gap: 4px; }
+  .actions .btn { font-size: 13.5px; padding: 11px 7px; }
+  .actions #runBtn svg, .actions #checkBtn svg { display: none; }
+  /* MathJax не переносит встроенные формулы: самой длинной даём свою
+     прокрутку, чтобы она не растягивала страницу. Только здесь — на
+     обычных экранах выравнивание формул по строке остаётся как было. */
+  .theory mjx-container:not([display="true"]) {
+    display: inline-block; max-width: 100%; overflow-x: auto; overflow-y: hidden;
+    vertical-align: middle;
+  }
 }
 
 /* ============================================================
@@ -1413,13 +1449,11 @@ textarea.notes::placeholder { color: var(--ink-3); }
   }
   html { scroll-behavior: auto; }
   .spin { animation-duration: 2.4s !important; }
-  .rise { opacity: 1; transform: none; }
 }
 
 @media print {
   .hdr, .secnav, .readbar, .actions, .lesson-nav, .toast, .warnbar { display: none !important; }
   body { background: #FFFFFF; font-size: 12pt; }
-  .rise { opacity: 1; transform: none; }
   .drill[open] .drill-body, .drill-body { display: block !important; }
   .block { page-break-inside: avoid; }
 }
@@ -59655,7 +59689,7 @@ const Theme = {
     const b = $("#themeBtn");
     if (b) {
       b.innerHTML = (t === "dark" ? ICON.sun : ICON.moon) +
-        "<span>" + (t === "dark" ? "Светлая" : "Тёмная") + "</span>";
+        '<span class="bl">' + (t === "dark" ? "Светлая" : "Тёмная") + "</span>";
       b.setAttribute("aria-label", "Переключить на " + (t === "dark" ? "светлую" : "тёмную") + " тему");
       b.setAttribute("title", "Переключить тему");
     }
@@ -59817,11 +59851,11 @@ function mountHeader(crumbHtml) {
   const hdr = el("header", { class: "hdr" });
   hdr.innerHTML =
     '<div class="hdr-in">' +
-      '<a class="brand" href="#"><span class="mark">DA</span><span>Тетрадь аналитика</span></a>' +
+      '<a class="brand" href="#"><span class="mark">' + ICON.mark + '</span><span>Тетрадь аналитика</span></a>' +
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
       '<button class="iconbtn" id="progBtn" type="button" title="Прогресс курса">' +
-        '<span class="mono">' + done + " / " + total + "</span></button>" +
+        '<span class="pb-n">' + done + " из " + total + "</span></button>" +
       '<button class="iconbtn" id="themeBtn" type="button">Тёмная</button>' +
     "</div>" +
     '<div class="hdr-bar" id="hdrBar"></div>';
@@ -59849,8 +59883,8 @@ function mountHeader(crumbHtml) {
 function refreshBar() {
   const bar = $("#hdrBar");
   if (bar) bar.style.width = Math.round(Course.doneCount(Course.flat) / Course.flat.length * 100) + "%";
-  const pb = $("#progBtn .mono");
-  if (pb) pb.textContent = Course.doneCount(Course.flat) + " / " + Course.flat.length;
+  const pb = $("#progBtn .pb-n");
+  if (pb) pb.textContent = Course.doneCount(Course.flat) + " из " + Course.flat.length;
 }
 
 Store.onChange(function () {
@@ -59862,62 +59896,6 @@ Store.onChange(function () {
    Главная: карта курса
    ============================================================ */
 
-/* Появление блоков при прокрутке. Смысл движения — показать, что
-   страница длинная и содержимое идёт порциями.
-
-   Намеренно не IntersectionObserver: при переходе по якорю блок
-   перескакивает из-под экрана наверх, не пересекая границу, и
-   наблюдатель молчит — контент остаётся невидимым навсегда.
-   Проверка по координате такого состояния не допускает.
-   При prefers-reduced-motion всё показывается сразу.              */
-function revealOnScroll(root) {
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let pending = Array.prototype.slice.call((root || document).querySelectorAll(".rise"));
-
-  if (reduce) {
-    pending.forEach(function (n) { n.classList.add("in"); });
-    return;
-  }
-  pending.forEach(function (n, i) { n.style.transitionDelay = Math.min(i, 3) * 55 + "ms"; });
-
-  let ticking = false;
-  function sweep() {
-    ticking = false;
-    const line = window.innerHeight * 0.94;
-    pending = pending.filter(function (n) {
-      if (n.getBoundingClientRect().top > line) return true;
-      n.classList.add("in");
-      return false;
-    });
-    if (!pending.length) stop();
-  }
-  function onScroll() {
-    if (!ticking) { ticking = true; requestAnimationFrame(sweep); }
-  }
-  function stop() {
-    window.removeEventListener("scroll", onScroll);
-    window.removeEventListener("resize", onScroll);
-  }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", onScroll);
-  sweep();
-  Router.cleanup.push(stop);
-}
-
-/* Счётчик, который добегает до значения. Движение здесь несёт смысл:
-   число — это прогресс, и он должен читаться как накопленный. */
-function countUp(node, to, suffix) {
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || to <= 0) { node.textContent = to + (suffix || ""); return; }
-  const dur = Math.min(900, 260 + to * 22);
-  const t0 = performance.now();
-  (function step(t) {
-    const k = Math.min(1, (t - t0) / dur);
-    const eased = 1 - Math.pow(1 - k, 3);
-    node.textContent = Math.round(to * eased) + (suffix || "");
-    if (k < 1) requestAnimationFrame(step);
-  })(t0);
-}
 
 /* ============================================================
    Ваш путь: где остановились, сколько времени, серия дней
@@ -59942,6 +59920,54 @@ const Stats = {
     while (active(d) && n < 3650) { n++; d = addDays(d, -1); }
     return n;
   },
+  today: function () { return ((Store.all().days || {})[isoDay()] || 0) >= 60; },
+
+  /* Фраза наставника о том, как идут дела. Серия считается со вчера,
+     если сегодня ещё не садились, — поэтому «сегодня» и «вчера»
+     различаем отдельно, иначе фраза соврёт. */
+  phrase: function () {
+    const done = Course.doneCount(Course.flat), total = Course.flat.length;
+    if (done === total) return "Все " + total + " уроков пройдены. Дальше — повторение и собеседования.";
+    const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak(), today = Stats.today();
+    const time = mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
+                           : hrs + " " + plural(hrs, "час", "часа", "часов");
+    const head = done
+      ? done + " " + plural(done, "урок", "урока", "уроков") + " из " + total + " и " + time + " за курсом."
+      : mins ? time + " за курсом, первый урок вот-вот." : "Первый урок ещё впереди.";
+    const run =
+      today && streak >= 2 ? streak + " " + plural(streak, "день", "дня", "дней") + " подряд — не сбавляйте."
+      : today ? "Сегодня уже занимались — хорошее начало серии."
+      : streak >= 2 ? "Серия — " + streak + " " + plural(streak, "день", "дня", "дней") + ", сегодня её легко продолжить."
+      : streak === 1 ? "Вчера занимались — сегодня самое время продолжить."
+      : "Сегодня хороший день, чтобы продолжить.";
+    return head + " " + run;
+  },
+
+  /* Календарь занятий: двенадцать недель точками, по неделе в столбце,
+     понедельник сверху. Размер точки — сколько занимались в тот день. */
+  calendar: function () {
+    const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+                    "августа", "сентября", "октября", "ноября", "декабря"];
+    const days = Store.all().days || {}, today = isoDay();
+    const wd = (fromIso(today).getDay() + 6) % 7;           /* 0 — понедельник */
+    const start = addDays(today, -(7 * 11 + wd));
+    let h = '<div class="cal" role="img" aria-label="Календарь занятий за двенадцать недель">';
+    for (let w = 0; w < 12; w++) {
+      h += '<span class="cal-w">';
+      for (let d = 0; d < 7; d++) {
+        const day = addDays(start, w * 7 + d);
+        if (day > today) { h += '<i class="cal-d none"></i>'; continue; }
+        const sec = days[day] || 0, dt = fromIso(day);
+        const lvl = sec >= 3600 ? 3 : sec >= 1200 ? 2 : sec >= 60 ? 1 : 0;
+        const tip = dt.getDate() + " " + MONTHS[dt.getMonth()] +
+          (sec >= 60 ? ", " + Math.round(sec / 60) + " мин" : "");
+        h += '<i class="cal-d l' + lvl + (day === today ? " today" : "") + '" title="' + tip + '"></i>';
+      }
+      h += "</span>";
+    }
+    return h + "</div>";
+  },
+
   /* Куда вернуться: к последнему открытому уроку, если он не пройден,
      иначе к следующему непройденному. Новичку карточка не нужна. */
   resume: function () {
@@ -60102,7 +60128,6 @@ function renderHome(app) {
   mountHeader("");
 
   const done = Course.doneCount(Course.flat);
-  const total = Course.flat.length;
 
   /* обложка: каждая клетка — урок */
   let mapHtml = "";
@@ -60112,7 +60137,7 @@ function renderHome(app) {
       const cls = "cell" + (d ? " done" : "") + (l.ready ? "" : " locked");
       const title = l.num + " " + l.title + (l.ready ? (d ? ", пройден" : "") : ", скоро");
       return l.ready
-        ? '<a class="' + cls + '" href="#' + l.id + '" title="' + esc(title) + '"></a>'
+        ? '<a class="' + cls + '" href="#' + l.id + '" title="' + esc(title) + '">' + (d ? penTick(l.id) : "") + "</a>"
         : '<span class="' + cls + '" title="' + esc(title) + '"></span>';
     }).join("");
     mapHtml += '<div class="map-mod"><div class="map-mod-h">' + m.num + ". " + esc(m.title) +
@@ -60133,28 +60158,12 @@ function renderHome(app) {
       "</a>"
     : "";
 
-  /* Пока занятий не было, цифры рассказывают о курсе. Как только они
-     начались — о человеке: сколько сделано, сколько времени отдано
-     и сколько дней подряд. */
-  function stat(n, label, suffix) {
-    return '<div><div class="st-n" data-count="' + n + '"' +
-      (suffix ? ' data-suffix="' + suffix + '"' : "") + ">0</div>" +
-      '<div class="st-l">' + label + "</div></div>";
-  }
-  let statsHtml = stat(done, plural(done, "урок пройден", "урока пройдено", "уроков пройдено"));
-  if (Stats.started()) {
-    const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak();
-    statsHtml +=
-      (mins < 60
-        ? stat(mins, plural(mins, "минута", "минуты", "минут") + " за курсом")
-        : stat(hrs, plural(hrs, "час", "часа", "часов") + " за курсом")) +
-      stat(streak, plural(streak, "день подряд", "дня подряд", "дней подряд"));
-  } else {
-    statsHtml +=
-      stat(Course.ready.length, plural(Course.ready.length, "урок открыт", "урока открыто", "уроков открыто") +
-        " из " + total) +
-      stat(2, "на один урок", " ч");
-  }
+  /* Как дела — не рядом цифр с подписями, а фразой наставника и календарём
+     занятий: смысл тот же, но это разговор, а не панель показателей.
+     Новичку это не нужно — о курсе уже сказано выше. */
+  const paceHtml = Stats.started()
+    ? '<div class="pace"><p class="pace-say">' + esc(Stats.phrase()) + "</p>" + Stats.calendar() + "</div>"
+    : "";
 
   const hero = el("section", { class: "hero" });
   hero.innerHTML =
@@ -60166,7 +60175,7 @@ function renderHome(app) {
         "заканчивается задачей, которую вы решаете прямо в браузере.</p>" +
       resumeHtml +
       '<div class="map">' + mapHtml + "</div>" +
-      '<div class="hero-stats">' + statsHtml + "</div>" +
+      paceHtml +
       /* Пустой курс — единственный момент, когда перенос вообще уместен:
          дальше эта строка только мешала бы. */
       (done === 0
@@ -60183,9 +60192,6 @@ function renderHome(app) {
   const carry = $("#carryBtn", hero);
   if (carry) carry.addEventListener("click", Progress.load);
 
-  Array.prototype.forEach.call(hero.querySelectorAll(".st-n"), function (n) {
-    countUp(n, +n.dataset.count, n.dataset.suffix || "");
-  });
 
   const main = el("main", { class: "wrap" });
 
@@ -60193,67 +60199,48 @@ function renderHome(app) {
   const review = Review.section();
   if (review) main.appendChild(review);
 
-  /* ---------- программа: модули карточками ---------- */
-  const mods = el("section", { class: "modules" });
-  mods.innerHTML = '<div class="sec-title">Программа курса</div><div class="mod-grid" id="modGrid"></div>';
-  const grid = $("#modGrid", mods);
-
+  /* ---------- программа: оглавление тетради ---------- */
+  /* Не карточки, а оглавление: номер, название, отточие, вид практики
+     и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
+  const toc = el("section", { class: "toc" });
+  let tocHtml = '<div class="sec-title">Оглавление</div>';
   Course.data.modules.forEach(function (m) {
-    const d = Course.doneCount(m.lessons);
-    const t = m.lessons.length;
-    const dflt = d < t && m.lessons.some(function (l) { return l.ready; });
-    const openState = Store.get("seen", "open-" + m.id, dflt) ? "1" : "0";
-
-    const node = el("article", { class: "mod rise" });
-    node.setAttribute("open-state", openState);
-
-    let lessons = "";
+    const d = Course.doneCount(m.lessons), t = m.lessons.length;
+    tocHtml +=
+      '<section class="toc-mod">' +
+        '<header class="toc-mh">' +
+          '<span class="toc-mn">' + m.num + "</span>" +
+          '<h3 class="toc-mt">' + esc(m.title) + "</h3>" +
+          '<span class="toc-mw">' + (d === t ? "пройден" : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
+        "</header>" +
+        '<p class="toc-ms">' + esc(m.sub) + "</p>" +
+        (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
+        '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
       const isDone = Course.isDone(l.id);
-      const inner =
-        '<span class="les-n">' + l.num + "</span>" +
-        '<span class="les-t">' + esc(l.title) + "</span>" +
-        '<span class="les-d">' + esc(l.desc) + "</span>" +
-        '<span class="les-tail">' +
-          '<span class="tag ' + l.kind + '">' + (l.kind === "text" ? "разбор" : l.kind) + "</span>" +
-          (isDone ? '<span class="tick" title="пройден">&#10003;</span>' : "") +
-        "</span>";
-      lessons += l.ready
-        ? '<a class="les" href="#' + l.id + '">' + inner + "</a>"
-        : '<div class="les soon">' + inner + "</div>";
-    });
-
-    node.innerHTML =
-      '<button class="mod-head" type="button" aria-expanded="' + (openState === "1") + '">' +
-        '<span class="mod-top">' +
-          '<span class="mod-num">' + m.num + "</span>" +
-          '<span class="mod-weeks">' + esc(m.weeks) + "</span>" +
-          '<span class="chev">' + ICON.arrow + "</span>" +
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const row =
+        '<span class="toc-line">' +
+          '<span class="toc-n">' + l.num + "</span>" +
+          '<span class="toc-tt">' + esc(l.title) + "</span>" +
+          '<span class="toc-lead" aria-hidden="true"></span>' +
+          '<span class="toc-k">' + kind + "</span>" +
+          '<span class="toc-c">' + (isDone ? penTick(l.id) + '<span class="sr">пройден</span>' : "") + "</span>" +
         "</span>" +
-        '<span class="mod-title">' + esc(m.title) + "</span>" +
-        '<span class="mod-sub">' + esc(m.sub) + "</span>" +
-        (m.say ? '<span class="mod-say">' + esc(m.say) + "</span>" : "") +
-        '<span class="mod-foot">' +
-          '<span class="mod-track"><i data-fill="' + (t ? d / t * 100 : 0) + '"></i></span>' +
-          '<span class="mod-count">' + d + " / " + t + "</span>" +
-        "</span>" +
-      "</button>" +
-      '<div class="mod-body">' + lessons + "</div>";
-
-    $(".mod-head", node).addEventListener("click", function () {
-      const now = node.getAttribute("open-state") === "1" ? "0" : "1";
-      node.setAttribute("open-state", now);
-      this.setAttribute("aria-expanded", now === "1");
-      Store.set("seen", "open-" + m.id, now === "1");
+        '<span class="toc-d">' + esc(l.desc) + "</span>";
+      tocHtml += "<li>" + (l.ready
+        ? '<a class="toc-l' + (isDone ? " done" : "") + '" href="#' + l.id + '">' + row + "</a>"
+        : '<span class="toc-l soon">' + row + "</span>") + "</li>";
     });
-    grid.appendChild(node);
+    tocHtml += "</ol></section>";
   });
-  main.appendChild(mods);
+  toc.innerHTML = tocHtml;
+  main.appendChild(toc);
 
   /* ---------- на чём построена программа ---------- */
   const mk = Course.data.market;
   const lead = mk[0], rest = mk.slice(1);
-  let mkHtml = '<section class="market rise has-margin">' +
+  let mkHtml = '<section class="market has-margin">' +
     '<div class="aside"><p>цифры из вакансий, а не из моей головы</p></div>' +
     "<h2>На чём построена программа</h2>" +
     '<p class="note">Частота требований в вакансиях Junior Data Analyst и Product Analyst ' +
@@ -60284,13 +60271,6 @@ function renderHome(app) {
   app.appendChild(main);
   $("#footProg").addEventListener("click", Progress.openMenu);
 
-  revealOnScroll(app);
-  /* полоски прогресса модулей заполняются после появления карточек */
-  setTimeout(function () {
-    Array.prototype.forEach.call(document.querySelectorAll(".mod-track i"), function (i) {
-      i.style.width = i.dataset.fill + "%";
-    });
-  }, 120);
 }
 
 /* ============================================================
@@ -60533,6 +60513,10 @@ function modal(title, html) {
    ============================================================ */
 
 const ICON = {
+  /* знак в шапке — та же тетрадная клетка с галочкой, что в иконке вкладки */
+  mark:  '<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="mk-p" x="3" y="3" width="58" height="58" rx="13" stroke-width="3"/>' +
+         '<path class="mk-m" d="M20 10v44" stroke-width="3.5" stroke-linecap="round"/>' +
+         '<path class="mk-k" d="M27 34.5l7.5 7.5L50 22" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   play:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
   bulb:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>',
@@ -60544,6 +60528,21 @@ const ICON = {
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>'
 };
+
+/* Галочка ручкой. Каждая чуть своя: наклон, размах и начало штриха
+   выводятся из id урока, поэтому от перерисовки к перерисовке одна и та
+   же галочка не «пляшет». pathLength="1" нужен, чтобы её можно было
+   дорисовать анимацией в момент решения задачи. */
+function penTick(key, cls) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const rot = (h % 17) - 8;
+  const sx = (0.92 + (h % 7) * 0.025).toFixed(3);
+  const y0 = (12.2 + ((h >> 4) % 4) * 0.35).toFixed(2);
+  return '<svg class="pen-tick' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true" ' +
+    'style="transform:rotate(' + rot + "deg) scaleX(" + sx + ')">' +
+    '<path pathLength="1" d="M3.5 ' + y0 + ' C5.6 13.8 7.3 16.1 8.9 18.6 C12.1 12.3 15.9 7.5 21 4"/></svg>';
+}
 
 /* план по умолчанию, если урок не задал свой */
 function defaultPlan(C) {
@@ -60650,7 +60649,7 @@ function renderLesson(app, id) {
   /* ---------- тренажёр ---------- */
   let drillsHtml = "";
   if (hasDrills) {
-    drillsHtml = '<section class="block rise has-margin" id="s-drills">' +
+    drillsHtml = '<section class="block has-margin" id="s-drills">' +
       (L.sayDrills ? '<div class="aside"><p>' + esc(L.sayDrills) + "</p></div>" : "") +
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
@@ -60682,7 +60681,7 @@ function renderLesson(app, id) {
   /* ---------- самопроверка ---------- */
   let quizHtml = "";
   if (hasQuiz) {
-    quizHtml = '<section class="block rise" id="s-quiz">' +
+    quizHtml = '<section class="block" id="s-quiz">' +
       '<div class="block-h"><h2>Самопроверка</h2></div>' +
       '<p class="block-intro">Отвечайте не глядя в теорию. Разбор откроется сразу после ответа, ' +
       "а завтра эти вопросы вернутся на главную — повторить.</p>" +
@@ -60706,7 +60705,7 @@ function renderLesson(app, id) {
   /* ---------- ссылки ---------- */
   let linksHtml = "";
   if (hasLinks) {
-    linksHtml = '<section class="block rise" id="s-links">' +
+    linksHtml = '<section class="block" id="s-links">' +
       '<div class="block-h"><h2>Что почитать дальше</h2></div>' +
       '<p class="block-intro">Материалы открываются в новой вкладке. Помеченные EN на английском: ' +
       "читать документацию по-английски аналитику всё равно придётся, лучше начать сейчас.</p>" +
@@ -60726,7 +60725,7 @@ function renderLesson(app, id) {
     '<header class="lesson-head has-margin">' +
       (L.say ? '<div class="aside"><p>' + esc(L.say) + "</p></div>" : "") +
       '<div class="kicker"><span>Урок ' + L.num + ", " + esc(kindLabel) + "</span>" +
-        '<button class="timer" id="timer" type="button" title="Клик ставит таймер на паузу">0:00</button></div>' +
+        '<button class="timer" id="timer" type="button" title="Время урока считается само и видно на главной. Клик — пауза">время идёт</button></div>' +
       "<h1>" + esc(L.title) + "</h1>" +
       '<p class="sub">' + esc(C.intro || L.desc) + "</p>" +
       planHtml +
@@ -60734,12 +60733,12 @@ function renderLesson(app, id) {
 
     navHtml +
 
-    '<section class="block rise" id="s-theory">' +
+    '<section class="block" id="s-theory">' +
       '<div class="block-h"><h2>Теория</h2></div>' +
       '<div class="theory">' + C.theory + "</div>" +
     "</section>" +
 
-    '<section class="block rise has-margin" id="s-task">' +
+    '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
       '<div class="block-h"><h2>Основная задача</h2></div>' +
 
@@ -60765,10 +60764,12 @@ function renderLesson(app, id) {
 
       '<div class="actions">' +
         (isText ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
-          "Запустить код<span class=\"k\">Cmd+Enter</span></button>") +
+          "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
         '<button class="btn check" id="checkBtn" type="button">' + ICON.check + "Проверить</button>" +
-        '<button class="btn" id="hintBtn" type="button">' + ICON.bulb + "Подсказка</button>" +
-        '<button class="btn" id="solBtn" type="button" disabled>' + ICON.key + "Решение</button>" +
+        '<button class="btn" id="hintBtn" type="button" aria-label="Подсказка">' + ICON.bulb +
+          '<span class="bl">Подсказка</span></button>' +
+        '<button class="btn" id="solBtn" type="button" aria-label="Решение" disabled>' + ICON.key +
+          '<span class="bl">Решение</span></button>' +
       "</div>" +
 
       '<div class="status" id="status"></div>' +
@@ -60789,7 +60790,7 @@ function renderLesson(app, id) {
 
     drillsHtml + quizHtml + linksHtml +
 
-    '<section class="block rise" id="s-notes">' +
+    '<section class="block" id="s-notes">' +
       '<div class="block-h"><h2>Мои заметки</h2></div>' +
       '<div class="notes-wrap">' +
         '<textarea class="notes" id="notes" placeholder="Что было непонятно, на чём споткнулась, что спросить у наставника..."></textarea>' +
@@ -60801,7 +60802,6 @@ function renderLesson(app, id) {
 
   app.appendChild(main);
 
-  revealOnScroll(main);
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   (function () {
@@ -60881,12 +60881,15 @@ function renderLesson(app, id) {
   }
 
   /* ---------- статус и индикатор загрузки ---------- */
-  function setStatus(kind, title, body) {
+  function setStatus(kind, title, body, drawn) {
     const s = $("#status");
-    const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+    /* галочку ручкой наставник ставит только в момент решения задачи —
+       это единственное движение на странице урока */
+    const ico = drawn ? penTick(id, "draw")
+      : kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
     s.className = "status show " + kind;
-    s.innerHTML = '<span class="s-ico">' + ico + '</span><span class="s-body"><b>' + esc(title) + "</b>" +
-                  (body ? "<br>" + body : "") + "</span>";
+    s.innerHTML = '<span class="s-ico' + (drawn ? " s-pen" : "") + '">' + ico + "</span>" +
+                  '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
   }
   function clearStatus() { $("#status").className = "status"; }
   function loader(on, txt) {
@@ -61054,7 +61057,7 @@ function renderLesson(app, id) {
       ? '<br><span style="color:var(--amber)">Браузер не сохраняет прогресс — выгрузите его ' +
         "в файл кнопкой вверху, иначе результат пропадёт.</span>" : "";
     setStatus("ok", "Задание выполнено", (extra || "") + remind +
-      '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>');
+      '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>', true);
     const nb = $("#nextBtn");
     if (nb) nb.addEventListener("click", function () {
       const n = Course.neighbour(id, 1);
@@ -61209,20 +61212,22 @@ function renderLesson(app, id) {
     let day = isoDay(), daySecs = Store.get("days", day, 0);
     let running = true;
     const btn = $("#timer");
-    function fmt(s) { return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
-    btn.textContent = fmt(secs);
     const tick = setInterval(function () {
       if (!running || document.hidden) return;
-      secs += 1; btn.textContent = fmt(secs);
+      secs += 1;
       const d = isoDay();
       if (d !== day) { Store.set("days", day, daySecs); day = d; daySecs = Store.get("days", day, 0); }
       daySecs += 1;
       if (secs % 10 === 0) { Store.set("time", id, secs); Store.set("days", day, daySecs); }
     }, 1000);
+    /* Секундомер на экране давит, поэтому времени не видно: оно считается
+       само и показывается на главной. Пауза — если отошли от открытого урока. */
     btn.addEventListener("click", function () {
       running = !running;
       btn.classList.toggle("paused", !running);
-      btn.title = running ? "Клик — пауза" : "На паузе. Клик — продолжить";
+      btn.textContent = running ? "время идёт" : "на паузе";
+      btn.title = running ? "Время урока считается само и видно на главной. Клик — пауза"
+                          : "Время не считается. Клик — продолжить";
     });
     Router.cleanup.push(function () {
       clearInterval(tick);
