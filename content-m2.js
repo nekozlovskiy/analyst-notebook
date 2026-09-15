@@ -1223,7 +1223,7 @@ for ch, n, med, avg, avg_trim, p90 in rows:
       d: "Ящик с усами это визуальный IQR. Разобравшись один раз, вы будете читать такие графики с первого взгляда." },
     { t: "Курс по очистке данных", url: "https://www.kaggle.com/learn/data-cleaning", src: "kaggle.com", lang: "EN",
       d: "Раздел про масштабирование и нормализацию хорошо дополняет тему выбросов практикой." },
-    { t: "Хаб «Математика» на Хабре", url: "https://habr.com/ru/hubs/mathematics/articles/", src: "habr.com", lang: "RU",
+    { t: "Хаб «Статистика в IT» на Хабре", url: "https://habr.com/ru/hubs/statistics/articles/", src: "habr.com", lang: "RU",
       d: "Разборы про смещённые распределения и почему среднее вводит в заблуждение. Читать по мере интереса." }
   ]
 };
@@ -2828,8 +2828,8 @@ print(rep.to_string())`,
       d: "Практика построения графиков для EDA. Хорошо ложится сразу после этого модуля." },
     { t: "Датасеты для собственных проектов", url: "https://www.kaggle.com/datasets", src: "kaggle.com", lang: "EN",
       d: "Тысячи открытых наборов данных. Для портфолио берите тему, в которой разбираетесь: так выводы получатся содержательными." },
-    { t: "Открытые данные России", url: "https://data.gov.ru/", src: "data.gov.ru", lang: "RU",
-      d: "Государственные открытые данные. Хороший источник для проекта на локальную тему, который выделит вас среди типовых портфолио." },
+    { t: "Открытые данные Росстата", url: "https://rosstat.gov.ru/opendata", src: "rosstat.gov.ru", lang: "RU",
+      d: "Официальная статистика в машиночитаемом виде: население, цены, занятость по регионам. Хороший источник для проекта на локальную тему, который выделит вас среди типовых портфолио." },
     { t: "Cookiecutter Data Science", url: "https://cookiecutter-data-science.drivendata.org/", src: "drivendata.org", lang: "EN",
       d: "Как организовать папки проекта, чтобы репозиторий выглядел профессионально. Пригодится в модуле 6 при сборке портфолио." },
     { t: "Storytelling with Data", url: "https://www.storytellingwithdata.com/blog", src: "storytellingwithdata.com", lang: "EN",

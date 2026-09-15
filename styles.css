@@ -49,6 +49,7 @@
   --pen-2:      #8064DD;
   --pen-soft:   #F1EDFC;
   --pen-line:   #D6CBF3;
+  --on-pen:     #FFFFFF;   /* текст на заливке ручкой */
 
   /* маркер: только термины, которые спрашивают на собеседовании */
   --mark:       #FFE59E;
@@ -101,6 +102,7 @@
   --pen-2:      #CDBCFF;
   --pen-soft:   #241E3A;
   --pen-line:   #3B3160;
+  --on-pen:     #16130F;   /* ручка светлая — текст тёмный */
 
   --mark:       #6A5514;
   --mark-2:     #8A6E17;
@@ -305,9 +307,11 @@ button:disabled { cursor: not-allowed; }
 
 @media (min-width: 1400px) {
   .hero-in.has-margin,
-  .market.has-margin { position: relative; }
+  .market.has-margin,
+  .review.has-margin { position: relative; }
   .hero-in.has-margin > .aside,
-  .market.has-margin > .aside {
+  .market.has-margin > .aside,
+  .review.has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
@@ -317,7 +321,8 @@ button:disabled { cursor: not-allowed; }
   /* Обложка сама является обёрткой, а блок со статистикой лежит
      внутри неё, поэтому его левый край сдвинут на отступ обёртки.
      Компенсируем, иначе две реплики стоят на разной вертикали. */
-  .market.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
+  .market.has-margin > .aside,
+  .review.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
 }
 
 /* Маркер. Ставится только на то, что спрашивают на собеседовании:
@@ -399,6 +404,43 @@ button:disabled { cursor: not-allowed; }
   margin: 26px 0 0; font-size: 14.5px; color: var(--ink-2);
   max-width: 56ch; line-height: 1.55;
 }
+
+/* Вернуться к занятиям — первое, что нужно вернувшемуся человеку. */
+.resume {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  max-width: 620px; margin: 0 0 36px; padding: 16px 18px 16px 20px;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--pen-line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease);
+}
+.resume:hover { text-decoration: none; border-color: var(--pen); box-shadow: var(--shadow-2); }
+.resume-txt { flex: 1 1 280px; min-width: 0; }
+.resume-k { display: block; font-size: 13.5px; color: var(--ink-3); margin-bottom: 3px; }
+.resume-t {
+  display: block; font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.012em; line-height: 1.25;
+}
+.resume-d { display: block; font-size: 14px; color: var(--ink-2); margin-top: 3px; }
+.resume-go {
+  flex: none; padding: 10px 18px; border-radius: var(--r);
+  background: var(--pen); color: var(--on-pen); font-size: 15px; font-weight: 600;
+}
+.resume:hover .resume-go { background: var(--pen-2); }
+
+/* Повторение на главной: карточки вопросов те же, что в уроке. */
+.review { padding: 44px 0 4px; }
+.review-body { max-width: 720px; }
+.review-intro {
+  font-family: var(--serif); font-size: 17px; line-height: 1.6; color: var(--ink-2);
+  max-width: 58ch; margin: 0 0 18px;
+}
+.review-later { font-size: 15px; color: var(--ink-2); margin: 0; }
+.rv-meta { font-size: 13.5px; color: var(--ink-3); margin-bottom: 10px; }
+.rv-next { margin-top: 14px; }
+
+/* Пока подгружается модуль урока. */
+.lazy-wait { padding: 96px 0; font-size: 17px; color: var(--ink-2); }
 
 /* Плёнка при перетаскивании файла на страницу. */
 .dropveil {
@@ -927,7 +969,7 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .btn:hover:not(:disabled) { border-color: var(--ink-3); background: var(--paper-2); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: .4; }
-.btn.primary { background: var(--pen); border-color: var(--pen); color: #FFFFFF; }
+.btn.primary { background: var(--pen); border-color: var(--pen); color: var(--on-pen); }
 [data-theme="dark"] .btn.primary { color: #0E1218; }
 .btn.primary:hover:not(:disabled) { background: var(--pen-2); border-color: var(--pen-2); }
 .btn.check { border-color: var(--green); color: var(--green); background: var(--green-soft); }

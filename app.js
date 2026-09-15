@@ -33,7 +33,8 @@ const CDN = {
 
 const Store = (function () {
   const KEY = "da.state.v1";
-  const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {} };
+  const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
+                  days: {}, review: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -108,29 +109,33 @@ const Store = (function () {
        из файла кладём только туда, где здесь пусто — набранное
        в этой копии всегда важнее принесённого.                  */
     merge: function (next) {
-      if (!next || typeof next !== "object") return 0;
-      let added = 0;
-      ["done", "attempts", "time"].forEach(function (b) {
+      const res = { added: 0, changed: 0 };
+      if (!next || typeof next !== "object") return res;
+      /* Число из файла побеждает, если здесь пусто, не число (урок
+         сброшен — done: false) или меньше. Пройденное из файла поверх
+         сброшенного считается новым пройденным уроком.             */
+      ["done", "attempts", "time", "days"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id];
-          if (cur === undefined) {
-            state[b][id] = src[id];
-            if (b === "done") added++;
-          } else if (typeof src[id] === "number" && typeof cur === "number" && src[id] > cur) {
-            state[b][id] = src[id];
-          }
+          const cur = state[b][id], val = src[id];
+          const better = cur === undefined ||
+            (typeof val === "number" && (typeof cur !== "number" || val > cur));
+          if (!better) return;
+          if (b === "done" && val && !cur) res.added++;
+          state[b][id] = val;
+          res.changed++;
         });
       });
-      ["code", "notes", "seen"].forEach(function (b) {
+      ["code", "notes", "seen", "review"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id];
-          if (cur === undefined || cur === null || cur === "") state[b][id] = src[id];
+          const cur = state[b][id], val = src[id];
+          const empty = function (v) { return v === undefined || v === null || v === ""; };
+          if (empty(cur) && !empty(val)) { state[b][id] = val; res.changed++; }
         });
       });
-      if (mode === "memory") { dirty = true; notify(); } else flush();
-      return added;
+      if (res.changed) { if (mode === "memory") { dirty = true; notify(); } else flush(); }
+      return res;
     },
     flush: flush
   };
@@ -215,10 +220,51 @@ function loadScript(src) {
     const s = document.createElement("script");
     s.src = src; s.async = true; s.dataset.src = src;
     s.onload = function () { s.dataset.loaded = "1"; res(); };
-    s.onerror = function () { rej(new Error("Не удалось загрузить " + src)); };
+    /* неудачный тег убираем, иначе повторная попытка ждала бы его вечно */
+    s.onerror = function () { s.remove(); rej(new Error("Не удалось загрузить " + src)); };
     document.head.appendChild(s);
   });
 }
+/* ---------- даты: локальный календарный день YYYY-MM-DD ---------- */
+function isoDay(d) {
+  d = d || new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+         String(d.getDate()).padStart(2, "0");
+}
+function fromIso(s) { const p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+function addDays(s, n) { const d = fromIso(s); d.setDate(d.getDate() + n); return isoDay(d); }
+/* round, а не floor: при переходе на летнее время в сутках 23 или 25 часов */
+function daysBetween(a, b) { return Math.round((fromIso(b) - fromIso(a)) / 864e5); }
+
+/* выполнить, когда браузер освободится, — для фоновой подгрузки */
+function idle(f) {
+  if (window.requestIdleCallback) window.requestIdleCallback(f, { timeout: 4000 });
+  else setTimeout(f, 1200);
+}
+
+/* ============================================================
+   Ленивая загрузка
+
+   Содержимое уроков и учебная база весят вместе ~650 КБ в сжатом
+   виде, а главной не нужно ни то ни другое. Модуль уроков грузится,
+   когда открывают его урок; база — перед первым запуском кода.
+   В собранный одним файлом курс build.py кладёт всё внутрь заранее,
+   и тогда загружать ничего не приходится.
+   ============================================================ */
+
+const Lazy = {
+  has: function (moduleId) {
+    const m = Course.data.modules.filter(function (x) { return x.id === moduleId; })[0];
+    return !!m && m.lessons.every(function (l) { return !!window.CONTENT[l.id]; });
+  },
+  content: function (moduleId) {
+    return Lazy.has(moduleId) ? Promise.resolve() : loadScript("content-" + moduleId + ".js");
+  },
+  data: function () {
+    return window.DATA ? Promise.resolve() : loadScript("data.js");
+  }
+};
+
 function loadCSS(href) {
   if (document.querySelector('link[href="' + href + '"]')) return;
   const l = document.createElement("link");
@@ -280,13 +326,16 @@ const Progress = {
         Progress.toast("Файл прочитался, но это не похоже на прогресс курса.");
         return;
       }
-      const added = Store.merge(data);
+      const res = Store.merge(data);
       Router.render(true);
       const total = Course.doneCount(Course.flat);
-      Progress.toast(added
-        ? "Прогресс перенесён: добавилось " + added + " " +
-          plural(added, "урок", "урока", "уроков") + ", всего пройдено " + total + "."
-        : "В этом файле нет ничего нового — всё уже на месте.");
+      Progress.toast(res.added
+        ? "Прогресс перенесён: добавилось " + res.added + " " +
+          plural(res.added, "урок", "урока", "уроков") + ", всего пройдено " + total + "."
+        : res.changed
+          ? "Прогресс перенесён. Новых пройденных уроков в файле нет, а код, заметки, " +
+            "время и повторение подтянулись."
+          : "В этом файле нет ничего нового — всё уже на месте.");
     };
     r.onerror = function () { Progress.toast("Не удалось прочитать файл."); };
     r.readAsText(f);
@@ -499,6 +548,184 @@ function countUp(node, to, suffix) {
   })(t0);
 }
 
+/* ============================================================
+   Ваш путь: где остановились, сколько времени, серия дней
+   ============================================================ */
+
+const Stats = {
+  started: function () {
+    return Course.doneCount(Course.flat) > 0 || !!Store.get("seen", "last", null);
+  },
+  minutes: function () {
+    const t = Store.all().time || {};
+    return Math.round(Object.keys(t).reduce(function (s, k) { return s + (+t[k] || 0); }, 0) / 60);
+  },
+  /* Серия — сколько дней подряд было хотя бы по минуте занятий.
+     Если сегодня ещё не садились, серия не прервана: считаем со вчера. */
+  streak: function () {
+    const days = Store.all().days || {};
+    const active = function (d) { return (days[d] || 0) >= 60; };
+    let d = isoDay();
+    if (!active(d)) d = addDays(d, -1);
+    let n = 0;
+    while (active(d) && n < 3650) { n++; d = addDays(d, -1); }
+    return n;
+  },
+  /* Куда вернуться: к последнему открытому уроку, если он не пройден,
+     иначе к следующему непройденному. Новичку карточка не нужна. */
+  resume: function () {
+    const last = Course.byId(Store.get("seen", "last", null) || "");
+    if (last && last.ready && !Course.isDone(last.id)) return { lesson: last, fresh: false };
+    if (!last && Course.doneCount(Course.flat) === 0) return null;
+    const from = last ? Course.ready.indexOf(last) : -1;
+    const order = Course.ready.slice(from + 1).concat(Course.ready.slice(0, from + 1));
+    const next = order.filter(function (l) { return !Course.isDone(l.id); })[0];
+    return next ? { lesson: next, fresh: true } : null;
+  }
+};
+
+/* ============================================================
+   Повторение
+
+   Вопрос из самопроверки возвращается через 1, 3, 7 и 21 день.
+   Верный ответ переводит его на ступень дальше, ошибка — снова на
+   завтра. Верный ответ на последней ступени — вопрос выучен и из
+   очереди уходит. Хранится в Store под ключом «урок:номер вопроса».
+   ============================================================ */
+
+const Review = {
+  STEPS: [1, 3, 7, 21],
+  LIMIT: 20,              /* больше за раз — уже не пять минут, а урок */
+
+  record: function (id, qi, ok, fromLesson) {
+    const k = id + ":" + qi;
+    const cur = Store.get("review", k, null);
+    /* повторный проход теста в уроке не должен сбивать расписание */
+    if (fromLesson && cur) return;
+    const step = cur ? cur.step : -1;
+    if (ok && step + 1 >= Review.STEPS.length) {
+      Store.set("review", k, { step: step, done: true });
+      return;
+    }
+    const next = ok ? step + 1 : 0;
+    Store.set("review", k, { step: next, due: addDays(isoDay(), Review.STEPS[next]) });
+  },
+
+  items: function () {
+    const all = Store.all().review || {};
+    return Object.keys(all).map(function (k) {
+      const p = k.split(":");
+      return { key: k, id: p[0], qi: +p[1], r: all[k] };
+    }).filter(function (x) {
+      return x.r && !x.r.done && x.r.due && Course.byId(x.id);
+    });
+  },
+  due: function () {
+    const t = isoDay();
+    return Review.items().filter(function (x) { return x.r.due <= t; });
+  },
+  nextDate: function () {
+    const t = isoDay();
+    return Review.items().map(function (x) { return x.r.due; })
+      .filter(function (d) { return d > t; }).sort()[0] || null;
+  },
+  when: function (iso) {
+    const n = daysBetween(isoDay(), iso);
+    if (n <= 1) return "завтра";
+    if (n === 2) return "послезавтра";
+    return "через " + n + " " + plural(n, "день", "дня", "дней");
+  },
+
+  /* Блок на главной. Пока в очереди ничего нет, его нет вовсе. */
+  section: function () {
+    const due = Review.due(), next = Review.nextDate();
+    if (!due.length && !next) return null;
+    const n = Math.min(due.length, Review.LIMIT);
+    const node = el("section", { class: "review has-margin" });
+    node.innerHTML =
+      '<div class="aside"><p>вспомнить с усилием — это и есть запоминание</p></div>' +
+      '<div class="sec-title">Повторение</div>' +
+      '<div class="review-body">' +
+      (due.length
+        ? '<p class="review-intro">' +
+            (due.length > n
+              ? "Накопилось " + due.length + " " + plural(due.length, "вопрос", "вопроса", "вопросов") +
+                ", сегодня возьмём " + n + ". "
+              : "Сегодня " + n + " " + plural(n, "вопрос", "вопроса", "вопросов") + " из пройденных уроков. ") +
+            "Минут пять — и материал останется с вами надолго.</p>" +
+          '<button class="btn primary" id="rvStart" type="button">Начать повторение</button>'
+        : '<p class="review-later">Всё повторено. Следующие вопросы вернутся ' + Review.when(next) + ".</p>") +
+      "</div>";
+    const start = $("#rvStart", node);
+    if (start) start.addEventListener("click", function () { Review.run($(".review-body", node)); });
+    return node;
+  },
+
+  run: function (box) {
+    const list = Review.due();
+    const order = shuffled(list.length).slice(0, Review.LIMIT).map(function (i) { return list[i]; });
+    const mods = {};
+    order.forEach(function (x) { mods[Course.byId(x.id).module.id] = true; });
+    box.innerHTML = '<p class="review-intro">Достаю вопросы…</p>';
+    Promise.all(Object.keys(mods).map(function (m) { return Lazy.content(m); })).then(function () {
+      /* урок могли переписать — вопроса с таким номером может уже не быть */
+      const ok = order.filter(function (x) {
+        const C = window.CONTENT[x.id];
+        return C && C.quiz && C.quiz[x.qi];
+      });
+      Review.step(box, ok, 0, 0);
+    }, function () {
+      box.innerHTML = '<p class="review-intro">Вопросы не загрузились — похоже, пропал интернет.</p>' +
+        '<button class="btn" id="rvRetry" type="button">Попробовать ещё раз</button>';
+      $("#rvRetry", box).addEventListener("click", function () { Review.run(box); });
+    });
+  },
+
+  step: function (box, order, i, right) {
+    if (i >= order.length) {
+      const next = Review.nextDate();
+      box.innerHTML = '<p class="review-intro">Готово: верно ' + right + " из " + order.length + ". " +
+        (next ? "Следующие вопросы вернутся " + Review.when(next) + "." : "Все вопросы выучены.") + "</p>" +
+        '<button class="btn" id="rvClose" type="button">Закрыть</button>';
+      $("#rvClose", box).addEventListener("click", function () { Router.render(true); });
+      return;
+    }
+    const x = order[i], L = Course.byId(x.id), q = window.CONTENT[x.id].quiz[x.qi];
+    let h = '<div class="rv-meta">Вопрос ' + (i + 1) + " из " + order.length +
+      ", из урока " + L.num + " «" + esc(L.title) + "»</div>" +
+      '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
+    shuffled(q.opts.length).forEach(function (orig, pos) {
+      h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
+        '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
+    });
+    h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" +
+      '<div class="rv-next" hidden><button class="btn primary" type="button">' +
+        (i + 1 < order.length ? "Дальше" : "Закончить") + "</button></div>";
+    box.innerHTML = h;
+
+    const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
+    opts.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.disabled) return;
+        const picked = +btn.dataset.i, ok = picked === q.right;
+        Review.record(x.id, x.qi, ok, false);
+        opts.forEach(function (b) {
+          b.disabled = true;
+          const oi = +b.dataset.i;
+          if (oi === q.right) b.classList.add("right");
+          else if (oi === picked) b.classList.add("wrong");
+        });
+        $(".q-why", box).classList.add("show");
+        const nx = $(".rv-next", box);
+        nx.hidden = false;
+        const nb = $("button", nx);
+        nb.addEventListener("click", function () { Review.step(box, order, i + 1, right + (ok ? 1 : 0)); });
+        nb.focus();
+      });
+    });
+  }
+};
+
 function renderHome(app) {
   document.title = "Тетрадь аналитика — курс подготовки к Junior Data Analyst";
   mountHeader("");
@@ -521,6 +748,43 @@ function renderHome(app) {
                '</div><div class="map-cells">' + cells + "</div></div>";
   });
 
+  /* Вернувшемуся человеку первым делом нужно «где я остановился»,
+     а не описание курса, — поэтому карточка стоит сразу под заголовком. */
+  const resume = Stats.resume();
+  const resumeHtml = resume
+    ? '<a class="resume" href="#' + resume.lesson.id + '">' +
+        '<span class="resume-txt">' +
+          '<span class="resume-k">' + (resume.fresh ? "Следующий урок" : "Вы остановились здесь") + "</span>" +
+          '<span class="resume-t">' + resume.lesson.num + " " + esc(resume.lesson.title) + "</span>" +
+          '<span class="resume-d">' + esc(resume.lesson.desc) + "</span>" +
+        "</span>" +
+        '<span class="resume-go">Продолжить</span>' +
+      "</a>"
+    : "";
+
+  /* Пока занятий не было, цифры рассказывают о курсе. Как только они
+     начались — о человеке: сколько сделано, сколько времени отдано
+     и сколько дней подряд. */
+  function stat(n, label, suffix) {
+    return '<div><div class="st-n" data-count="' + n + '"' +
+      (suffix ? ' data-suffix="' + suffix + '"' : "") + ">0</div>" +
+      '<div class="st-l">' + label + "</div></div>";
+  }
+  let statsHtml = stat(done, plural(done, "урок пройден", "урока пройдено", "уроков пройдено"));
+  if (Stats.started()) {
+    const mins = Stats.minutes(), hrs = Math.round(mins / 60), streak = Stats.streak();
+    statsHtml +=
+      (mins < 60
+        ? stat(mins, plural(mins, "минута", "минуты", "минут") + " за курсом")
+        : stat(hrs, plural(hrs, "час", "часа", "часов") + " за курсом")) +
+      stat(streak, plural(streak, "день подряд", "дня подряд", "дней подряд"));
+  } else {
+    statsHtml +=
+      stat(Course.ready.length, plural(Course.ready.length, "урок открыт", "урока открыто", "уроков открыто") +
+        " из " + total) +
+      stat(2, "на один урок", " ч");
+  }
+
   const hero = el("section", { class: "hero" });
   hero.innerHTML =
     '<div class="wrap hero-in has-margin">' +
@@ -529,16 +793,9 @@ function renderHome(app) {
       "<h1>Тетрадь аналитика данных</h1>" +
       '<p class="lede">Программа на 2-3 месяца до первого оффера. Каждый урок ' +
         "заканчивается задачей, которую вы решаете прямо в браузере.</p>" +
+      resumeHtml +
       '<div class="map">' + mapHtml + "</div>" +
-      '<div class="hero-stats">' +
-        '<div><div class="st-n" data-count="' + done + '">0</div>' +
-          '<div class="st-l">' + plural(done, "урок пройден", "урока пройдено", "уроков пройдено") + "</div></div>" +
-        '<div><div class="st-n" data-count="' + Course.ready.length + '">0</div>' +
-          '<div class="st-l">' + plural(Course.ready.length, "урок открыт", "урока открыто", "уроков открыто") +
-          " из " + total + "</div></div>" +
-        '<div><div class="st-n" data-count="2" data-suffix=" ч">0</div>' +
-          '<div class="st-l">на один урок</div></div>' +
-      "</div>" +
+      '<div class="hero-stats">' + statsHtml + "</div>" +
       /* Пустой курс — единственный момент, когда перенос вообще уместен:
          дальше эта строка только мешала бы. */
       (done === 0
@@ -549,6 +806,9 @@ function renderHome(app) {
     "</div>";
   app.appendChild(hero);
 
+  /* модуль урока из карточки «продолжить» подтягиваем заранее */
+  if (resume) idle(function () { Lazy.content(resume.lesson.module.id).catch(function () {}); });
+
   const carry = $("#carryBtn", hero);
   if (carry) carry.addEventListener("click", Progress.load);
 
@@ -557,6 +817,10 @@ function renderHome(app) {
   });
 
   const main = el("main", { class: "wrap" });
+
+  /* повторение — первым в программе: оно на сегодня, программа — на месяцы */
+  const review = Review.section();
+  if (review) main.appendChild(review);
 
   /* ---------- программа: модули карточками ---------- */
   const mods = el("section", { class: "modules" });
@@ -683,7 +947,8 @@ const Engine = {
 
   sql: async function () {
     if (Engine.db) return Engine.db;
-    await loadScript(CDN.sqlBase + "sql-wasm.js");
+    /* база и движок качаются одновременно */
+    await Promise.all([Lazy.data(), loadScript(CDN.sqlBase + "sql-wasm.js")]);
     const SQL = await window.initSqlJs({ locateFile: function (f) { return CDN.sqlBase + f; } });
     const db = new SQL.Database();
     db.run(window.DATA.shopSQL);
@@ -921,6 +1186,28 @@ function defaultPlan(C) {
 
 function renderLesson(app, id) {
   const L = Course.byId(id);
+
+  /* Урок есть в программе, но модуль с его содержимым ещё не загружен:
+     показываем тихую заглушку и дорисовываем урок, когда модуль придёт.
+     Если за это время человек ушёл на другую страницу — ничего не делаем. */
+  if (L && !window.CONTENT[id]) {
+    document.title = L.num + " " + L.title + " — Тетрадь аналитика";
+    mountHeader("");
+    app.appendChild(el("main", { class: "wrap lesson-wrap" },
+      '<div class="lazy-wait">Открываю урок ' + L.num + "…</div>"));
+    Lazy.content(L.module.id).then(function () {
+      if (Router.current === id) Router.render(true);
+    }, function () {
+      if (Router.current !== id) return;
+      const w = $(".lazy-wait");
+      if (!w) return;
+      w.innerHTML = "Урок не загрузился — похоже, пропал интернет. " +
+        '<button class="linkbtn" id="lazyRetry" type="button">Попробовать ещё раз</button>';
+      $("#lazyRetry").addEventListener("click", function () { Router.render(true); });
+    });
+    return;
+  }
+
   const C = window.CONTENT[id];
 
   if (!L || !C) {
@@ -931,6 +1218,17 @@ function renderLesson(app, id) {
       '<p style="color:var(--ink-2);font-size:17px">Вернитесь на <a href="#">карту курса</a> ' +
       "и выберите урок без пометки «скоро».</p></div>"));
     return;
+  }
+
+  Store.set("seen", "last", id);
+
+  /* Пока человек читает теорию, в фоне подтягиваем учебную базу —
+     первый запуск кода не будет её ждать. И модуль следующего урока,
+     если он в другом модуле, — переход дальше откроется сразу.     */
+  if (L.kind !== "text") idle(function () { Lazy.data().catch(function () {}); });
+  const after = Course.neighbour(id, 1);
+  if (after && after.module !== L.module) {
+    idle(function () { Lazy.content(after.module.id).catch(function () {}); });
   }
 
   const M = L.module;
@@ -1015,7 +1313,8 @@ function renderLesson(app, id) {
   if (hasQuiz) {
     quizHtml = '<section class="block rise" id="s-quiz">' +
       '<div class="block-h"><h2>Самопроверка</h2></div>' +
-      '<p class="block-intro">Отвечайте не глядя в теорию. Разбор откроется сразу после ответа.</p>' +
+      '<p class="block-intro">Отвечайте не глядя в теорию. Разбор откроется сразу после ответа, ' +
+      "а завтра эти вопросы вернутся на главную — повторить.</p>" +
       '<div class="quiz" id="quiz">';
     C.quiz.forEach(function (q, i) {
       quizHtml += '<div class="q" data-q="' + i + '">' +
@@ -1180,6 +1479,7 @@ function renderLesson(app, id) {
           if (answered[qi]) return;
           answered[qi] = true;
           const picked = +btn.dataset.i;
+          Review.record(id, qi, picked === q.right, true);
           opts.forEach(function (b) {
             b.disabled = true;
             const oi = +b.dataset.i;
@@ -1341,6 +1641,7 @@ function renderLesson(app, id) {
   async function runPython(code) {
     loader(true, Engine.py ? "Выполняю..." : "Первый запуск: качаю Python в браузер, 15-40 секунд...");
     const py = await Engine.python(C.packages || []);
+    if (C.data && C.data.length) await Lazy.data();
     (C.data || []).forEach(function (k) { py.globals.set(k, window.DATA[k]); });
     /* stdout и stderr разделены: с эталоном сравнивается только stdout,
        предупреждения библиотек не должны ломать проверку */
@@ -1533,6 +1834,8 @@ function renderLesson(app, id) {
   /* ---------- таймер ---------- */
   (function () {
     let secs = Store.get("time", id, 0);
+    /* время по календарным дням — для серии «дней подряд» на главной */
+    let day = isoDay(), daySecs = Store.get("days", day, 0);
     let running = true;
     const btn = $("#timer");
     function fmt(s) { return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
@@ -1540,7 +1843,10 @@ function renderLesson(app, id) {
     const tick = setInterval(function () {
       if (!running || document.hidden) return;
       secs += 1; btn.textContent = fmt(secs);
-      if (secs % 10 === 0) Store.set("time", id, secs);
+      const d = isoDay();
+      if (d !== day) { Store.set("days", day, daySecs); day = d; daySecs = Store.get("days", day, 0); }
+      daySecs += 1;
+      if (secs % 10 === 0) { Store.set("time", id, secs); Store.set("days", day, daySecs); }
     }, 1000);
     btn.addEventListener("click", function () {
       running = !running;
@@ -1550,6 +1856,7 @@ function renderLesson(app, id) {
     Router.cleanup.push(function () {
       clearInterval(tick);
       if (secs > 0) Store.set("time", id, secs);
+      if (daySecs > 0) Store.set("days", day, daySecs);
     });
   })();
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Иконка: лист тетради с полем и галочкой ручкой наставника -->
+  <style>
+    .p { fill: #FCFAF6; stroke: #E7E1D4; }
+    .m { stroke: #D6CBF3; }
+    .k { stroke: #6B4FC9; }
+    @media (prefers-color-scheme: dark) {
+      .p { fill: #1E1B16; stroke: #453E33; }
+      .m { stroke: #3B3160; }
+      .k { stroke: #B9A3FF; }
+    }
+  </style>
+  <rect class="p" x="3" y="3" width="58" height="58" rx="13" stroke-width="2"/>
+  <path class="m" d="M20 9v46" stroke-width="2.5" stroke-linecap="round"/>
+  <path class="k" d="M27 34.5l7.5 7.5L50 22" fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

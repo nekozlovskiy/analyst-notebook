@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Тетрадь аналитика — курс подготовки к Junior Data Analyst</title>
 <meta name="description" content="Интерактивный курс подготовки к позиции Junior Data Analyst и Product Analyst: SQL, Python, статистика, продуктовые метрики.">
+<meta name="theme-color" content="#FCFAF6">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<!-- превью ссылки в мессенджерах и соцсетях -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="Тетрадь аналитика">
+<meta property="og:title" content="Тетрадь аналитика — курс подготовки к Junior Data Analyst">
+<meta property="og:description" content="40 уроков: SQL, Python, статистика и продуктовые метрики. Каждый урок заканчивается задачей, которую вы решаете прямо в браузере.">
+<meta property="og:url" content="https://nekozlovskiy.github.io/analyst-notebook/">
+<meta property="og:image" content="https://nekozlovskiy.github.io/analyst-notebook/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Тетрадь аналитика: курс подготовки к Junior Data Analyst">
+<meta name="twitter:card" content="summary_large_image">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,15 +43,11 @@
 <body>
 <div id="app"></div>
 
+<!-- Модули уроков (content-m1…m6) и учебная база (data.js) подгружаются
+     по мере надобности — см. Lazy в app.js. В собранный одним файлом
+     курс build.py кладёт их внутрь заранее. -->
 <script src="lessons.js"></script>
 <script src="content-core.js"></script>
-<script src="content-m1.js"></script>
-<script src="content-m2.js"></script>
-<script src="content-m3.js"></script>
-<script src="content-m4.js"></script>
-<script src="content-m5.js"></script>
-<script src="content-m6.js"></script>
-<script src="data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

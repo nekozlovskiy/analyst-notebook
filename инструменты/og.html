@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Превью ссылки — Тетрадь аналитика</title>
+<!-- Исходник картинки og.png (1200×630) для превью в мессенджерах.
+     Перерисовать: открыть на локальном сервере и снять экран 1200×630. -->
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500&family=Literata:opsz,wght@7..72,700&family=Caveat:wght@600&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden; position: relative;
+    background: #FCFAF6; color: #23201C; font-family: Onest, sans-serif;
+  }
+  .rule { position: absolute; left: 252px; top: 0; bottom: 0; width: 2px; background: #D6CBF3; }
+  .note {
+    position: absolute; left: 36px; top: 112px; width: 190px; text-align: right;
+    font: 600 31px/1.2 Caveat, cursive; color: #6B4FC9;
+  }
+  .main { position: absolute; left: 300px; top: 92px; right: 80px; }
+  h1 { font: 700 86px/1.02 Literata, serif; letter-spacing: -0.02em; margin: 0 0 26px; }
+  p { font-size: 29px; line-height: 1.45; color: #5A5349; margin: 0; max-width: 780px; }
+  .map { display: flex; gap: 14px; margin-top: 46px; }
+  .mod { display: flex; gap: 4px; }
+  .mod i { width: 14px; height: 14px; border-radius: 4px; border: 2px solid #CFC6B2; box-sizing: border-box; }
+  .mod i.on { background: #6B4FC9; border-color: #6B4FC9; }
+  .url { position: absolute; left: 300px; bottom: 44px; font-size: 22px; color: #7A7264; }
+</style>
+</head>
+<body>
+<div class="rule"></div>
+<div class="note">40 уроков, и каждый — с задачей</div>
+<div class="main">
+  <h1>Тетрадь аналитика</h1>
+  <p>Курс подготовки к Junior Data Analyst: SQL, Python, статистика и продуктовые метрики. Задачи решаются прямо в браузере.</p>
+  <div class="map" id="map"></div>
+</div>
+<div class="url">nekozlovskiy.github.io/analyst-notebook</div>
+<script>
+  /* карта курса: шесть модулей по числу уроков, закрашено начало пути */
+  var mods = [8, 7, 7, 7, 5, 6], filled = 11, n = 0, h = "";
+  mods.forEach(function (c) {
+    h += '<div class="mod">';
+    for (var i = 0; i < c; i++) h += "<i" + (n++ < filled ? ' class="on"' : "") + "></i>";
+    h += "</div>";
+  });
+  document.getElementById("map").innerHTML = h;
+</script>
+</body>
+</html>

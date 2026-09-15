@@ -383,7 +383,7 @@ print(f"отношение: {p_two / p_one:.1f}")`,
       d: "Джош Стармер объясняет статистику на пальцах и с песенками. Ролики про p-value и доверительные интервалы стоит посмотреть первыми." },
     { t: "Experiment Guide от Microsoft", url: "https://exp-platform.com/", src: "exp-platform.com", lang: "EN",
       d: "Материалы команды Рона Кохави, который построил эксперименты в Microsoft и Amazon. Первоисточник по A/B-тестам." },
-    { t: "Хаб «Математика» на Хабре", url: "https://habr.com/ru/hubs/mathematics/articles/", src: "habr.com", lang: "RU",
+    { t: "Хаб «Статистика в IT» на Хабре", url: "https://habr.com/ru/hubs/statistics/articles/", src: "habr.com", lang: "RU",
       d: "Разборы про статистику и A/B-тесты на русском, в том числе типичные ошибки интерпретации." }
   ]
 };

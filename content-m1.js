@@ -734,8 +734,8 @@ ORDER BY order_date;`,
   ],
 
   links: [
-    { t: "Window Functions — полный разбор", url: "https://modern-sql.com/feature/over", src: "modern-sql.com", lang: "EN",
-      d: "Сайт Маркуса Винанда, автора книги про производительность SQL. Лучшее объяснение рамок окна, которое существует в открытом доступе." },
+    { t: "Оконные функции в туториале Mode", url: "https://mode.com/sql-tutorial/sql-window-functions", src: "mode.com", lang: "EN",
+      d: "Пошаговый разбор с задачами на живой базе: PARTITION BY, ранжирование, накопительные суммы. Хорошо ложится сразу после теории урока." },
     { t: "Оконные функции в SQLite", url: "https://www.sqlite.org/windowfunctions.html", src: "sqlite.org", lang: "EN",
       d: "Документация того движка, на котором вы решаете задачи курса. Раздел про frame specification стоит прочитать до конца." },
     { t: "Window Functions в PostgreSQL", url: "https://www.postgresql.org/docs/current/tutorial-window.html", src: "postgresql.org", lang: "EN",
@@ -1084,7 +1084,7 @@ WHERE rn IN ((total + 1) / 2, (total + 2) / 2);`,
       d: "Раздел про агрегаты с интерактивными упражнениями. Хорошо закрывает пробелы, если синтаксис ещё не автоматический." },
     { t: "Задачи на агрегацию", url: "https://sqlbolt.com/lesson/select_queries_with_aggregates", src: "sqlbolt.com", lang: "EN",
       d: "Два коротких урока именно про GROUP BY и HAVING. Пятнадцать минут, зато синтаксис ложится в руки." },
-    { t: "Среднее, медиана и когда они врут", url: "https://habr.com/ru/hubs/mathematics/articles/", src: "habr.com", lang: "RU",
+    { t: "Хаб «Статистика в IT» на Хабре", url: "https://habr.com/ru/hubs/statistics/articles/", src: "habr.com", lang: "RU",
       d: "Хаб с разборами базовой статистики на практике. Ищите материалы про смещённые распределения — это ровно про средний чек." },
     { t: "Функции SQLite", url: "https://www.sqlite.org/lang_aggfunc.html", src: "sqlite.org", lang: "EN",
       d: "Список агрегатов вашего движка. Обратите внимание, чего здесь нет: медианы и перцентилей — их придётся собирать руками." }
@@ -2304,7 +2304,7 @@ ORDER BY w.week_start;`,
       d: "DATE_TRUNC, INTERVAL, AGE и работа с часовыми поясами. То, с чем вы столкнётесь на реальной работе." },
     { t: "Cohort Analysis — что это и зачем", url: "https://amplitude.com/blog/cohort-analysis", src: "amplitude.com", lang: "EN",
       d: "Продуктовый взгляд на когорты от вендора аналитики: какие вопросы они закрывают и как читать когортную таблицу." },
-    { t: "Хаб «Аналитика» на Хабре", url: "https://habr.com/ru/hubs/analytics/articles/", src: "habr.com", lang: "RU",
+    { t: "Статьи Хабра про когортный анализ", url: "https://habr.com/ru/search/?q=%D0%BA%D0%BE%D0%B3%D0%BE%D1%80%D1%82%D0%BD%D1%8B%D0%B9+%D0%B0%D0%BD%D0%B0%D0%BB%D0%B8%D0%B7&target_type=posts&order=relevance", src: "habr.com", lang: "RU",
       d: "Разборы когортного анализа и retention на русском, с картинками и реальными кейсами компаний." },
     { t: "Задачи на даты и когорты", url: "https://www.stratascratch.com/", src: "stratascratch.com", lang: "EN",
       d: "Фильтруйте по тегу Date. Работа с периодами — второй по частоте тип задач на SQL-секции после джойнов." }
@@ -2713,7 +2713,7 @@ WHERE event_date >= '2024-07-01'
       d: "windowFunnel, retention, sequenceMatch — воронки и ретеншен одной функцией. Именно ради этого ClickHouse и ставят в продуктовых командах." },
     { t: "Поиграть с ClickHouse без установки", url: "https://sql.clickhouse.com/", src: "clickhouse.com", lang: "EN",
       d: "Публичная песочница с реальными датасетами на миллиарды строк. Можно писать запросы прямо в браузере и увидеть скорость своими глазами." },
-    { t: "Хаб ClickHouse на Хабре", url: "https://habr.com/ru/hubs/clickhouse/articles/", src: "habr.com", lang: "RU",
+    { t: "Статьи Хабра про ClickHouse", url: "https://habr.com/ru/search/?q=ClickHouse&target_type=posts&order=relevance", src: "habr.com", lang: "RU",
       d: "Опыт российских команд: как готовят таблицы, какие грабли собирают. Практика, которой нет в документации." }
   ]
 };
@@ -3062,7 +3062,7 @@ ORDER BY cohort;`,
       d: "Воронки и конверсии — самый частый тип задач на продуктовых секциях. Здесь они разложены по работодателям." },
     { t: "SQL Interview Questions", url: "https://leetcode.com/problemset/database/", src: "leetcode.com", lang: "EN",
       d: "Прорешайте 20–30 задач уровня Medium перед собеседованиями. Этого достаточно, чтобы перестать нервничать на SQL-секции." },
-    { t: "Хаб «Аналитика» на Хабре", url: "https://habr.com/ru/hubs/analytics/articles/", src: "habr.com", lang: "RU",
+    { t: "Статьи Хабра про продуктовую аналитику", url: "https://habr.com/ru/search/?q=%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82%D0%BE%D0%B2%D0%B0%D1%8F+%D0%B0%D0%BD%D0%B0%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B0&target_type=posts&order=relevance", src: "habr.com", lang: "RU",
       d: "Разборы реальных продуктовых кейсов на русском: воронки, retention, ошибки в метриках." },
     { t: "Курс SQL для анализа данных целиком", url: "https://mode.com/sql-tutorial/", src: "Mode Analytics", lang: "EN",
       d: "Если после модуля остались пробелы — пройдите этот курс целиком за выходные. Он бесплатный и построен ровно вокруг задач аналитика." }
