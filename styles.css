@@ -18,8 +18,9 @@
    несут смысл состояния (зачтено / ошибка / предупреждение)
    и нигде не декоративны.
 
-   ПРАВИЛО РУКОПИСНОГО: Caveat — только короткие реплики,
-   до полутора строк. Длинный рукописный текст нечитаем.
+   ПРАВИЛО РУКОПИСНОГО: скоропись — только короткие реплики
+   наставника, до полутора строк. Длинный рукописный текст
+   нечитаем, а мелкий — тем более: ниже 18px руки не бывает.
    ============================================================ */
 
 /* ============================================================
@@ -55,6 +56,12 @@
   --mark:       #FFE59E;
   --mark-2:     #FFD86B;
 
+  /* Поля тетради. Единственное исключение из правила одного акцента:
+     эту линию не рисует наставник — она напечатана в тетради ещё на
+     фабрике. Поэтому она ничего не значит, ни на что не реагирует и
+     никогда не становится рамкой или состоянием. */
+  --margin-rule: #DDA093;
+
   /* состояния */
   --green:      #2E6B4F;   --green-soft: #E8F1EA;   --green-line: #BFD9C7;
   --red:        #A83B2A;   --red-soft:   #FAEDE9;   --red-line:   #EDC8BF;
@@ -63,7 +70,10 @@
   /* типографика */
   --sans:  "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --serif: "Literata", "Iowan Old Style", Georgia, "Times New Roman", serif;
-  --hand:  "Caveat", "Segoe Script", cursive;
+  /* Русский почерк связный, поэтому и здесь связная скоропись, а не
+     маркерный леттеринг: наставник пишет от руки, а не подписывает
+     плакат. Начертание одно и тонкое — отсюда кегли крупнее. */
+  --hand:  "Bad Script", "Segoe Script", cursive;
   --mono:  "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* геометрия */
@@ -73,7 +83,7 @@
   --wrap:     1020px;  /* главная */
   --lesson:   820px;   /* урок    */
   --measure:  66ch;
-  --margin-w: 150px;   /* левое поле под реплики наставника */
+  --margin-w: 175px;   /* левое поле под реплики наставника */
 
   --shadow-1: 0 1px 2px rgba(35, 32, 28, .05);
   --shadow-2: 0 8px 26px -10px rgba(35, 32, 28, .16);
@@ -106,6 +116,8 @@
 
   --mark:       #6A5514;
   --mark-2:     #8A6E17;
+
+  --margin-rule: #583A33;
 
   --green:      #6FC79B;   --green-soft: #14251C;   --green-line: #2A4536;
   --red:        #F0907C;   --red-soft:   #2C1A16;   --red-line:   #4C2C24;
@@ -254,11 +266,15 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
   transition: width .6s var(--ease);
 }
 
+/* Полоса прочитанного в уроке. Полоса пройденного курса в это время
+   прячется: две одинаковые черты в двух пикселях друг от друга значат
+   разное и потому не значат ничего. */
 .readbar {
   position: fixed; left: 0; top: var(--header-h); height: 2px;
   background: var(--pen); width: 0; z-index: 41; pointer-events: none;
   transition: width .1s linear;
 }
+body.reading .hdr-bar { display: none; }
 
 .iconbtn {
   border: 1px solid var(--rule); background: transparent; color: var(--ink-2);
@@ -295,23 +311,33 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
    4. Обёртки
    ============================================================ */
 
-.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 32px; }
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 32px; position: relative; }
 .wrap.lesson-wrap { max-width: var(--lesson); }
+
+/* Поля. У школьной тетради есть ровно два опознавательных знака —
+   линовка и вертикальная черта полей; линовка под текстом мешает
+   читать, черта — нет. Она проходит по левому краю колонки, и
+   реплики наставника на широком экране оказываются там, где им и
+   место: слева от неё, на полях. */
+.wrap::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 10px;
+  border-left: 1px solid var(--margin-rule);
+  pointer-events: none;
+}
 
 /* ============================================================
    4a. Голос наставника
    ============================================================ */
 
-/* Реплика на поле. На широком экране висит слева от колонки
-   текста и не занимает её ширину; на узком становится обычным
-   блоком с чертой слева. Внутри — от руки и коротко.        */
+/* Реплика на поле. На широком экране висит слева от черты полей и
+   не занимает ширину колонки; на узком встаёт в колонку обычным
+   абзацем. Своей черты у неё нет: почерка и цвета хватает, чтобы
+   отличить голос наставника от набранного текста курса. */
 .aside {
   font-family: var(--hand);
-  font-size: 21px; line-height: 1.3;
+  font-size: 23px; line-height: 1.32;
   color: var(--pen);
   margin: 0 0 18px;
-  padding-left: 15px;
-  border-left: 2px solid var(--pen-line);
 }
 .aside p { margin: 0 0 10px; }
 .aside p:last-child { margin-bottom: 0; }
@@ -319,19 +345,22 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
 /* Поле выносится наружу, только если рядом с колонкой реально есть
    место: внешние поля должны вместить ширину реплики и зазор.
    Порог разный для урока (колонка 820px) и для главной (1020px) —
-   с одним общим реплика уезжала бы за край экрана.               */
-@media (min-width: 1200px) {
+   с одним общим реплика уезжала бы за край экрана. Пороги считаны
+   от --margin-w: 175 + 26 зазора должны уместиться сбоку.        */
+@media (min-width: 1240px) {
   .lesson-wrap .has-margin { position: relative; }
   .lesson-wrap .has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
-    margin: 0; padding-left: 0; border-left: 0;
+    margin: 0;
+    /* на поле перо мельче: там узко, а строка должна уложиться в две */
+    font-size: 21px;
     text-align: right;
   }
 }
 
-@media (min-width: 1400px) {
+@media (min-width: 1440px) {
   .hero-in.has-margin,
   .market.has-margin,
   .review.has-margin { position: relative; }
@@ -341,7 +370,8 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
-    margin: 0; padding-left: 0; border-left: 0;
+    margin: 0;
+    font-size: 21px;
     text-align: right;
   }
   /* Обложка сама является обёрткой, а блок со статистикой лежит
@@ -428,7 +458,7 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
 .pace { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 22px 44px; }
 .pace-say {
   margin: 0; flex: 1 1 300px; max-width: 520px;
-  font-family: var(--hand); font-size: 26px; line-height: 1.22; color: var(--pen);
+  font-family: var(--hand); font-size: 28px; line-height: 1.24; color: var(--pen);
 }
 /* Двенадцать недель штрихами ручкой: неделя — столбец, понедельник
    сверху, длина штриха — сколько занимались в тот день. Пустой день
@@ -444,7 +474,7 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
   fill: none; stroke: var(--pen); stroke-width: 1.3;
   stroke-linecap: round; opacity: .7;
 }
-.cal-mo { font-family: var(--hand); font-size: 12px; fill: var(--ink-4); }
+.cal-mo { font-family: var(--sans); font-size: 10.5px; fill: var(--ink-4); }
 
 /* рукописные строки переносятся ровно, без одинокого слова в конце */
 .pace-say, .toc-say, .aside p { text-wrap: balance; }
@@ -502,7 +532,7 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
 }
 .dropveil.show { display: flex; }
 .dropveil span {
-  font-family: var(--hand); font-size: 30px; color: var(--pen);
+  font-family: var(--hand); font-size: 32px; color: var(--pen);
   border: 2px dashed var(--pen-line); border-radius: var(--r-lg);
   padding: 34px 46px; background: var(--card);
 }
@@ -533,7 +563,7 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
 .toc-mw { margin-left: auto; flex: none; font-size: 13.5px; color: var(--ink-3); }
 .toc-ms, .toc-say { margin: 6px 0 0 40px; max-width: 62ch; }
 .toc-ms { font-size: 15px; line-height: 1.5; color: var(--ink-2); }
-.toc-say { font-family: var(--hand); font-size: 20px; line-height: 1.2; color: var(--pen); }
+.toc-say { font-family: var(--hand); font-size: 22px; line-height: 1.24; color: var(--pen); }
 
 .toc-list { list-style: none; margin: 12px 0 0; padding: 0; }
 .toc-l { display: block; padding: 8px 0; color: var(--ink); text-decoration: none; }
@@ -610,15 +640,16 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
   font-size: 19px; line-height: 1.6; margin: 0;
 }
 
-/* план занятия */
+/* План занятия — расписание, выписанное на той же странице, а не
+   панель поверх неё: две линейки сверху и снизу, колонки разделены
+   волосяными. Единственная карточка в теории — разобранный пример:
+   он и правда отдельный объект. */
 .plan {
   margin-top: 30px;
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  background: var(--card); overflow: hidden;
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
 }
 .plan-h {
-  padding: 12px 18px; border-bottom: 1px solid var(--rule);
-  background: var(--paper-2);
+  padding: 11px 0; border-bottom: 1px solid var(--rule-soft);
   font-size: 14.5px; font-weight: 600; color: var(--ink-2);
   display: flex; align-items: center; gap: 10px;
 }
@@ -627,10 +658,10 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
    висящую строку с одной ячейкой */
 .plan-list { display: grid; grid-template-columns: repeat(var(--plan-cols, 4), minmax(0, 1fr)); }
 .plan-item {
-  padding: 15px 18px; border-right: 1px solid var(--rule-soft);
-  border-bottom: 1px solid var(--rule-soft);
+  padding: 14px 16px; border-right: 1px solid var(--rule-soft);
 }
-.plan-item:last-child { border-right: 0; }
+.plan-item:first-child { padding-left: 0; }
+.plan-item:last-child { border-right: 0; padding-right: 0; }
 .plan-item .m {
   font-family: var(--serif); font-size: 14px; font-weight: 600;
   color: var(--pen); margin-bottom: 4px;
@@ -758,11 +789,13 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
 }
 
 /* врезки */
+/* Врезка — отчёркнутый кусок той же страницы, а не карточка поверх
+   неё. Смысл несёт цвет черты слева, поэтому рамка вокруг и скругление
+   оказались лишними: они повторяли то, что черта уже сказала. */
 .callout {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  padding: 17px 21px; margin: 0 0 22px;
+  border-left: 3px solid var(--rule-hard);
+  padding: 4px 0 4px 18px; margin: 0 0 24px;
   font-family: var(--sans); font-size: 15.4px; line-height: 1.6;
-  background: var(--card);
 }
 .callout .ct {
   font-weight: 600; font-size: 14.5px; margin-bottom: 8px; display: block;
@@ -778,11 +811,11 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
   padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft);
 }
 
-.callout.work  { border-left: 3px solid var(--green); background: var(--green-soft); border-color: var(--green-line); }
+.callout.work  { border-left-color: var(--green); }
 .callout.work .ct { color: var(--green); }
 /* Заливки нет намеренно: полоса маркера должна читаться как маркер
    по бумаге, а на цветной плашке она мутнеет. */
-.callout.jobs  { border-left: 3px solid var(--pen); background: var(--card); border-color: var(--pen-line); }
+.callout.jobs  { border-left-color: var(--pen); }
 /* Единственная полоса маркера на урок. Больше нигде маркер не ставится:
    если подсвечивать всё подряд, он перестаёт что-либо значить. */
 .callout.jobs .ct {
@@ -791,9 +824,9 @@ a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
     transparent 56%, var(--mark) 56%, var(--mark) 94%, transparent 94%);
   display: inline-block; padding: 0 3px; margin-bottom: 10px;
 }
-.callout.trap  { border-left: 3px solid var(--red); background: var(--red-soft); border-color: var(--red-line); }
+.callout.trap  { border-left-color: var(--red); }
 .callout.trap .ct { color: var(--red); }
-.callout.note  { border-left: 3px solid var(--ink-3); background: var(--paper-2); }
+.callout.note  { border-left-color: var(--ink-3); }
 .callout.note .ct { color: var(--ink); }
 
 /* разобранный пример */
@@ -1143,11 +1176,12 @@ table.res td.num { text-align: right; }
    12. Урок — самопроверка
    ============================================================ */
 
-.quiz { display: flex; flex-direction: column; gap: 14px; }
-.q {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  background: var(--card); padding: 20px 22px;
-}
+/* Вопрос написан на странице; в рамку берутся только варианты —
+   по ним надо попадать пальцем. Карточка вокруг карточек была
+   лишним слоем и ничего не добавляла. */
+.quiz { display: flex; flex-direction: column; gap: 26px; }
+.q { padding-top: 24px; border-top: 1px solid var(--rule); }
+.quiz .q:first-child { padding-top: 0; border-top: 0; }
 .q-t {
   font-size: 16.5px; font-weight: 500; margin-bottom: 15px;
   display: flex; gap: 13px; align-items: baseline; line-height: 1.5;
@@ -1202,17 +1236,18 @@ table.res td.num { text-align: right; }
    13. Урок — что почитать
    ============================================================ */
 
-.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+/* Что почитать — список литературы в конце главы, а не витрина
+   карточек: источник, название, зачем это читать. */
+.links { display: block; max-width: var(--measure); }
 .link-card {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  padding: 17px 19px; background: var(--card); color: var(--ink);
-  text-decoration: none; display: block;
-  transition: border-color .18s var(--ease);
+  display: block; padding: 16px 0; color: var(--ink);
+  border-top: 1px solid var(--rule-soft); text-decoration: none;
 }
-.link-card:hover { text-decoration: none; border-color: var(--pen-line); }
+.links .link-card:first-child { border-top: 0; padding-top: 4px; }
+.link-card:hover { text-decoration: none; }
 .link-card .lk-src {
   font-size: 12.5px; color: var(--ink-3);
-  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
 }
 .link-card .lk-src .lang {
   font-size: 11px; font-weight: 600;
@@ -1301,7 +1336,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
    Номер шага набран его рукой, сама подсказка — обычным текстом. */
 .hint-step { border-left: 2px solid var(--pen-line); padding-left: 18px; margin-bottom: 22px; }
 .hint-step .hs-n {
-  font-family: var(--hand); font-size: 20px; line-height: 1.2;
+  font-family: var(--hand); font-size: 22px; line-height: 1.24;
   color: var(--pen); margin-bottom: 4px;
 }
 .hint-step p { margin: 0; font-family: var(--serif); }
@@ -1370,7 +1405,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 }
 
 /* сводка «готовы ответить на N из M» — голосом наставника */
-.prep-sum { margin: 18px 0 0; font-family: var(--hand); font-size: 24px; line-height: 1.25; color: var(--pen); }
+.prep-sum { margin: 18px 0 0; font-family: var(--hand); font-size: 26px; line-height: 1.28; color: var(--pen); }
 .prep-list { list-style: none; margin: 0; padding: 0; }
 .prep-item { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--rule-soft); }
 .prep-item:first-child { border-top: 0; padding-top: 4px; }
@@ -1512,7 +1547,10 @@ body.no-scroll { overflow: hidden; }
 
 @media (max-width: 720px) {
   :root { --measure: 100%; }
-  .wrap { padding: 0 18px; }
+  /* поля остаются и на телефоне: слева страница шире, чем справа —
+     как в тетради, где справа полей нет */
+  .wrap { padding: 0 18px 0 30px; }
+  .wrap::before { left: 8px; }
   .hdr-in { padding: 0 18px; gap: 12px; }
   .crumbs { display: none; }
   .warnbar { padding: 10px 18px; }
@@ -1534,7 +1572,7 @@ body.no-scroll { overflow: hidden; }
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--rule);
   }
-  .pace-say { font-size: 23px; }
+  .pace-say { font-size: 25px; }
   /* прилипающая полоса — в одну строку: подсказка и решение иконками,
      их имена держит aria-label */
   .actions { flex-wrap: nowrap; gap: 6px; }
@@ -1547,8 +1585,12 @@ body.no-scroll { overflow: hidden; }
   .find-foot { display: none; }
   .find { padding-top: 6vh; }
   .find-it { min-height: 52px; padding: 12px; }
+  /* План в два столбца: обнулять внешние отступы надо у каждого ряда,
+     а не у первого и последнего пункта — иначе вторая строка уезжает. */
   .plan-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .plan-item { border-right: 0; }
+  .plan-item { padding: 14px 16px; border-right: 1px solid var(--rule-soft); }
+  .plan-item:nth-child(odd) { padding-left: 0; }
+  .plan-item:nth-child(even) { padding-right: 0; border-right: 0; }
   .mk-hero .pct { font-size: 48px; }
 
   /* ПРАВИЛО ПАЛЬЦА: на телефоне всё, что нажимают, не ниже 48px.

@@ -1775,6 +1775,10 @@ function renderLesson(app, id) {
   (function () {
     const bar = el("div", { class: "readbar", id: "readbar" });
     document.body.appendChild(bar);
+    /* В уроке две полосы прогресса не нужны: здесь важно, сколько
+       осталось до конца страницы, а сколько пройдено курса — сказано
+       словами на кнопке в шапке. */
+    document.body.classList.add("reading");
     const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
     let ticking = false;
 
@@ -1801,6 +1805,7 @@ function renderLesson(app, id) {
     Router.cleanup.push(function () {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      document.body.classList.remove("reading");
       const b = document.getElementById("readbar");
       if (b) b.remove();
     });
@@ -2312,7 +2317,7 @@ const Find = {
         '" role="option" aria-selected="false" data-i="' + i + '">' +
         '<span class="find-n">' + esc(x.num || "") + "</span>" +
         '<span class="find-t">' + esc(x.title) +
-          '<span class="find-w">' + esc(x.where) + (x.soon ? " · скоро" : "") + "</span></span>" +
+          '<span class="find-w">' + esc(x.where) + (x.soon ? ", скоро" : "") + "</span></span>" +
         '<span class="find-c">' + (x.done ? penTick(x.key) : "") + "</span></a>";
     }).join("");
     Find.mark();
