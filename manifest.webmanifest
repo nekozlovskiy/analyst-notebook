@@ -1,0 +1,16 @@
+{
+  "name": "Тетрадь аналитика — подготовка к Junior Data Analyst",
+  "short_name": "Тетрадь",
+  "description": "40 уроков: SQL, Python, статистика и продуктовые метрики. Каждый урок заканчивается задачей, которую вы решаете прямо в браузере.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FCFAF6",
+  "theme_color": "#FCFAF6",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
