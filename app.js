@@ -734,39 +734,103 @@ const Stats = {
 };
 
 /* ============================================================
+   Карточка «вопрос → ответ»
+
+   Одна карточка в box: вопрос и «Показать ответ», затем ответ под
+   чертой и две оценки. onRate(ok) вызывается ровно один раз. Какую
+   карточку показать следующей и писать ли оценку в расписание —
+   решает тот, кто вызвал: колода в уроке или повторение на главной.
+   ============================================================ */
+
+const Flash = {
+  card: function (box, card, meta, onRate) {
+    box.innerHTML =
+      '<div class="fc">' +
+        '<div class="fc-meta">' + meta + "</div>" +
+        '<div class="fc-q">' + card.q + "</div>" +
+        '<div class="fc-a" aria-live="polite"></div>' +
+        '<div class="fc-act">' +
+          '<button class="btn primary fc-show" type="button">Показать ответ</button>' +
+        "</div>" +
+      "</div>";
+    const root = $(".fc", box), act = $(".fc-act", root), ans = $(".fc-a", root);
+    let rated = false;
+
+    function show() {
+      if (root.classList.contains("open")) return;
+      root.classList.add("open");
+      ans.innerHTML = card.a;
+      act.innerHTML =
+        '<button class="btn fc-no" type="button">Не вспомнил</button>' +
+        '<button class="btn primary fc-yes" type="button">Вспомнил</button>';
+      $(".fc-no", act).addEventListener("click", function () { rate(false); });
+      $(".fc-yes", act).addEventListener("click", function () { rate(true); });
+      $(".fc-yes", act).focus({ preventScroll: true });
+    }
+    function rate(ok) {
+      if (rated) return;
+      rated = true;
+      root.classList.add(ok ? "yes" : "no");
+      Array.prototype.forEach.call(act.querySelectorAll("button"), function (b) { b.disabled = true; });
+      onRate(ok);
+    }
+
+    $(".fc-show", act).addEventListener("click", show);
+    /* Пробел и Enter нажимают кнопку в фокусе сами — «Показать ответ»,
+       потом «Вспомнил». Стрелки — оценка, когда ответ уже открыт. */
+    root.addEventListener("keydown", function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey || rated || !root.classList.contains("open")) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); rate(false); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); rate(true); }
+    });
+    return root;
+  }
+};
+
+/* ============================================================
    Повторение
 
-   Вопрос из самопроверки возвращается через 1, 3, 7 и 21 день.
-   Верный ответ переводит его на ступень дальше, ошибка — снова на
-   завтра. Верный ответ на последней ступени — вопрос выучен и из
-   очереди уходит. Хранится в Store под ключом «урок:номер вопроса».
+   Вопрос из самопроверки и карточка из урока возвращаются через 1, 3,
+   7 и 21 день. Верный ответ или «вспомнил» переводит на ступень дальше,
+   ошибка — снова на завтра. Верный ответ на последней ступени — выучено,
+   из очереди уходит. Хранится в Store: «урок:номер» — вопрос,
+   «урок:cномер» — карточка; miss — сколько раз ошибся или не вспомнил.
    ============================================================ */
 
 const Review = {
   STEPS: [1, 3, 7, 21],
   LIMIT: 20,              /* больше за раз — уже не пять минут, а урок */
 
-  record: function (id, qi, ok, fromLesson) {
-    const k = id + ":" + qi;
+  parse: function (k) {
+    const m = /^([^:]+):(c?)(\d+)$/.exec(k);
+    return m ? { key: k, id: m[1], kind: m[2] ? "card" : "quiz", n: +m[3] } : null;
+  },
+
+  /* ref — номер вопроса или "c" + номер карточки. false — запись
+     пропущена: повторный проход в уроке не должен сбивать расписание. */
+  record: function (id, ref, ok, fromLesson) {
+    const k = id + ":" + ref;
     const cur = Store.get("review", k, null);
-    /* повторный проход теста в уроке не должен сбивать расписание */
-    if (fromLesson && cur) return;
+    if (fromLesson && cur) return false;
     const step = cur ? cur.step : -1;
+    const miss = ((cur && cur.miss) || 0) + (ok ? 0 : 1);
     if (ok && step + 1 >= Review.STEPS.length) {
-      Store.set("review", k, { step: step, done: true });
-      return;
+      Store.set("review", k, { step: step, done: true, miss: miss });
+      return true;
     }
     const next = ok ? step + 1 : 0;
-    Store.set("review", k, { step: next, due: addDays(isoDay(), Review.STEPS[next]) });
+    Store.set("review", k, { step: next, due: addDays(isoDay(), Review.STEPS[next]), miss: miss });
+    return true;
   },
 
   items: function () {
     const all = Store.all().review || {};
     return Object.keys(all).map(function (k) {
-      const p = k.split(":");
-      return { key: k, id: p[0], qi: +p[1], r: all[k] };
+      const x = Review.parse(k);
+      if (x) x.r = all[k];
+      return x;
     }).filter(function (x) {
-      return x.r && !x.r.done && x.r.due && Course.byId(x.id);
+      return x && x.r && !x.r.done && x.r.due && Course.byId(x.id);
     });
   },
   due: function () {
@@ -785,6 +849,15 @@ const Review = {
     return "через " + n + " " + plural(n, "день", "дня", "дней");
   },
 
+  /* «12: 5 вопросов и 7 карточек», а если вид один — «7 карточек» */
+  say: function (list) {
+    const c = list.filter(function (x) { return x.kind === "card"; }).length;
+    const q = list.length - c;
+    const qs = q + " " + plural(q, "вопрос", "вопроса", "вопросов");
+    const cs = c + " " + plural(c, "карточка", "карточки", "карточек");
+    return q && c ? list.length + ": " + qs + " и " + cs : c ? cs : qs;
+  },
+
   /* Блок на главной. Пока в очереди ничего нет, его нет вовсе. */
   section: function () {
     const due = Review.due(), next = Review.nextDate();
@@ -798,9 +871,8 @@ const Review = {
       (due.length
         ? '<p class="review-intro">' +
             (due.length > n
-              ? "Накопилось " + due.length + " " + plural(due.length, "вопрос", "вопроса", "вопросов") +
-                ", сегодня возьмём " + n + ". "
-              : "Сегодня " + n + " " + plural(n, "вопрос", "вопроса", "вопросов") + " из пройденных уроков. ") +
+              ? "Накопилось " + Review.say(due) + ", сегодня возьмём " + n + ". "
+              : "Сегодня " + Review.say(due) + " из пройденных уроков. ") +
             "Минут пять — и материал останется с вами надолго.</p>" +
           '<button class="btn primary" id="rvStart" type="button">Начать повторение</button>'
         : '<p class="review-later">Всё повторено. Следующие вопросы вернутся ' + Review.when(next) + ".</p>") +
@@ -817,10 +889,11 @@ const Review = {
     order.forEach(function (x) { mods[Course.byId(x.id).module.id] = true; });
     box.innerHTML = '<p class="review-intro">Достаю вопросы…</p>';
     Promise.all(Object.keys(mods).map(function (m) { return Lazy.content(m); })).then(function () {
-      /* урок могли переписать — вопроса с таким номером может уже не быть */
+      /* урок могли переписать — вопроса или карточки с таким номером может уже не быть */
       const ok = order.filter(function (x) {
         const C = window.CONTENT[x.id];
-        return C && C.quiz && C.quiz[x.qi];
+        const items = C && (x.kind === "card" ? C.cards : C.quiz);
+        return items && items[x.n];
       });
       Review.step(box, ok, 0, 0);
     }, function () {
@@ -839,17 +912,38 @@ const Review = {
       $("#rvClose", box).addEventListener("click", function () { Router.render(true); });
       return;
     }
-    const x = order[i], L = Course.byId(x.id), q = window.CONTENT[x.id].quiz[x.qi];
-    let h = '<div class="rv-meta">Вопрос ' + (i + 1) + " из " + order.length +
-      ", из урока " + L.num + " «" + esc(L.title) + "»</div>" +
+    const x = order[i], L = Course.byId(x.id), C = window.CONTENT[x.id];
+    const from = " из " + order.length + ", из урока " + L.num + " «" + esc(L.title) + "»";
+    const nextHtml = '<div class="rv-next" hidden><button class="btn primary" type="button">' +
+      (i + 1 < order.length ? "Дальше" : "Закончить") + "</button></div>";
+
+    /* после ответа — кнопка дальше, фокус на неё: можно идти с клавиатуры */
+    function next(ok) {
+      const nx = $(".rv-next", box);
+      nx.hidden = false;
+      const nb = $("button", nx);
+      nb.addEventListener("click", function () { Review.step(box, order, i + 1, right + (ok ? 1 : 0)); });
+      nb.focus();
+    }
+
+    if (x.kind === "card") {
+      box.innerHTML = '<div class="rv-card"></div>' + nextHtml;
+      const root = Flash.card($(".rv-card", box), C.cards[x.n], "Карточка " + (i + 1) + from, function (ok) {
+        Review.record(x.id, "c" + x.n, ok, false);
+        next(ok);
+      });
+      $(".fc-show", root).focus({ preventScroll: true });
+      return;
+    }
+
+    const q = C.quiz[x.n];
+    let h = '<div class="rv-meta">Вопрос ' + (i + 1) + from + "</div>" +
       '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
     shuffled(q.opts.length).forEach(function (orig, pos) {
       h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
         '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
     });
-    h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" +
-      '<div class="rv-next" hidden><button class="btn primary" type="button">' +
-        (i + 1 < order.length ? "Дальше" : "Закончить") + "</button></div>";
+    h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" + nextHtml;
     box.innerHTML = h;
 
     const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
@@ -857,7 +951,7 @@ const Review = {
       btn.addEventListener("click", function () {
         if (btn.disabled) return;
         const picked = +btn.dataset.i, ok = picked === q.right;
-        Review.record(x.id, x.qi, ok, false);
+        Review.record(x.id, x.n, ok, false);
         opts.forEach(function (b) {
           b.disabled = true;
           const oi = +b.dataset.i;
@@ -865,11 +959,7 @@ const Review = {
           else if (oi === picked) b.classList.add("wrong");
         });
         $(".q-why", box).classList.add("show");
-        const nx = $(".rv-next", box);
-        nx.hidden = false;
-        const nb = $("button", nx);
-        nb.addEventListener("click", function () { Review.step(box, order, i + 1, right + (ok ? 1 : 0)); });
-        nb.focus();
+        next(ok);
       });
     });
   }
@@ -2432,6 +2522,7 @@ const Keys = {
     [["["], "Предыдущий урок", "в открытом уроке"],
     [["]"], "Следующий урок", "в открытом уроке"],
     [["Cmd", "&crarr;"], "Запустить код, а в разборе — проверить", "в открытом уроке"],
+    [["Пробел", "&larr;", "&rarr;"], "Карточка: открыть ответ, не вспомнил, вспомнил", "в уроке и в повторении"],
     [["Esc"], "Закрыть поиск или окно", ""],
     [["?"], "Этот список", ""]
   ],
