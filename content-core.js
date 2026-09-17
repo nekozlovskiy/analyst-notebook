@@ -16,6 +16,8 @@
      solution   — эталонный код с комментариями
      drills     — [{title, level, body, solution, note}] — тренажёр
      quiz       — [{q, opts, right, why}] — самопроверка
+     cards      — [{q, a}] — карточки «вопрос → ответ», 6–12 на урок;
+                  проверка: node инструменты/checkcards.js --require <урок>
      links      — [{t, url, src, d, lang}] — что почитать
    ============================================================ */
 
