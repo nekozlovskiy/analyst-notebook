@@ -18,8 +18,9 @@
    несут смысл состояния (зачтено / ошибка / предупреждение)
    и нигде не декоративны.
 
-   ПРАВИЛО РУКОПИСНОГО: Caveat — только короткие реплики,
-   до полутора строк. Длинный рукописный текст нечитаем.
+   ПРАВИЛО РУКОПИСНОГО: скоропись — только короткие реплики
+   наставника, до полутора строк. Длинный рукописный текст
+   нечитаем, а мелкий — тем более: ниже 18px руки не бывает.
    ============================================================ */
 
 /* ============================================================
@@ -55,6 +56,12 @@
   --mark:       #FFE59E;
   --mark-2:     #FFD86B;
 
+  /* Поля тетради. Единственное исключение из правила одного акцента:
+     эту линию не рисует наставник — она напечатана в тетради ещё на
+     фабрике. Поэтому она ничего не значит, ни на что не реагирует и
+     никогда не становится рамкой или состоянием. */
+  --margin-rule: #DDA093;
+
   /* состояния */
   --green:      #2E6B4F;   --green-soft: #E8F1EA;   --green-line: #BFD9C7;
   --red:        #A83B2A;   --red-soft:   #FAEDE9;   --red-line:   #EDC8BF;
@@ -63,7 +70,10 @@
   /* типографика */
   --sans:  "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --serif: "Literata", "Iowan Old Style", Georgia, "Times New Roman", serif;
-  --hand:  "Caveat", "Segoe Script", cursive;
+  /* Русский почерк связный, поэтому и здесь связная скоропись, а не
+     маркерный леттеринг: наставник пишет от руки, а не подписывает
+     плакат. Начертание одно и тонкое — отсюда кегли крупнее. */
+  --hand:  "Bad Script", "Segoe Script", cursive;
   --mono:  "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* геометрия */
@@ -73,7 +83,7 @@
   --wrap:     1020px;  /* главная */
   --lesson:   820px;   /* урок    */
   --measure:  66ch;
-  --margin-w: 150px;   /* левое поле под реплики наставника */
+  --margin-w: 175px;   /* левое поле под реплики наставника */
 
   --shadow-1: 0 1px 2px rgba(35, 32, 28, .05);
   --shadow-2: 0 8px 26px -10px rgba(35, 32, 28, .16);
@@ -107,6 +117,8 @@
   --mark:       #6A5514;
   --mark-2:     #8A6E17;
 
+  --margin-rule: #583A33;
+
   --green:      #6FC79B;   --green-soft: #14251C;   --green-line: #2A4536;
   --red:        #F0907C;   --red-soft:   #2C1A16;   --red-line:   #4C2C24;
   --amber:      #E0B361;   --amber-soft: #272014;   --amber-line: #453820;
@@ -138,6 +150,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* ПРАВИЛО ЦИФР: по умолчанию старостильные, как в книге, — они
+     живут в строке наравне с буквами и не выкрикивают себя.
+     Ровные табличные остаются там, где цифры стоят столбцом:
+     код, таблицы результатов, календарь, проценты в списке. */
+  font-variant-numeric: oldstyle-nums proportional-nums;
 }
 
 a { color: var(--pen); text-decoration: none; }
@@ -161,26 +178,49 @@ h3, h4 {
   letter-spacing: -0.015em; line-height: 1.25;
 }
 
-code, kbd, pre, .mono {
+code, pre, .mono, table.res, .CodeMirror, .editor-h {
   font-family: var(--mono);
   font-variant-ligatures: none;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Клавиша — не код: набирается тем же гротеском, что и подписи
+   кнопок, и выглядит нажимаемой. Моноширинный шрифт в проекте
+   означает «это код», и клавиши его не занимают.               */
+kbd {
+  font-family: var(--sans); font-size: .86em; font-weight: 500;
+  font-variant-numeric: lining-nums;
+  padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+  border: 1px solid var(--rule-hard); border-bottom-width: 2px;
+  background: var(--paper-2); color: var(--ink-2);
 }
 
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+
+/* Палец не ждёт: браузер не должен держать 300 мс на случай двойного
+   тапа, а подсветка нажатия у нас своя — у каждого контрола есть
+   состояние :active. */
+a, button, summary, label, input, select, textarea, .toc-l, .q-opt {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* текст только для экранного диктора */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 ::selection { background: var(--pen-soft); color: var(--ink); }
 
+/* ПРАВИЛО ПОЯВЛЕНИЯ: блок возникает там, где он и будет стоять.
+   Ничего не выезжает снизу и не наплывает сбоку — страница и так
+   движется под рукой читателя. Единственное, что позволено, —
+   проявление, будто чернила проступили на бумаге.               */
+@keyframes ink-in { from { opacity: 0; } }
+
 .io-body, .modal, .theory pre, .drill-body {
   scrollbar-width: thin;
   scrollbar-color: var(--rule-hard) transparent;
 }
-
-/* ---------- появление блоков при скролле (motion 5) ---------- */
-
 
 /* ============================================================
    3. Шапка
@@ -212,7 +252,7 @@ button:disabled { cursor: not-allowed; }
 .mk-p { fill: var(--card); stroke: var(--rule-hard); }
 .mk-m { fill: none; stroke: var(--pen-line); }
 .mk-k { fill: none; stroke: var(--pen); }
-.pb-n { font-variant-numeric: tabular-nums; }
+.pb-n { font-family: var(--serif); font-size: 13.5px; }
 .crumbs {
   font-size: 13.5px; color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -226,11 +266,15 @@ button:disabled { cursor: not-allowed; }
   transition: width .6s var(--ease);
 }
 
+/* Полоса прочитанного в уроке. Полоса пройденного курса в это время
+   прячется: две одинаковые черты в двух пикселях друг от друга значат
+   разное и потому не значат ничего. */
 .readbar {
   position: fixed; left: 0; top: var(--header-h); height: 2px;
   background: var(--pen); width: 0; z-index: 41; pointer-events: none;
   transition: width .1s linear;
 }
+body.reading .hdr-bar { display: none; }
 
 .iconbtn {
   border: 1px solid var(--rule); background: transparent; color: var(--ink-2);
@@ -267,23 +311,33 @@ button:disabled { cursor: not-allowed; }
    4. Обёртки
    ============================================================ */
 
-.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 32px; }
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 32px; position: relative; }
 .wrap.lesson-wrap { max-width: var(--lesson); }
+
+/* Поля. У школьной тетради есть ровно два опознавательных знака —
+   линовка и вертикальная черта полей; линовка под текстом мешает
+   читать, черта — нет. Она проходит по левому краю колонки, и
+   реплики наставника на широком экране оказываются там, где им и
+   место: слева от неё, на полях. */
+.wrap::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 10px;
+  border-left: 1px solid var(--margin-rule);
+  pointer-events: none;
+}
 
 /* ============================================================
    4a. Голос наставника
    ============================================================ */
 
-/* Реплика на поле. На широком экране висит слева от колонки
-   текста и не занимает её ширину; на узком становится обычным
-   блоком с чертой слева. Внутри — от руки и коротко.        */
+/* Реплика на поле. На широком экране висит слева от черты полей и
+   не занимает ширину колонки; на узком встаёт в колонку обычным
+   абзацем. Своей черты у неё нет: почерка и цвета хватает, чтобы
+   отличить голос наставника от набранного текста курса. */
 .aside {
   font-family: var(--hand);
-  font-size: 21px; line-height: 1.3;
+  font-size: 23px; line-height: 1.32;
   color: var(--pen);
   margin: 0 0 18px;
-  padding-left: 15px;
-  border-left: 2px solid var(--pen-line);
 }
 .aside p { margin: 0 0 10px; }
 .aside p:last-child { margin-bottom: 0; }
@@ -291,19 +345,22 @@ button:disabled { cursor: not-allowed; }
 /* Поле выносится наружу, только если рядом с колонкой реально есть
    место: внешние поля должны вместить ширину реплики и зазор.
    Порог разный для урока (колонка 820px) и для главной (1020px) —
-   с одним общим реплика уезжала бы за край экрана.               */
-@media (min-width: 1200px) {
+   с одним общим реплика уезжала бы за край экрана. Пороги считаны
+   от --margin-w: 175 + 26 зазора должны уместиться сбоку.        */
+@media (min-width: 1240px) {
   .lesson-wrap .has-margin { position: relative; }
   .lesson-wrap .has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
-    margin: 0; padding-left: 0; border-left: 0;
+    margin: 0;
+    /* на поле перо мельче: там узко, а строка должна уложиться в две */
+    font-size: 21px;
     text-align: right;
   }
 }
 
-@media (min-width: 1400px) {
+@media (min-width: 1440px) {
   .hero-in.has-margin,
   .market.has-margin,
   .review.has-margin { position: relative; }
@@ -313,7 +370,8 @@ button:disabled { cursor: not-allowed; }
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
-    margin: 0; padding-left: 0; border-left: 0;
+    margin: 0;
+    font-size: 21px;
     text-align: right;
   }
   /* Обложка сама является обёрткой, а блок со статистикой лежит
@@ -400,19 +458,23 @@ button:disabled { cursor: not-allowed; }
 .pace { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 22px 44px; }
 .pace-say {
   margin: 0; flex: 1 1 300px; max-width: 520px;
-  font-family: var(--hand); font-size: 26px; line-height: 1.22; color: var(--pen);
+  font-family: var(--hand); font-size: 28px; line-height: 1.24; color: var(--pen);
 }
-/* двенадцать недель точками: неделя — столбец, понедельник сверху,
-   размер точки — сколько занимались в тот день */
-.cal { display: flex; gap: 4px; flex: none; }
-.cal-w { display: flex; flex-direction: column; gap: 4px; }
-.cal-d { width: 11px; height: 11px; display: grid; place-items: center; border-radius: 50%; }
-.cal-d::before { content: ""; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
-.cal-d.l1::before { width: 5px; height: 5px; background: var(--pen); }
-.cal-d.l2::before { width: 8px; height: 8px; background: var(--pen); }
-.cal-d.l3::before { width: 11px; height: 11px; background: var(--pen); }
-.cal-d.none::before { background: transparent; }
-.cal-d.today { box-shadow: 0 0 0 1.5px var(--pen-line); }
+/* Двенадцать недель штрихами ручкой: неделя — столбец, понедельник
+   сверху, длина штриха — сколько занимались в тот день. Пустой день
+   остаётся точкой линовки, сегодняшний обведён. */
+.cal { flex: none; }
+.cal svg { display: block; width: 218px; height: auto; overflow: visible; }
+.cal-m { fill: none; stroke: var(--pen); stroke-linecap: round; }
+.cal-m.l1 { stroke-width: 1.5; opacity: .5; }
+.cal-m.l2 { stroke-width: 2.1; opacity: .78; }
+.cal-m.l3 { stroke-width: 2.8; }
+.cal-n { fill: var(--ink-4); opacity: .4; }
+.cal-ring {
+  fill: none; stroke: var(--pen); stroke-width: 1.3;
+  stroke-linecap: round; opacity: .7;
+}
+.cal-mo { font-family: var(--sans); font-size: 10.5px; fill: var(--ink-4); }
 
 /* рукописные строки переносятся ровно, без одинокого слова в конце */
 .pace-say, .toc-say, .aside p { text-wrap: balance; }
@@ -470,7 +532,7 @@ button:disabled { cursor: not-allowed; }
 }
 .dropveil.show { display: flex; }
 .dropveil span {
-  font-family: var(--hand); font-size: 30px; color: var(--pen);
+  font-family: var(--hand); font-size: 32px; color: var(--pen);
   border: 2px dashed var(--pen-line); border-radius: var(--r-lg);
   padding: 34px 46px; background: var(--card);
 }
@@ -501,13 +563,13 @@ button:disabled { cursor: not-allowed; }
 .toc-mw { margin-left: auto; flex: none; font-size: 13.5px; color: var(--ink-3); }
 .toc-ms, .toc-say { margin: 6px 0 0 40px; max-width: 62ch; }
 .toc-ms { font-size: 15px; line-height: 1.5; color: var(--ink-2); }
-.toc-say { font-family: var(--hand); font-size: 20px; line-height: 1.2; color: var(--pen); }
+.toc-say { font-family: var(--hand); font-size: 22px; line-height: 1.24; color: var(--pen); }
 
 .toc-list { list-style: none; margin: 12px 0 0; padding: 0; }
 .toc-l { display: block; padding: 8px 0; color: var(--ink); text-decoration: none; }
 .toc-l:hover { text-decoration: none; }
 .toc-line { display: flex; align-items: baseline; gap: 10px; }
-.toc-n { flex: none; min-width: 30px; font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.toc-n { flex: none; min-width: 30px; font-family: var(--serif); font-size: 15px; color: var(--ink-3); }
 .toc-tt { font-size: 16px; font-weight: 500; transition: color .15s var(--ease); }
 .toc-l:hover .toc-tt { color: var(--pen); }
 .toc-l.done .toc-tt { color: var(--ink-2); }
@@ -540,7 +602,6 @@ button:disabled { cursor: not-allowed; }
 .mk-hero .pct {
   font-family: var(--serif); font-size: 62px; font-weight: 600; color: var(--pen);
   line-height: 1; letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
 }
 .mk-hero .what { font-size: 19px; font-weight: 600; margin-top: 12px; letter-spacing: -0.02em; }
 .mk-hero .where { font-size: 15px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
@@ -553,7 +614,7 @@ button:disabled { cursor: not-allowed; }
 .mk-row:last-child { border-bottom: 0; }
 .mk-row .pct {
   font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--pen);
-  min-width: 48px; font-variant-numeric: tabular-nums;
+  min-width: 48px; font-variant-numeric: lining-nums tabular-nums;
 }
 .mk-row .what { font-size: 14.5px; font-weight: 500; }
 .mk-row .where { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
@@ -565,7 +626,7 @@ button:disabled { cursor: not-allowed; }
 .lesson-head { padding: 44px 0 28px; }
 
 .lesson-head .kicker {
-  font-size: 13px; color: var(--ink-3);
+  font-size: 13.5px; color: var(--ink-3);
   margin-bottom: 16px; display: flex; align-items: center;
   gap: 14px; flex-wrap: wrap;
 }
@@ -579,15 +640,16 @@ button:disabled { cursor: not-allowed; }
   font-size: 19px; line-height: 1.6; margin: 0;
 }
 
-/* план занятия */
+/* План занятия — расписание, выписанное на той же странице, а не
+   панель поверх неё: две линейки сверху и снизу, колонки разделены
+   волосяными. Единственная карточка в теории — разобранный пример:
+   он и правда отдельный объект. */
 .plan {
   margin-top: 30px;
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  background: var(--card); overflow: hidden;
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
 }
 .plan-h {
-  padding: 12px 18px; border-bottom: 1px solid var(--rule);
-  background: var(--paper-2);
+  padding: 11px 0; border-bottom: 1px solid var(--rule-soft);
   font-size: 14.5px; font-weight: 600; color: var(--ink-2);
   display: flex; align-items: center; gap: 10px;
 }
@@ -596,13 +658,13 @@ button:disabled { cursor: not-allowed; }
    висящую строку с одной ячейкой */
 .plan-list { display: grid; grid-template-columns: repeat(var(--plan-cols, 4), minmax(0, 1fr)); }
 .plan-item {
-  padding: 15px 18px; border-right: 1px solid var(--rule-soft);
-  border-bottom: 1px solid var(--rule-soft);
+  padding: 14px 16px; border-right: 1px solid var(--rule-soft);
 }
-.plan-item:last-child { border-right: 0; }
+.plan-item:first-child { padding-left: 0; }
+.plan-item:last-child { border-right: 0; padding-right: 0; }
 .plan-item .m {
-  font-size: 13px; font-weight: 600; color: var(--pen); margin-bottom: 4px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--serif); font-size: 14px; font-weight: 600;
+  color: var(--pen); margin-bottom: 4px;
 }
 .plan-item .w { font-size: 14px; color: var(--ink-2); line-height: 1.45; }
 
@@ -651,12 +713,9 @@ button:disabled { cursor: not-allowed; }
   line-height: 1.72;
   color: var(--ink);
 }
-/* В тексте — старостильные цифры, как в книге; в таблицах и коде —
-   ровные табличные, чтобы столбцы чисел читались. */
-.theory, .ticket-b, .drill-body, .d-say, .review-intro, .hero p.lede, .lesson-head .sub {
-  font-variant-numeric: oldstyle-nums proportional-nums;
-}
-.theory table, .ticket-b table, .theory pre, .theory code, .drill-body pre, .drill-body code {
+/* Столбцы чисел в тексте — исключение из правила цифр: в таблице
+   разряды должны стоять друг под другом. */
+.theory table, .ticket-b table, .drill-body table {
   font-variant-numeric: lining-nums tabular-nums;
 }
 .theory > * { max-width: var(--measure); }
@@ -730,11 +789,13 @@ button:disabled { cursor: not-allowed; }
 }
 
 /* врезки */
+/* Врезка — отчёркнутый кусок той же страницы, а не карточка поверх
+   неё. Смысл несёт цвет черты слева, поэтому рамка вокруг и скругление
+   оказались лишними: они повторяли то, что черта уже сказала. */
 .callout {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  padding: 17px 21px; margin: 0 0 22px;
+  border-left: 3px solid var(--rule-hard);
+  padding: 4px 0 4px 18px; margin: 0 0 24px;
   font-family: var(--sans); font-size: 15.4px; line-height: 1.6;
-  background: var(--card);
 }
 .callout .ct {
   font-weight: 600; font-size: 14.5px; margin-bottom: 8px; display: block;
@@ -750,11 +811,11 @@ button:disabled { cursor: not-allowed; }
   padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft);
 }
 
-.callout.work  { border-left: 3px solid var(--green); background: var(--green-soft); border-color: var(--green-line); }
+.callout.work  { border-left-color: var(--green); }
 .callout.work .ct { color: var(--green); }
 /* Заливки нет намеренно: полоса маркера должна читаться как маркер
    по бумаге, а на цветной плашке она мутнеет. */
-.callout.jobs  { border-left: 3px solid var(--pen); background: var(--card); border-color: var(--pen-line); }
+.callout.jobs  { border-left-color: var(--pen); }
 /* Единственная полоса маркера на урок. Больше нигде маркер не ставится:
    если подсвечивать всё подряд, он перестаёт что-либо значить. */
 .callout.jobs .ct {
@@ -763,9 +824,9 @@ button:disabled { cursor: not-allowed; }
     transparent 56%, var(--mark) 56%, var(--mark) 94%, transparent 94%);
   display: inline-block; padding: 0 3px; margin-bottom: 10px;
 }
-.callout.trap  { border-left: 3px solid var(--red); background: var(--red-soft); border-color: var(--red-line); }
+.callout.trap  { border-left-color: var(--red); }
 .callout.trap .ct { color: var(--red); }
-.callout.note  { border-left: 3px solid var(--ink-3); background: var(--paper-2); }
+.callout.note  { border-left-color: var(--ink-3); }
 .callout.note .ct { color: var(--ink); }
 
 /* разобранный пример */
@@ -963,7 +1024,15 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .btn.check:hover:not(:disabled) {
   background: color-mix(in srgb, var(--green-soft) 55%, var(--card)); border-color: var(--green);
 }
-.btn .k { font-family: var(--mono); font-size: 11px; opacity: .6; margin-left: 3px; }
+/* Подпись клавиши на кнопке — тихая плашка из самого цвета кнопки:
+   на фиолетовой «Запустить» рамка кричала бы громче подписи. */
+.btn .k, .iconbtn .k {
+  font-family: var(--sans); font-size: 11px; font-weight: 500;
+  font-variant-numeric: lining-nums;
+  margin-left: 4px; padding: 2px 6px; border-radius: 5px;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+  opacity: .85;
+}
 
 /* статус проверки */
 .status {
@@ -971,8 +1040,7 @@ textarea.answer::placeholder { color: var(--ink-3); }
   border-radius: var(--r-lg); padding: 15px 18px; margin-bottom: 18px;
   font-size: 15px; line-height: 1.58; border: 1px solid transparent;
 }
-.status.show { display: flex; animation: fade-up .3s var(--ease-spring); }
-@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } }
+.status.show { display: flex; animation: ink-in .26s var(--ease) both; }
 .status.ok   { background: var(--green-soft); border-color: var(--green-line); }
 .status.bad  { background: var(--red-soft);   border-color: var(--red-line); }
 .status.warn { background: var(--amber-soft); border-color: var(--amber-line); }
@@ -1108,16 +1176,17 @@ table.res td.num { text-align: right; }
    12. Урок — самопроверка
    ============================================================ */
 
-.quiz { display: flex; flex-direction: column; gap: 14px; }
-.q {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  background: var(--card); padding: 20px 22px;
-}
+/* Вопрос написан на странице; в рамку берутся только варианты —
+   по ним надо попадать пальцем. Карточка вокруг карточек была
+   лишним слоем и ничего не добавляла. */
+.quiz { display: flex; flex-direction: column; gap: 26px; }
+.q { padding-top: 24px; border-top: 1px solid var(--rule); }
+.quiz .q:first-child { padding-top: 0; border-top: 0; }
 .q-t {
   font-size: 16.5px; font-weight: 500; margin-bottom: 15px;
   display: flex; gap: 13px; align-items: baseline; line-height: 1.5;
 }
-.q-t .q-n { font-size: 12.5px; color: var(--ink-3); flex: none; font-variant-numeric: tabular-nums; }
+.q-t .q-n { font-family: var(--serif); font-size: 13.5px; color: var(--ink-3); flex: none; }
 .q-t code {
   font-family: var(--mono); font-size: .86em; background: var(--paper-2);
   padding: 2px 5px; border-radius: var(--r);
@@ -1150,7 +1219,7 @@ table.res td.num { text-align: right; }
   border-left: 3px solid var(--pen);
   font-size: 15px; line-height: 1.6; color: var(--ink-2);
 }
-.q-why.show { display: block; animation: fade-up .3s var(--ease-spring); }
+.q-why.show { display: block; animation: ink-in .26s var(--ease) both; }
 .q-why b { color: var(--ink); }
 .q-why code {
   font-family: var(--mono); font-size: .87em; background: var(--card);
@@ -1161,23 +1230,24 @@ table.res td.num { text-align: right; }
   margin-top: 18px; font-size: 14px; color: var(--ink-3);
   display: flex; align-items: center; gap: 10px;
 }
-.quiz-score b { color: var(--pen); font-weight: 600; font-variant-numeric: tabular-nums; }
+.quiz-score b { font-family: var(--serif); color: var(--pen); font-weight: 700; }
 
 /* ============================================================
    13. Урок — что почитать
    ============================================================ */
 
-.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+/* Что почитать — список литературы в конце главы, а не витрина
+   карточек: источник, название, зачем это читать. */
+.links { display: block; max-width: var(--measure); }
 .link-card {
-  border: 1px solid var(--rule); border-radius: var(--r-lg);
-  padding: 17px 19px; background: var(--card); color: var(--ink);
-  text-decoration: none; display: block;
-  transition: border-color .18s var(--ease);
+  display: block; padding: 16px 0; color: var(--ink);
+  border-top: 1px solid var(--rule-soft); text-decoration: none;
 }
-.link-card:hover { text-decoration: none; border-color: var(--pen-line); }
+.links .link-card:first-child { border-top: 0; padding-top: 4px; }
+.link-card:hover { text-decoration: none; }
 .link-card .lk-src {
   font-size: 12.5px; color: var(--ink-3);
-  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
 }
 .link-card .lk-src .lang {
   font-size: 11px; font-weight: 600;
@@ -1213,11 +1283,13 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .navlink {
   color: var(--ink-2); font-size: 14.5px; text-decoration: none;
   border: 1px solid var(--rule); border-radius: var(--r); padding: 11px 16px;
-  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 34ch;
   transition: border-color .18s var(--ease), color .18s var(--ease),
               background-color .18s var(--ease);
-  min-height: 44px; display: inline-flex; align-items: center;
+  min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
 }
+.nl-a { flex: none; }
+.nl-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .navlink:hover {
   border-color: var(--ink-3); color: var(--ink);
   text-decoration: none; background: var(--paper-2);
@@ -1234,15 +1306,13 @@ textarea.notes::placeholder { color: var(--ink-3); }
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   display: none; align-items: center; justify-content: center; z-index: 90; padding: 20px;
 }
-.modal-bg.show { display: flex; animation: fade-in .22s var(--ease); }
-@keyframes fade-in { from { opacity: 0; } }
+.modal-bg.show { display: flex; animation: ink-in .22s var(--ease) both; }
 .modal {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-lg);
   max-width: 720px; width: 100%; max-height: 84vh; overflow: auto;
   box-shadow: var(--shadow-3);
-  animation: modal-in .26s var(--ease-spring);
+  animation: ink-in .26s var(--ease) both;
 }
-@keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(.99); } }
 .modal-h {
   padding: 17px 24px; border-bottom: 1px solid var(--rule);
   display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16.5px;
@@ -1266,7 +1336,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
    Номер шага набран его рукой, сама подсказка — обычным текстом. */
 .hint-step { border-left: 2px solid var(--pen-line); padding-left: 18px; margin-bottom: 22px; }
 .hint-step .hs-n {
-  font-family: var(--hand); font-size: 20px; line-height: 1.2;
+  font-family: var(--hand); font-size: 22px; line-height: 1.24;
   color: var(--pen); margin-bottom: 4px;
 }
 .hint-step p { margin: 0; font-family: var(--serif); }
@@ -1300,20 +1370,163 @@ textarea.notes::placeholder { color: var(--ink-3); }
 }
 
 .toast {
-  position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 14px);
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
   max-width: min(540px, calc(100vw - 32px));
   background: var(--ink); color: var(--paper);
   border-radius: var(--r-lg); padding: 14px 19px; font-size: 14px; line-height: 1.5;
   box-shadow: var(--shadow-3);
   opacity: 0; pointer-events: none; z-index: 120;
-  transition: opacity .24s var(--ease), transform .24s var(--ease-spring);
+  transition: opacity .24s var(--ease);
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show { opacity: 1; }
 
 .iconbtn.unsaved {
   border-color: var(--amber); color: var(--amber); background: var(--amber-soft);
 }
 .iconbtn.unsaved::after { content: "не сохранено"; font-size: 12px; }
+
+/* строка отчёта под кнопками в окне прогресса */
+.pg-msg { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); min-height: 20px; }
+
+/* ============================================================
+   15a. Отдельные страницы: к собеседованию, конспект, итог модуля
+   ============================================================ */
+
+.hdr-nav { display: flex; gap: 18px; font-size: 14px; flex: none; }
+.hdr-nav a { color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.hdr-nav a:hover, .hdr-nav a[aria-current="page"] { color: var(--pen); text-decoration: none; }
+
+.prep-line { margin: 30px 0 0; max-width: 62ch; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+
+.page-wait, .page-empty { font-size: 16px; line-height: 1.6; color: var(--ink-2); padding: 18px 0 40px; margin: 0; }
+.page-actions { margin-top: 22px; }
+.page .block-h h2 .prep-n {
+  margin-left: 10px; font-family: var(--sans); font-size: 15px; font-weight: 500; color: var(--ink-3);
+}
+
+/* сводка «готовы ответить на N из M» — голосом наставника */
+.prep-sum { margin: 18px 0 0; font-family: var(--hand); font-size: 26px; line-height: 1.28; color: var(--pen); }
+.prep-list { list-style: none; margin: 0; padding: 0; }
+.prep-item { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--rule-soft); }
+.prep-item:first-child { border-top: 0; padding-top: 4px; }
+/* квадратик тетради: «готов ответить» отмечается галочкой ручкой */
+.prep-mark {
+  flex: none; position: relative; width: 22px; height: 22px; margin-top: 3px; padding: 0;
+  border: 1.5px solid var(--rule-hard); border-radius: var(--r); background: var(--card);
+  transition: border-color .15s var(--ease);
+}
+.prep-mark:hover { border-color: var(--pen); }
+.prep-item.on .prep-mark { border-color: var(--pen-line); }
+.prep-mark .pen-tick { position: absolute; left: -3px; top: -9px; width: 29px; height: 29px; }
+.prep-t { min-width: 0; font-family: var(--serif); font-size: 16.5px; line-height: 1.6; color: var(--ink); }
+.prep-item.on .prep-t { color: var(--ink-2); }
+.prep-from { display: block; margin-top: 4px; font-family: var(--sans); font-size: 13.5px; color: var(--ink-3); }
+.prep-from:hover { color: var(--pen); text-decoration: none; }
+.prep-more { margin: 18px 0 0; font-size: 15px; color: var(--ink-2); }
+
+/* конспект: заметки как есть, с переносами строк */
+.nt-item { padding: 16px 0 18px; border-top: 1px solid var(--rule-soft); }
+.block-h + .nt-item { border-top: 0; padding-top: 0; }
+.nt-h { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.nt-h a { color: var(--ink); }
+.nt-h a:hover { color: var(--pen); text-decoration: none; }
+.nt-body {
+  font-family: var(--serif); font-size: 16.5px; line-height: 1.65; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* итог модуля */
+.sum-list { list-style: none; margin: 0; padding: 0; }
+.sum-list li { display: flex; gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--rule-soft); }
+.sum-list li:first-child { border-top: 0; padding-top: 0; }
+.sum-c { flex: none; position: relative; width: 22px; height: 16px; }
+.sum-c .pen-tick { position: absolute; left: 0; top: -5px; width: 24px; height: 24px; }
+.sum-l { color: var(--ink); text-decoration: none; }
+.sum-l:hover { text-decoration: none; }
+.sum-l:hover .sum-t { color: var(--pen); }
+.sum-t { font-size: 16px; font-weight: 500; }
+.sum-d { display: block; margin-top: 2px; font-size: 14px; color: var(--ink-3); }
+.toc-mw a { color: var(--pen); }
+
+/* ============================================================
+   15b. Поиск по курсу и клавиши
+   ============================================================ */
+
+/* Поиск — карточка, положенная на страницу: бумага под ней остаётся
+   видна, потому что человек ищет, не уходя с того места, где был. */
+.find {
+  position: fixed; inset: 0; z-index: 110;
+  display: none; justify-content: center; align-items: flex-start;
+  padding: 12vh 20px 20px;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.find.show { display: flex; animation: ink-in .18s var(--ease) both; }
+body.no-scroll { overflow: hidden; }
+
+.find-box {
+  width: 100%; max-width: 560px; max-height: 76vh;
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--rule);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-3); overflow: hidden;
+}
+.find-top {
+  display: flex; align-items: center; gap: 11px;
+  padding: 13px 16px; border-bottom: 1px solid var(--rule);
+}
+.find-top svg { width: 17px; height: 17px; color: var(--ink-4); flex: none; }
+#findQ {
+  flex: 1; min-width: 0; border: 0; background: none; padding: 0;
+  font: inherit; font-size: 16.5px; color: var(--ink);
+}
+#findQ:focus { outline: none; }
+#findQ::placeholder { color: var(--ink-4); }
+#findQ::-webkit-search-cancel-button { display: none; }
+.find-esc {
+  flex: none; font: inherit; font-size: 12.5px; color: var(--ink-3);
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: transparent; padding: 5px 10px;
+  transition: border-color .18s var(--ease), color .18s var(--ease);
+}
+.find-esc:hover { border-color: var(--ink-3); color: var(--ink); }
+
+.find-list { overflow-y: auto; padding: 8px; }
+.find-it {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 22px;
+  align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--r);
+  color: var(--ink); text-decoration: none;
+}
+.find-it:hover { text-decoration: none; }
+.find-it.on { background: var(--pen-soft); }
+.find-n { font-family: var(--serif); font-size: 15px; color: var(--ink-3); }
+.find-it.on .find-n { color: var(--pen); }
+.find-t { font-size: 15.5px; font-weight: 500; min-width: 0; }
+.find-w {
+  display: block; margin-top: 1px;
+  font-size: 13px; font-weight: 400; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.find-c { position: relative; width: 22px; height: 18px; }
+.find-c .pen-tick { position: absolute; left: 0; top: -4px; width: 24px; height: 24px; }
+.find-none {
+  margin: 0; padding: 22px 14px 26px; font-size: 15px;
+  line-height: 1.55; color: var(--ink-2);
+}
+.find-foot {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  padding: 10px 16px; border-top: 1px solid var(--rule-soft);
+  background: var(--paper-2); font-size: 12.5px; color: var(--ink-3);
+}
+.find-foot kbd { font-size: 11px; margin-right: 3px; }
+
+/* список клавиш в модалке */
+.keys { border-collapse: collapse; width: 100%; }
+.keys td { padding: 9px 0; border-top: 1px solid var(--rule-soft); vertical-align: top; }
+.keys tr:first-child td { border-top: 0; }
+.keys td:first-child { width: 128px; padding-right: 16px; white-space: nowrap; }
+.keys kbd { margin-right: 4px; }
+.keys-w { display: block; font-size: 13px; color: var(--ink-3); margin-top: 2px; }
 
 /* ============================================================
    16. Адаптив
@@ -1324,6 +1537,9 @@ textarea.notes::placeholder { color: var(--ink-3); }
 }
 
 @media (max-width: 860px) {
+  .hdr-nav { display: none; }
+  /* подсказка про клавишу бесполезна там, где клавиатуры нет */
+  .iconbtn .k { display: none; }
   .io { grid-template-columns: 1fr; }
   .market-lead { grid-template-columns: 1fr; }
   .mk-hero { border-right: 0; border-bottom: 1px solid var(--rule); }
@@ -1331,7 +1547,10 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 @media (max-width: 720px) {
   :root { --measure: 100%; }
-  .wrap { padding: 0 18px; }
+  /* поля остаются и на телефоне: слева страница шире, чем справа —
+     как в тетради, где справа полей нет */
+  .wrap { padding: 0 18px 0 30px; }
+  .wrap::before { left: 8px; }
   .hdr-in { padding: 0 18px; gap: 12px; }
   .crumbs { display: none; }
   .warnbar { padding: 10px 18px; }
@@ -1353,7 +1572,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--rule);
   }
-  .pace-say { font-size: 23px; }
+  .pace-say { font-size: 25px; }
   /* прилипающая полоса — в одну строку: подсказка и решение иконками,
      их имена держит aria-label */
   .actions { flex-wrap: nowrap; gap: 6px; }
@@ -1362,9 +1581,49 @@ textarea.notes::placeholder { color: var(--ink-3); }
   .actions .btn .k, .actions .btn .bl { display: none; }
   .actions #hintBtn, .actions #solBtn { flex: none; width: 46px; padding: 11px 0; }
   .iconbtn.unsaved::after { content: "!"; }
+  /* подсказки про клавиши в поиске — там же, где клавиатура */
+  .find-foot { display: none; }
+  .find { padding-top: 6vh; }
+  .find-it { min-height: 52px; padding: 12px; }
+  /* План в два столбца: обнулять внешние отступы надо у каждого ряда,
+     а не у первого и последнего пункта — иначе вторая строка уезжает. */
   .plan-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .plan-item { border-right: 0; }
+  .plan-item { padding: 14px 16px; border-right: 1px solid var(--rule-soft); }
+  .plan-item:nth-child(odd) { padding-left: 0; }
+  .plan-item:nth-child(even) { padding-right: 0; border-right: 0; }
   .mk-hero .pct { font-size: 48px; }
+
+  /* ПРАВИЛО ПАЛЬЦА: на телефоне всё, что нажимают, не ниже 48px.
+     Мышь целится остриём, палец — подушечкой шириной с ноготь. */
+  .btn { min-height: 48px; }
+  .hdr .iconbtn { min-height: 42px; padding: 0 13px; }
+  .q-opt { min-height: 52px; padding: 14px 16px; }
+  .secnav a { padding: 10px 14px; }
+  .navlink { min-height: 48px; }
+  /* Кнопки-ссылки в служебных полосах («сбросить к шаблону»,
+     «показать») мелкие: зону нажатия расширяем вверх и вниз
+     невидимой накладкой. В абзаце так делать нельзя — накладка
+     перекрыла бы соседние строки текста. */
+  .editor-h .linkbtn, .io-h .linkbtn { position: relative; }
+  .editor-h .linkbtn::after, .io-h .linkbtn::after {
+    content: ""; position: absolute; left: -8px; right: -8px; top: 50%;
+    height: 44px; transform: translateY(-50%);
+  }
+  /* Тем же способом — тетрадный квадратик «готов ответить». */
+  .prep-mark::before {
+    content: ""; position: absolute; inset: -11px;
+  }
+
+  /* Переход дальше: главное действие — во всю ширину и первым под
+     большим пальцем, соседние уроки — строкой под ним. */
+  .lesson-nav { padding: 24px 0 64px; gap: 10px; }
+  .lesson-nav #markBtn { order: -1; width: 100%; justify-content: center; }
+  /* Соседние уроки — в столбик и во всю ширину: одно полное название
+     полезнее двух обрезанных, и палец не мажет мимо. */
+  .lesson-nav .navlink { flex: 1 1 100%; max-width: none; justify-content: center; }
+  /* «Карта курса» на телефоне лишняя: наверху есть знак-ссылка */
+  .lesson-nav .navlink[href="#"] { display: none; }
+  .lesson-nav .spacer { display: none; }
 }
 
 @media (max-width: 520px) {
@@ -1374,12 +1633,16 @@ textarea.notes::placeholder { color: var(--ink-3); }
      С переносом флекса элементы разлетались по строкам как попало. */
   .toc-mh { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 14px; }
   .toc-mw { grid-column: 2; margin: 4px 0 0; }
-  /* у кнопки темы остаётся значок, подпись читает экранный диктор */
-  .hdr #themeBtn { padding: 0; width: 36px; justify-content: center; }
+  /* На телефоне в шапке помещаются знак тетради и три кнопки. От
+     названия остаётся знак, от кнопок — значки: надписи прячутся
+     только визуально, экранный диктор читает их по-прежнему. */
+  .brand > span:last-child,
+  .hdr #findBtn .bl,
   .hdr #themeBtn .bl {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap;
   }
+  .hdr #themeBtn, .hdr #findBtn { padding: 0; width: 42px; justify-content: center; }
   .toc-line { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; column-gap: 10px; }
   .toc-n  { grid-row: 1; grid-column: 1; }
   .toc-tt { grid-row: 1; grid-column: 2; }
@@ -1388,17 +1651,14 @@ textarea.notes::placeholder { color: var(--ink-3); }
   .toc-lead { display: none; }
   .hero h1 { font-size: 32px; }
   .hero p.lede { font-size: 18px; }
+  /* «Продолжить» — главное действие на главной: во всю ширину карточки */
+  .resume { padding: 16px; }
+  .resume-go { width: 100%; text-align: center; padding: 13px 18px; }
 }
 
 /* Самые узкие телефоны (320px): подписи «Запустить» и «Проверить»
    важнее значков — значки убираем, чтобы слова поместились. */
 @media (max-width: 360px) {
-  /* на самом узком экране от названия остаётся знак; надпись
-     прячется только визуально — ссылка на главную не теряет имени */
-  .brand > span:last-child {
-    position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap;
-  }
   .actions { gap: 4px; }
   .actions .btn { font-size: 13.5px; padding: 11px 7px; }
   .actions #runBtn svg, .actions #checkBtn svg { display: none; }
@@ -1426,8 +1686,13 @@ textarea.notes::placeholder { color: var(--ink-3); }
 }
 
 @media print {
-  .hdr, .secnav, .readbar, .actions, .lesson-nav, .toast, .warnbar { display: none !important; }
+  .hdr, .secnav, .readbar, .actions, .lesson-nav, .toast, .warnbar,
+  .find, .modal-bg { display: none !important; }
   body { background: #FFFFFF; font-size: 12pt; }
   .drill[open] .drill-body, .drill-body { display: block !important; }
   .block { page-break-inside: avoid; }
+  /* конспект на бумаге: без кнопок и рукописных пометок на полях */
+  .page-actions, .prep-mark, .page .aside { display: none !important; }
+  .nt-item { page-break-inside: avoid; }
+  .nt-h a, .prep-from { color: #000000; }
 }

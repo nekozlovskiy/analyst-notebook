@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {} };
+                  days: {}, review: {}, prep: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -126,7 +126,7 @@ const Store = (function () {
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -370,9 +370,18 @@ const Progress = {
             "Специально ничего делать не нужно — просто закрывайте вкладку и возвращайтесь " +
             "когда удобно.</p>") +
         "<p>Пройдено: <strong>" + done + " из " + Course.flat.length + "</strong>.</p>" +
+        (Offline.ready()
+          ? "<p>Курс уже открывается без интернета: страница и прочитанные уроки лежат " +
+            "в браузере. Кнопка ниже докачает остальное — это около трёх мегабайт, " +
+            "после чего курс читается целиком в самолёте и в метро.</p>"
+          : "") +
         '<div class="actions" style="margin-top:16px">' +
+          (Offline.ready()
+            ? '<button class="btn" id="pgKeep" type="button">Сохранить курс на устройство</button>'
+            : "") +
           '<button class="btn' + (risky ? " primary" : "") + '" id="pgReset" type="button">Начать курс заново</button>' +
         "</div>" +
+        (Offline.ready() ? '<p class="pg-msg" id="pgKeepMsg"></p>' : "") +
         '<p style="font-size:12.6px;color:var(--ink-3);margin-top:16px;margin-bottom:0">' +
           "Новая версия курса подхватывает прогресс сама, если открывать её в том же " +
           "браузере. Чтобы перенести занятия на другой компьютер или в другой браузер — " +
@@ -384,6 +393,8 @@ const Progress = {
     $("#pgReset").addEventListener("click", Progress.reset);
     $("#pgSave").addEventListener("click", Progress.save);
     $("#pgLoad").addEventListener("click", Progress.load);
+    const keep = $("#pgKeep");
+    if (keep) keep.addEventListener("click", function () { Offline.keep(keep, $("#pgKeepMsg")); });
   },
 
   toast: function (text) {
@@ -436,6 +447,87 @@ window.addEventListener("beforeunload", function (e) {
 });
 
 /* ============================================================
+   Работа без интернета
+
+   Сам кеш ведёт sw.js. Отсюда его регистрируют, предупреждают о
+   новой версии курса и — по кнопке — прогревают: запрашивают все
+   файлы, которые обычно грузятся по мере чтения. Обслуживающий
+   скрипт положит их в кеш по дороге, и дальше курс открывается
+   с диска целиком.
+   ============================================================ */
+
+const Offline = {
+  reg: null,
+
+  /* На сайте файлы лежат рядом; в собранном одним файлом курсе всё
+     уже внутри страницы, и обслуживать нечего. Отличаем по тегу
+     script: в собранном файле скриптов с адресами нет. */
+  supported: function () {
+    return "serviceWorker" in navigator &&
+           (location.protocol === "http:" || location.protocol === "https:") &&
+           !!document.querySelector('script[src="app.js"]');
+  },
+
+  ready: function () {
+    return Offline.supported() &&
+           !!(Offline.reg || navigator.serviceWorker.controller);
+  },
+
+  init: function () {
+    if (!Offline.supported()) return;
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      Offline.reg = reg;
+      /* Новая версия курса устанавливается в стороне и ждёт закрытия
+         вкладки. Пока человек не обновит страницу, он читает старую —
+         поэтому говорим об этом, но не перезагружаем под руками. */
+      reg.addEventListener("updatefound", function () {
+        const w = reg.installing;
+        if (!w) return;
+        w.addEventListener("statechange", function () {
+          if (w.state === "installed" && navigator.serviceWorker.controller) {
+            Progress.toast("Вышла новая версия курса. Она откроется, когда обновите страницу.");
+          }
+        });
+      });
+    }).catch(function () { /* запретили — курс просто работает как обычный сайт */ });
+  },
+
+  /* Что докачать, чтобы курс открывался без интернета целиком. */
+  files: function () {
+    const own = ["content-m1.js", "content-m2.js", "content-m3.js", "content-m4.js",
+                 "content-m5.js", "content-m6.js", "data.js"];
+    /* редактор кода, движок SQL и вёрстка формул: без них урок
+       откроется, но решать задачу будет нечем */
+    const cdn = [CDN.cmBase + "codemirror.min.css", CDN.cmBase + "codemirror.min.js",
+                 CDN.cmBase + "mode/sql/sql.min.js", CDN.cmBase + "mode/python/python.min.js",
+                 CDN.sqlBase + "sql-wasm.js", CDN.sqlBase + "sql-wasm.wasm",
+                 CDN.mathjax];
+    return own.concat(cdn);
+  },
+
+  /* Три мегабайта молча не тянем: это отдельная кнопка и отдельный
+     отчёт о том, что получилось. */
+  keep: async function (btn, msg) {
+    const list = Offline.files();
+    let ok = 0, fail = 0;
+    btn.disabled = true;
+    for (let i = 0; i < list.length; i++) {
+      msg.textContent = "Сохраняю… " + (i + 1) + " из " + list.length;
+      try {
+        await fetch(list[i], { cache: "no-store" });
+        ok++;
+      } catch (e) { fail++; }
+    }
+    btn.disabled = false;
+    msg.textContent = fail
+      ? "Сохранилось " + ok + " из " + list.length + " частей — похоже, связь оборвалась. " +
+        "Нажмите ещё раз, когда интернет будет получше."
+      : "Готово: курс открывается без интернета. Только Python при первом запуске " +
+        "всё равно попросит связь — его движок слишком велик, чтобы держать его здесь.";
+  }
+};
+
+/* ============================================================
    Шапка
    ============================================================ */
 
@@ -443,12 +535,24 @@ function mountHeader(crumbHtml) {
   const done = Course.doneCount(Course.flat);
   const total = Course.flat.length;
 
+  /* разделы для подготовки — ссылками в шапке; на узком экране прячутся,
+     туда ведут строка на главной и поиск */
+  const here = location.hash.replace(/^#/, "");
+  function navLink(to, t) {
+    return '<a href="#' + to + '"' + (here === to ? ' aria-current="page"' : "") + ">" + t + "</a>";
+  }
+
   const hdr = el("header", { class: "hdr" });
   hdr.innerHTML =
     '<div class="hdr-in">' +
       '<a class="brand" href="#"><span class="mark">' + ICON.mark + '</span><span>Тетрадь аналитика</span></a>' +
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
+      '<nav class="hdr-nav" aria-label="Разделы">' + navLink("interview", "К собеседованию") +
+        navLink("my-notes", "Конспект") + "</nav>" +
+      '<button class="iconbtn" id="findBtn" type="button" aria-label="Найти урок" ' +
+        'title="Найти урок — косая черта или Cmd K">' + ICON.find +
+        '<span class="bl">Найти</span><span class="k">/</span></button>' +
       '<button class="iconbtn" id="progBtn" type="button" title="Прогресс курса">' +
         '<span class="pb-n">' + done + " из " + total + "</span></button>" +
       '<button class="iconbtn" id="themeBtn" type="button">Тёмная</button>' +
@@ -459,6 +563,7 @@ function mountHeader(crumbHtml) {
   app.parentNode.insertBefore(hdr, app);
 
   $("#themeBtn").addEventListener("click", Theme.toggle);
+  $("#findBtn").addEventListener("click", Find.open);
   $("#progBtn").addEventListener("click", Progress.openMenu);
   Theme.apply(Theme.current());
   requestAnimationFrame(refreshBar);
@@ -541,29 +646,78 @@ const Stats = {
     return head + " " + run;
   },
 
-  /* Календарь занятий: двенадцать недель точками, по неделе в столбце,
-     понедельник сверху. Размер точки — сколько занимались в тот день. */
+  /* Календарь занятий: двенадцать недель, неделя — столбец, понедельник
+     сверху. День отмечен штрихом ручкой — чем дольше занимались, тем
+     длиннее и жирнее штрих; сегодняшний день обведён. Наклон, изгиб и
+     длина каждого штриха выведены из даты, поэтому от перерисовки к
+     перерисовке календарь не пляшет: он всегда один и тот же.      */
   calendar: function () {
     const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
                     "августа", "сентября", "октября", "ноября", "декабря"];
+    const SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл",
+                   "авг", "сен", "окт", "ноя", "дек"];
+    const CELL = 17, HALF = 7, TOP = 13;
+    const W = 12 * CELL - 3, H = TOP + 7 * CELL - 3;
     const days = Store.all().days || {}, today = isoDay();
     const wd = (fromIso(today).getDay() + 6) % 7;           /* 0 — понедельник */
     const start = addDays(today, -(7 * 11 + wd));
-    let h = '<div class="cal" role="img" aria-label="Календарь занятий за двенадцать недель">';
+
+    /* «дрожание руки»: для одной и той же даты — всегда одно число */
+    function hand(seed, n) {
+      let h = 2166136261;
+      for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+      return ((Math.imul(h ^ n, 16777619) >>> 0) % 1000) / 1000;
+    }
+    function r1(n) { return Math.round(n * 10) / 10; }
+
+    let marks = "", months = "", ring = "", active = 0, seenMonth = -1;
     for (let w = 0; w < 12; w++) {
-      h += '<span class="cal-w">';
       for (let d = 0; d < 7; d++) {
         const day = addDays(start, w * 7 + d);
-        if (day > today) { h += '<i class="cal-d none"></i>'; continue; }
-        const sec = days[day] || 0, dt = fromIso(day);
+        if (day > today) continue;
+        const dt = fromIso(day), sec = days[day] || 0;
+        const cx = w * CELL + HALF, cy = TOP + d * CELL + HALF;
+
+        /* месяц подписан над той неделей, в которой он начался */
+        if (dt.getMonth() !== seenMonth) {
+          seenMonth = dt.getMonth();
+          months += '<text class="cal-mo" x="' + (w * CELL) + '" y="6">' + SHORT[seenMonth] + "</text>";
+        }
+
+        if (day === today) {
+          /* обводка: перо заходит за начало круга, как это и выходит от руки */
+          const rx = 8.4 + hand(day, 9) * 0.7, ry = 7.6 + hand(day, 10) * 0.7;
+          ring = '<path class="cal-ring" d="M' + r1(cx - rx) + " " + r1(cy + 0.8) +
+            " C" + r1(cx - rx) + " " + r1(cy - ry * 1.35) + " " + r1(cx + rx) + " " + r1(cy - ry * 1.3) +
+            " " + r1(cx + rx * 0.94) + " " + r1(cy + 0.4) +
+            " C" + r1(cx + rx * 0.88) + " " + r1(cy + ry * 1.4) + " " + r1(cx - rx * 1.06) + " " + r1(cy + ry * 1.3) +
+            " " + r1(cx - rx * 1.12) + " " + r1(cy - 1.8) + '"/>';
+        }
+
         const lvl = sec >= 3600 ? 3 : sec >= 1200 ? 2 : sec >= 60 ? 1 : 0;
         const tip = dt.getDate() + " " + MONTHS[dt.getMonth()] +
-          (sec >= 60 ? ", " + Math.round(sec / 60) + " мин" : "");
-        h += '<i class="cal-d l' + lvl + (day === today ? " today" : "") + '" title="' + tip + '"></i>';
+          (sec >= 60 ? ", " + Math.round(sec / 60) + " мин" : ", не занимались");
+
+        if (!lvl) {                       /* пустой день — точка линовки */
+          marks += '<circle class="cal-n" cx="' + cx + '" cy="' + cy + '" r="1.1"><title>' +
+                   tip + "</title></circle>";
+          continue;
+        }
+        active++;
+        const a = -0.44 + hand(day, 1) * 0.5;                    /* наклон штриха */
+        const len = (lvl === 1 ? 3.5 : lvl === 2 ? 5 : 6.4) + hand(day, 2) * 0.9;
+        const bow = (hand(day, 3) - 0.5) * 2;                    /* лёгкий изгиб пера */
+        const sx = cx + Math.sin(a) * len, sy = cy - Math.cos(a) * len;
+        const ex = cx - Math.sin(a) * len, ey = cy + Math.cos(a) * len;
+        marks += '<path class="cal-m l' + lvl + '" d="M' + r1(sx) + " " + r1(sy) +
+          " Q" + r1(cx + Math.cos(a) * bow) + " " + r1(cy + Math.sin(a) * bow) +
+          " " + r1(ex) + " " + r1(ey) + '"><title>' + tip + "</title></path>";
       }
-      h += "</span>";
     }
-    return h + "</div>";
+
+    return '<div class="cal"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' +
+      "Календарь занятий за двенадцать недель: занимались " + active + " " +
+      plural(active, "день", "дня", "дней") + '">' + months + marks + ring + "</svg></div>";
   },
 
   /* Куда вернуться: к последнему открытому уроку, если он не пройден,
@@ -721,6 +875,216 @@ const Review = {
   }
 };
 
+/* ============================================================
+   Отдельные страницы: к собеседованию, конспект, итог модуля
+
+   Адреса выбраны так, чтобы не совпасть ни с одним id на странице:
+   роутер принимает хэш за якорь, если такой элемент есть (#notes —
+   это поле заметок в уроке).
+   ============================================================ */
+
+const Pages = {
+  find: function (id) {
+    if (id === "interview") return renderInterview;
+    if (id === "my-notes") return renderMyNotes;
+    if (/^summary-m\d+$/.test(id)) return renderSummary;
+    return null;
+  }
+};
+
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+                    "августа", "сентября", "октября", "ноября", "декабря"];
+
+/* Пункты врезок «Что закрывает урок в вакансиях» из всех уроков.
+   Группа — по началу пункта: вопросы («Вопрос на интервью», «Устный
+   вопрос», «Вопрос-ловушка»…), задачи («Задача с интервью», «Тестовое
+   задание»…) и всё остальное — формулировки из вакансий. */
+function interviewItems() {
+  const out = [];
+  Course.flat.forEach(function (l) {
+    const C = window.CONTENT[l.id];
+    const m = C && (C.theory || "").match(/<div class="callout jobs">([\s\S]*?)<\/div>/);
+    if (!m) return;
+    (m[1].match(/<li>[\s\S]*?<\/li>/g) || []).forEach(function (li, i) {
+      const html = li.replace(/^<li>|<\/li>$/g, "").trim();
+      const text = html.replace(/<[^>]+>/g, "");
+      const kind = /^(Устный вопрос|Вопрос[^:«]{0,20}):/.test(text) ? "ask"
+        : /^[^:«]{0,30}(задач|задани)[^:«]{0,20}:/i.test(text) ? "task" : "req";
+      out.push({ lesson: l, i: i, kind: kind, html: html });
+    });
+  });
+  return out;
+}
+
+function pageHead(title, sub, say, extra) {
+  return '<header class="lesson-head has-margin">' +
+    (say ? '<div class="aside"><p>' + esc(say) + "</p></div>" : "") +
+    "<h1>" + title + "</h1>" + '<p class="sub">' + sub + "</p>" + (extra || "") + "</header>";
+}
+
+function prepItem(x, withMark) {
+  const key = x.lesson.id + ":" + x.i;
+  const on = withMark && !!Store.get("prep", key, false);
+  return '<li class="prep-item' + (on ? " on" : "") + '">' +
+    (withMark ? '<button class="prep-mark" type="button" data-key="' + key + '" aria-pressed="' + on + '" ' +
+                'aria-label="Готов ответить">' + (on ? penTick(key) : "") + "</button>" : "") +
+    '<div class="prep-t">' + x.html +
+      '<a class="prep-from" href="#' + x.lesson.id + '">урок ' + x.lesson.num + " " + esc(x.lesson.title) + "</a>" +
+    "</div></li>";
+}
+
+/* ---------- к собеседованию ---------- */
+function renderInterview(app) {
+  document.title = "К собеседованию — Тетрадь аналитика";
+  mountHeader("<b>К собеседованию</b>");
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = pageHead("К собеседованию",
+    "Всё, что в уроках помечено как вопросы и задачи с интервью, — на одной странице. " +
+    "Ответьте вслух, сверьтесь с уроком и отметьте то, в чём уверены.",
+    "вслух и своими словами — иначе на интервью слова не найдутся") +
+    '<div id="prepBody"><p class="page-wait">Собираю вопросы из уроков…</p></div>';
+  app.appendChild(main);
+
+  /* вопросы лежат в содержимом уроков — нужны все шесть модулей */
+  Promise.all(Course.data.modules.map(function (m) { return Lazy.content(m.id); })).then(function () {
+    const box = $("#prepBody");
+    if (!box || location.hash !== "#interview") return;
+    const items = interviewItems();
+    const groups = [["ask", "Что спросят устно"], ["task", "Какие задачи дают"], ["req", "Что пишут в вакансиях"]];
+    let h = '<p class="prep-sum" id="prepSum"></p>';
+    groups.forEach(function (g) {
+      const list = items.filter(function (x) { return x.kind === g[0]; });
+      if (!list.length) return;
+      h += '<section class="block"><div class="block-h"><h2>' + g[1] +
+        '<span class="prep-n">' + list.length + "</span></h2></div>" +
+        '<ol class="prep-list">' + list.map(function (x) { return prepItem(x, true); }).join("") + "</ol></section>";
+    });
+    box.innerHTML = h;
+
+    function sum() {
+      const on = box.querySelectorAll(".prep-item.on").length;
+      $("#prepSum").textContent = on
+        ? "Готовы ответить на " + on + " из " + items.length + (on === items.length ? ". Можно откликаться." : ".")
+        : "Отмечайте то, в чём уверены, — будет честно видно, что ещё повторить.";
+    }
+    sum();
+    Array.prototype.forEach.call(box.querySelectorAll(".prep-mark"), function (b) {
+      b.addEventListener("click", function () {
+        const key = b.dataset.key, on = b.getAttribute("aria-pressed") !== "true";
+        Store.set("prep", key, on);
+        b.setAttribute("aria-pressed", String(on));
+        b.innerHTML = on ? penTick(key, "draw") : "";
+        b.closest(".prep-item").classList.toggle("on", on);
+        sum();
+      });
+    });
+  }, function () {
+    const box = $("#prepBody");
+    if (!box) return;
+    box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
+      '<button class="linkbtn" id="prepRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#prepRetry").addEventListener("click", function () { Router.render(true); });
+  });
+}
+
+/* ---------- мой конспект ---------- */
+function renderMyNotes(app) {
+  document.title = "Мой конспект — Тетрадь аналитика";
+  mountHeader("<b>Мой конспект</b>");
+  const notes = Store.all().notes || {};
+  const withNotes = Course.flat.filter(function (l) { return String(notes[l.id] || "").trim(); });
+  const n = withNotes.length;
+  let h = pageHead("Мой конспект",
+    n ? "Заметки из " + n + " " + plural(n, "урока", "уроков", "уроков") + " в одном месте. " +
+        "Перед собеседованием удобно распечатать или сохранить в PDF."
+      : "Здесь соберутся ваши заметки из всех уроков. Пока их нет — они пишутся в поле " +
+        "«Мои заметки» в конце каждого урока.",
+    "перечитать свои слова перед собеседованием — лучшая шпаргалка",
+    n ? '<div class="page-actions"><button class="btn" id="printBtn" type="button">Распечатать или сохранить в PDF</button></div>' : "");
+  Course.data.modules.forEach(function (m) {
+    const ls = withNotes.filter(function (l) { return l.module === m; });
+    if (!ls.length) return;
+    h += '<section class="block"><div class="block-h"><h2>' + m.num + ". " + esc(m.title) + "</h2></div>" +
+      ls.map(function (l) {
+        return '<article class="nt-item"><h3 class="nt-h"><a href="#' + l.id + '">' + l.num + " " + esc(l.title) + "</a></h3>" +
+          '<div class="nt-body">' + esc(String(notes[l.id]).trim()) + "</div></article>";
+      }).join("") + "</section>";
+  });
+  if (!n) {
+    const r = Stats.resume();
+    h += '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m1l1") + '">' +
+      (r ? "Открыть урок " + r.lesson.num : "Открыть первый урок") + "</a></p>";
+  }
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = h;
+  app.appendChild(main);
+  const pb = $("#printBtn");
+  if (pb) pb.addEventListener("click", function () { window.print(); });
+}
+
+/* ---------- итог модуля ---------- */
+function renderSummary(app, id) {
+  const mods = Course.data.modules;
+  const m = mods.filter(function (x) { return "summary-" + x.id === id; })[0];
+  if (!m) { renderLesson(app, id); return; }
+  document.title = "Итог модуля " + m.num + " — Тетрадь аналитика";
+  mountHeader("<b>Модуль " + m.num + ":</b> " + esc(m.title) + ", итог");
+
+  const d = Course.doneCount(m.lessons), t = m.lessons.length, closed = d === t;
+  const time = Store.all().time || {}, doneAt = Store.all().done || {};
+  const mins = Math.round(m.lessons.reduce(function (s, l) { return s + (+time[l.id] || 0); }, 0) / 60);
+  const hrs = Math.round(mins / 60);
+  /* даты — только настоящие отметки, а не пустые и не из тестовых выгрузок */
+  const stamps = m.lessons.map(function (l) { return doneAt[l.id]; })
+    .filter(function (v) { return typeof v === "number" && v > 1577836800000; }).sort();
+  const day = function (ms) { const x = new Date(ms); return x.getDate() + " " + MONTHS_GEN[x.getMonth()]; };
+  const span = stamps.length >= 2 ? ", с " + day(stamps[0]) + " по " + day(stamps[stamps.length - 1])
+             : stamps.length ? ", " + day(stamps[0]) : "";
+  const work = mins ? ", " + (mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
+                                        : hrs + " " + plural(hrs, "час", "часа", "часов")) + " работы" : "";
+
+  const next = closed ? mods[mods.indexOf(m) + 1] : m;
+  const target = next ? (next.lessons.filter(function (l) { return !Course.isDone(l.id); })[0] || next.lessons[0]) : null;
+  const nextHtml = !target
+    ? '<p class="page-empty">Это был последний модуль. Дальше — <a href="#interview">подготовка к собеседованию</a>.</p>'
+    : '<a class="resume" href="#' + target.id + '"><span class="resume-txt">' +
+        '<span class="resume-k">' + (closed ? "Дальше — модуль " + next.num : "Осталось в модуле") + "</span>" +
+        '<span class="resume-t">' + (closed ? esc(next.title) : target.num + " " + esc(target.title)) + "</span>" +
+        '<span class="resume-d">' + esc(closed ? next.sub : target.desc) + "</span>" +
+      '</span><span class="resume-go">' + (closed ? "Начать" : "Продолжить") + "</span></a>";
+
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML =
+    pageHead(closed ? "Модуль " + m.num + " закрыт" : "Модуль " + m.num + ": пройдено " + d + " из " + t,
+      esc(m.title) + ". " + d + " " + plural(d, "урок", "урока", "уроков") + work + span + ".",
+      closed ? (m.sayDone || m.say) : m.say) +
+    '<section class="block"><div class="block-h"><h2>' + (closed ? "Что теперь умеете" : "Уроки модуля") + "</h2></div>" +
+      '<ul class="sum-list">' + m.lessons.map(function (l) {
+        const ok = Course.isDone(l.id);
+        return '<li><span class="sum-c">' + (ok ? penTick(l.id) + '<span class="sr">пройден</span>' : "") + "</span>" +
+          '<a class="sum-l" href="#' + l.id + '"><span class="sum-t">' + esc(l.title) + "</span>" +
+          '<span class="sum-d">' + esc(l.desc) + "</span></a></li>";
+      }).join("") + "</ul></section>" +
+    '<section class="block"><div class="block-h"><h2>Вопросы собеседования из модуля</h2></div>' +
+      '<div id="sumJobs"><p class="page-wait">Собираю вопросы…</p></div></section>' +
+    '<section class="block">' + nextHtml + "</section>";
+  app.appendChild(main);
+
+  Lazy.content(m.id).then(function () {
+    const box = $("#sumJobs");
+    if (!box || location.hash !== "#" + id) return;
+    const items = interviewItems().filter(function (x) { return x.lesson.module === m && x.kind !== "req"; });
+    box.innerHTML = items.length
+      ? '<ol class="prep-list">' + items.map(function (x) { return prepItem(x, false); }).join("") + "</ol>" +
+        '<p class="prep-more">Отметить, что готовы ответить, — <a href="#interview">на странице к собеседованию</a>.</p>'
+      : '<p class="page-empty">Вопросы с интервью здесь не выделены — загляните ' +
+        '<a href="#interview">на страницу к собеседованию</a>.</p>';
+  }, function () {
+    const box = $("#sumJobs");
+    if (box) box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет.</p>';
+  });
+}
+
 function renderHome(app) {
   document.title = "Тетрадь аналитика — курс подготовки к Junior Data Analyst";
   mountHeader("");
@@ -797,6 +1161,11 @@ function renderHome(app) {
   const review = Review.section();
   if (review) main.appendChild(review);
 
+  /* о страницах для собеседования — одна строка, а не ещё один блок карточек */
+  main.insertAdjacentHTML("beforeend",
+    '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
+    '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>.</p>');
+
   /* ---------- программа: оглавление тетради ---------- */
   /* Не карточки, а оглавление: номер, название, отточие, вид практики
      и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
@@ -809,7 +1178,7 @@ function renderHome(app) {
         '<header class="toc-mh">' +
           '<span class="toc-mn">' + m.num + "</span>" +
           '<h3 class="toc-mt">' + esc(m.title) + "</h3>" +
-          '<span class="toc-mw">' + (d === t ? "пройден" : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
+          '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
         "</header>" +
         '<p class="toc-ms">' + esc(m.sub) + "</p>" +
         (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
@@ -1124,7 +1493,8 @@ const ICON = {
   ok:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
   bad:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>'
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+  find:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>'
 };
 
 /* Галочка ручкой. Каждая чуть своя: наклон, размах и начало штриха
@@ -1405,6 +1775,10 @@ function renderLesson(app, id) {
   (function () {
     const bar = el("div", { class: "readbar", id: "readbar" });
     document.body.appendChild(bar);
+    /* В уроке две полосы прогресса не нужны: здесь важно, сколько
+       осталось до конца страницы, а сколько пройдено курса — сказано
+       словами на кнопке в шапке. */
+    document.body.classList.add("reading");
     const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
     let ticking = false;
 
@@ -1431,6 +1805,7 @@ function renderLesson(app, id) {
     Router.cleanup.push(function () {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      document.body.classList.remove("reading");
       const b = document.getElementById("readbar");
       if (b) b.remove();
     });
@@ -1651,10 +2026,14 @@ function renderLesson(app, id) {
   /* ---------- проверка ---------- */
   function pass(extra) {
     Store.set("done", id, Date.now());
+    /* решён последний урок модуля — повод посмотреть итог */
+    const Mod = L.module;
+    const closedHtml = Course.doneCount(Mod.lessons) === Mod.lessons.length
+      ? '<br><a href="#summary-' + Mod.id + '">Модуль ' + Mod.num + " закрыт — посмотреть итог</a>" : "";
     const remind = Store.mode() === "memory"
       ? '<br><span style="color:var(--amber)">Браузер не сохраняет прогресс — выгрузите его ' +
         "в файл кнопкой вверху, иначе результат пропадёт.</span>" : "";
-    setStatus("ok", "Задание выполнено", (extra || "") + remind +
+    setStatus("ok", "Задание выполнено", (extra || "") + remind + closedHtml +
       '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>', true);
     const nb = $("#nextBtn");
     if (nb) nb.addEventListener("click", function () {
@@ -1778,16 +2157,25 @@ function renderLesson(app, id) {
   function updateNav() {
     const prev = Course.neighbour(id, -1), next = Course.neighbour(id, 1);
     const done = Course.isDone(id);
+    /* Стрелка вынесена из подписи отдельным значком: тогда длинное
+       название урока обрезается многоточием, а стрелка остаётся
+       на месте — иначе на телефоне срезало бы именно её. */
+    const link = function (l, dir) {
+      const arrow = '<span class="nl-a">' + (dir < 0 ? "&larr;" : "&rarr;") + "</span>";
+      const text = '<span class="nl-t">' + esc(l ? l.num + " " + l.title
+        : dir < 0 ? "начало курса" : "дальше — новые уроки") + "</span>";
+      const body = dir < 0 ? arrow + text : text + arrow;
+      return l ? '<a class="navlink" href="#' + l.id + '">' + body + "</a>"
+               : '<span class="navlink dim">' + body + "</span>";
+    };
     $("#lnav").innerHTML =
-      (prev ? '<a class="navlink" href="#' + prev.id + '">&larr; ' + esc(prev.num + " " + prev.title) + "</a>"
-            : '<span class="navlink dim">&larr; начало курса</span>') +
+      link(prev, -1) +
       '<a class="navlink" href="#">Карта курса</a>' +
       '<span class="spacer"></span>' +
       '<button class="btn ' + (done ? "" : "check") + '" id="markBtn" type="button"' +
         (done ? "" : " disabled") + ">" +
         (done ? "&#10003; Пройден — снять отметку" : "Отметить как пройденный") + "</button>" +
-      (next ? '<a class="navlink" href="#' + next.id + '">' + esc(next.num + " " + next.title) + " &rarr;</a>"
-            : '<span class="navlink dim">дальше — новые уроки</span>');
+      link(next, 1);
 
     const mb = $("#markBtn");
     if (!done) mb.title = "Станет активной, когда «Проверить» покажет зелёный результат";
@@ -1836,6 +2224,257 @@ function renderLesson(app, id) {
 }
 
 /* ============================================================
+   Поиск по курсу и клавиатура
+
+   Сорок уроков — это столько, что искать глазами в оглавлении
+   дольше, чем вспомнить слово из названия. Поиск открывается
+   косой чертой или Cmd+K, ищет по номеру, названию, описанию и
+   модулю и ведёт ещё и в разделы подготовки.
+
+   Раскладку определяем не по букве: на русской та же клавиша даёт
+   «.», поэтому кроме e.key смотрим на e.code — иначе сочетания
+   работали бы только в английской раскладке.
+   ============================================================ */
+
+const Find = {
+  sel: 0,
+  items: [],
+  back: null,          /* куда вернуть фокус после закрытия */
+
+  norm: function (s) { return String(s).toLowerCase().replace(/ё/g, "е"); },
+
+  /* Куда вообще можно попасть: уроки, разделы подготовки, карта
+     курса и итоги закрытых модулей.
+
+     hay — по чему ищем. Кроме названия и описания туда идут реплики
+     наставника: он говорит об уроке живыми словами («если поймёте
+     окна…»), а в названии стоит «Оконные функции». Русский язык
+     склоняет, подстрока этого не переживает, — зато чем шире запас
+     слов, тем чаще человек попадает с первого раза.            */
+  places: function () {
+    const out = Course.flat.map(function (l) {
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      return { href: "#" + l.id, key: l.id, num: l.num, title: l.title,
+               note: l.desc, where: l.module.num + ". " + l.module.title,
+               hay: [l.desc, l.module.title, kind, l.say, l.sayTask, l.sayDrills]
+                      .filter(Boolean).join(" "),
+               done: Course.isDone(l.id), soon: !l.ready };
+    });
+    out.push({ href: "#interview", title: "К собеседованию", where: "Раздел",
+               note: "вопросы и задачи с интервью на одной странице",
+               hay: "интервью собеседование вопросы задачи подготовка" });
+    out.push({ href: "#my-notes", title: "Мой конспект", where: "Раздел",
+               note: "ваши заметки из всех уроков",
+               hay: "заметки конспект записи" });
+    out.push({ href: "#", title: "Карта курса", where: "Раздел",
+               note: "оглавление и как идут дела",
+               hay: "оглавление главная программа календарь прогресс" });
+    Course.data.modules.forEach(function (m) {
+      if (Course.doneCount(m.lessons) === m.lessons.length) {
+        out.push({ href: "#summary-" + m.id, where: "Раздел",
+                   title: "Итог модуля " + m.num + ": " + m.title,
+                   note: "что закрыто и что с этого спросят",
+                   hay: "итог модуля " + m.title + " " + m.sub });
+      }
+    });
+    return out;
+  },
+
+  /* Пустой запрос — не пустой список: сначала то место, где
+     остановились, потом ближайшие непройденные уроки. */
+  match: function (q) {
+    const all = Find.places();
+    if (!q.trim()) {
+      const r = Stats.resume();
+      const first = r ? all.filter(function (x) { return x.key === r.lesson.id; }) : [];
+      return first.concat(all.filter(function (x) {
+        return first.indexOf(x) < 0 && (!x.key || (!x.done && !x.soon));
+      })).slice(0, 7);
+    }
+    const words = Find.norm(q).split(/\s+/).filter(Boolean);
+    const hit = [];
+    all.forEach(function (x) {
+      const head = Find.norm((x.num || "") + " " + x.title);
+      const hay = head + " " + Find.norm(x.hay || "");
+      if (!words.every(function (w) { return hay.indexOf(w) >= 0; })) return;
+      /* совпадение в названии важнее совпадения в описании */
+      hit.push({ x: x, rank: words.every(function (w) { return head.indexOf(w) >= 0; }) ? 0 : 1 });
+    });
+    hit.sort(function (a, b) { return a.rank - b.rank; });
+    return hit.map(function (h) { return h.x; }).slice(0, 9);
+  },
+
+  draw: function () {
+    const box = $("#findList");
+    if (!Find.items.length) {
+      box.innerHTML = '<p class="find-none">Ничего не нашлось. Попробуйте другое слово: ' +
+        "«когорты», «выбросы», «окна» — или номер урока, «1.3».</p>";
+      Find.mark();
+      return;
+    }
+    box.innerHTML = Find.items.map(function (x, i) {
+      return '<a class="find-it" id="find-it-' + i + '" href="' + x.href +
+        '" role="option" aria-selected="false" data-i="' + i + '">' +
+        '<span class="find-n">' + esc(x.num || "") + "</span>" +
+        '<span class="find-t">' + esc(x.title) +
+          '<span class="find-w">' + esc(x.where) + (x.soon ? ", скоро" : "") + "</span></span>" +
+        '<span class="find-c">' + (x.done ? penTick(x.key) : "") + "</span></a>";
+    }).join("");
+    Find.mark();
+  },
+
+  /* Выделение переставляем классом, а не перерисовкой списка: иначе
+     под движущейся мышью список пересобирался бы по сорок раз в
+     секунду. Экранному диктору о выборе говорит aria-activedescendant. */
+  mark: function (scroll) {
+    const q = $("#findQ");
+    let cur = null;
+    Array.prototype.forEach.call(document.querySelectorAll(".find-it"), function (a) {
+      const on = +a.dataset.i === Find.sel;
+      a.classList.toggle("on", on);
+      a.setAttribute("aria-selected", on);
+      if (on) cur = a;
+    });
+    if (q) q.setAttribute("aria-activedescendant", cur ? cur.id : "");
+    if (scroll && cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+  },
+
+  step: function (d) {
+    if (!Find.items.length) return;
+    Find.sel = (Find.sel + d + Find.items.length) % Find.items.length;
+    Find.mark(true);
+  },
+
+  build: function () {
+    const bg = el("div", { class: "find", id: "findBg" });
+    bg.innerHTML =
+      '<div class="find-box" role="dialog" aria-modal="true" aria-label="Поиск по курсу">' +
+        '<div class="find-top">' + ICON.find +
+          '<input id="findQ" type="text" autocomplete="off" autocorrect="off" ' +
+            'spellcheck="false" role="combobox" aria-expanded="true" aria-controls="findList" ' +
+            'placeholder="Урок, тема или номер">' +
+          '<button class="find-esc" id="findEsc" type="button">Закрыть</button>' +
+        "</div>" +
+        '<div class="find-list" id="findList" role="listbox" aria-label="Найденное"></div>' +
+        '<div class="find-foot"><span><kbd>↑</kbd><kbd>↓</kbd> выбрать</span>' +
+          "<span><kbd>&crarr;</kbd> открыть</span>" +
+          '<span><button class="linkbtn" id="findKeys" type="button">все клавиши</button></span></div>' +
+      "</div>";
+    document.body.appendChild(bg);
+
+    const q = $("#findQ", bg);
+    q.addEventListener("input", function () {
+      Find.items = Find.match(q.value); Find.sel = 0; Find.draw();
+    });
+    q.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); Find.step(1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); Find.step(-1); }
+      else if (e.key === "Enter") {
+        const on = $(".find-it.on");
+        if (on) { e.preventDefault(); on.click(); }
+      } else if (e.key === "Escape") { e.preventDefault(); Find.close(); }
+    });
+    bg.addEventListener("click", function (e) {
+      if (e.target === bg) { Find.close(); return; }
+      const it = e.target.closest && e.target.closest(".find-it");
+      /* ссылка сама поменяет адрес — панели остаётся закрыться */
+      if (it) Find.close();
+    });
+    bg.addEventListener("mousemove", function (e) {
+      const it = e.target.closest && e.target.closest(".find-it");
+      if (!it) return;
+      const i = +it.dataset.i;
+      if (i !== Find.sel) { Find.sel = i; Find.mark(); }
+    });
+    $("#findEsc", bg).addEventListener("click", Find.close);
+    $("#findKeys", bg).addEventListener("click", function () { Find.close(); Keys.help(); });
+    return bg;
+  },
+
+  open: function () {
+    const bg = $("#findBg") || Find.build();
+    if (!bg.classList.contains("show")) Find.back = document.activeElement;
+    bg.classList.add("show");
+    document.body.classList.add("no-scroll");
+    const q = $("#findQ");
+    Find.items = Find.match(q.value = "");
+    Find.sel = 0;
+    Find.draw();
+    q.focus();
+  },
+
+  close: function () {
+    const bg = $("#findBg");
+    if (!bg || !bg.classList.contains("show")) return;
+    bg.classList.remove("show");
+    document.body.classList.remove("no-scroll");
+    if (Find.back && Find.back.focus) Find.back.focus();
+    Find.back = null;
+  },
+
+  isOpen: function () {
+    const bg = $("#findBg");
+    return !!bg && bg.classList.contains("show");
+  }
+};
+
+const Keys = {
+  /* в поле ввода клавиша принадлежит полю, а не странице */
+  typing: function (e) {
+    const t = e.target;
+    if (!t || !t.tagName) return false;
+    const tag = t.tagName.toLowerCase();
+    return t.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
+  },
+
+  list: [
+    [["/"], "Найти урок", "или Cmd K"],
+    [["["], "Предыдущий урок", "в открытом уроке"],
+    [["]"], "Следующий урок", "в открытом уроке"],
+    [["Cmd", "&crarr;"], "Запустить код, а в разборе — проверить", "в открытом уроке"],
+    [["Esc"], "Закрыть поиск или окно", ""],
+    [["?"], "Этот список", ""]
+  ],
+
+  help: function () {
+    modal("Клавиши",
+      '<p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">' +
+      "Чтобы не тянуться к мыши посреди задачи.</p>" +
+      '<table class="keys"><tbody>' + Keys.list.map(function (k) {
+        return "<tr><td>" + k[0].map(function (x) { return "<kbd>" + x + "</kbd>"; }).join("") +
+          "</td><td>" + esc(k[1]) +
+          (k[2] ? '<span class="keys-w">' + esc(k[2]) + "</span>" : "") + "</td></tr>";
+      }).join("") + "</tbody></table>");
+  },
+
+  init: function () {
+    document.addEventListener("keydown", function (e) {
+      if (e.defaultPrevented) return;
+      const mod = e.metaKey || e.ctrlKey;
+
+      /* Cmd/Ctrl+K работает и из поля ввода: это общепринятый вызов поиска */
+      if (mod && !e.altKey && !e.shiftKey && (e.key === "k" || e.key === "K" || e.code === "KeyK")) {
+        e.preventDefault(); Find.open(); return;
+      }
+      if (e.key === "Escape" && Find.isOpen()) { e.preventDefault(); Find.close(); return; }
+      if (mod || e.altKey || Keys.typing(e)) return;
+
+      const slash = e.code === "Slash" || e.key === "/" || e.key === "?";
+      if (slash && !e.shiftKey && e.key !== "?") { e.preventDefault(); Find.open(); return; }
+      if (slash) { e.preventDefault(); Keys.help(); return; }
+
+      /* соседние уроки: скобки стоят рядом и не заняты браузером */
+      const dir = (e.code === "BracketLeft" || e.key === "[") ? -1
+                : (e.code === "BracketRight" || e.key === "]") ? 1 : 0;
+      if (dir && Router.current) {
+        const n = Course.neighbour(Router.current, dir);
+        if (n) { e.preventDefault(); Router.go("#" + n.id); }
+      }
+    });
+  }
+};
+
+/* ============================================================
    Маршрутизация по хэшу
    ============================================================ */
 
@@ -1860,7 +2499,8 @@ const Router = {
        перерисовывать нельзя: браузер уже прокрутил куда надо, а полная
        перерисовка вместо этого показала бы «урок ещё не открыт».
        Отличаем по наличию элемента с таким id на странице.          */
-    if (!force && id && !lesson && document.getElementById(id)) return;
+    const page = Pages.find(id);
+    if (!force && id && !lesson && !page && document.getElementById(id)) return;
 
     /* Возврат к адресу урока, который и так открыт (например, кнопкой
        «назад» после перехода по якорю), — просто подъём наверх.      */
@@ -1872,13 +2512,20 @@ const Router = {
     Router.cleanup.forEach(function (f) { try { f(); } catch (e) {} });
     Router.cleanup = [];
 
+    /* Окно и поиск живут вне страницы и пережили бы переход: открытая
+       подсказка поверх новой страницы выглядит как сбой. */
+    Find.close();
+    const open = $("#modalBg");
+    if (open) open.classList.remove("show");
+
     const hdr = $(".hdr"); if (hdr) hdr.remove();
     const bar = $("#storeBar"); if (bar) bar.remove();
 
     const app = document.getElementById("app");
     app.innerHTML = "";
 
-    if (id) renderLesson(app, id);
+    if (page) page(app, id);
+    else if (id) renderLesson(app, id);
     else renderHome(app);
 
     Router.current = lesson ? id : null;
@@ -1895,6 +2542,8 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.appendChild(el("div", { id: "app" }));
   }
   Theme.init();
+  Keys.init();
+  Offline.init();
   acceptDroppedProgress();
   Router.render();
   window.addEventListener("hashchange", function () { Router.render(); });
