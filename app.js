@@ -1680,6 +1680,7 @@ function renderLesson(app, id) {
   const plan = C.plan || defaultPlan(C);
   const hasDrills = !!(C.drills && C.drills.length);
   const hasQuiz = !!(C.quiz && C.quiz.length);
+  const hasCards = !!(C.cards && C.cards.length);
   const hasLinks = !!(C.links && C.links.length);
 
   /* ---------- план урока ---------- */
@@ -1692,7 +1693,9 @@ function renderLesson(app, id) {
   planHtml += "</div></div>";
 
   /* ---------- якорная навигация ---------- */
-  const secs = [{ id: "s-theory", t: "Теория" }, { id: "s-task", t: "Задача" }];
+  const secs = [{ id: "s-theory", t: "Теория" }];
+  if (hasCards) secs.push({ id: "s-cards", t: "Карточки" });
+  secs.push({ id: "s-task", t: "Задача" });
   if (hasDrills) secs.push({ id: "s-drills", t: "Тренажёр" });
   if (hasQuiz) secs.push({ id: "s-quiz", t: "Самопроверка" });
   if (hasLinks) secs.push({ id: "s-links", t: "Что почитать" });
@@ -1703,6 +1706,17 @@ function renderLesson(app, id) {
     navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
   });
   navHtml += "</div></nav>";
+
+  /* ---------- карточки ---------- */
+  /* Сразу после теории: прочитал — вспомнил без подсказки — применил в задаче. */
+  let cardsHtml = "";
+  if (hasCards) {
+    cardsHtml = '<section class="block" id="s-cards">' +
+      '<div class="block-h"><h2>Карточки</h2></div>' +
+      '<p class="block-intro">Не подглядывая в теорию: сначала ответьте в голове, потом откройте ответ ' +
+      "и честно оцените себя. С завтрашнего дня карточки будут возвращаться в повторение на главной.</p>" +
+      '<div class="deck" id="deck"></div></section>';
+  }
 
   /* ---------- тренажёр ---------- */
   let drillsHtml = "";
@@ -1795,6 +1809,8 @@ function renderLesson(app, id) {
       '<div class="block-h"><h2>Теория</h2></div>' +
       '<div class="theory">' + C.theory + "</div>" +
     "</section>" +
+
+    cardsHtml +
 
     '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
@@ -1927,6 +1943,46 @@ function renderLesson(app, id) {
         });
       });
     });
+  }
+
+  /* ---------- колода карточек ---------- */
+  /* Первый прогон ставит карточки в расписание повторения (запись
+     пропускается, если карточка там уже есть). Прогон «ещё раз» только
+     закрепляет и расписание не трогает. */
+  if (hasCards) {
+    const deck = $("#deck");
+    const every = C.cards.map(function (c, k) { return k; });
+    const runDeck = function (list, record) {
+      let i = 0, yes = 0, fresh = 0;
+      const missed = [];
+      const finish = function () {
+        const tail = !record ? "Расписание повторения этот прогон не меняет."
+          : fresh ? "Завтра карточки вернутся в повторение на главной."
+          : "Эти карточки уже в расписании повторения, прогон его не сдвинул.";
+        deck.innerHTML = '<div class="fc-done"><p>Вспомнили ' + yes + " из " + list.length + ". " + tail + "</p>" +
+          '<button class="btn" id="deckAgain" type="button">' +
+          (missed.length ? "Ещё раз невспомненные: " + missed.length : "Прогнать ещё раз") + "</button></div>";
+        $("#deckAgain").addEventListener("click", function () {
+          runDeck(missed.length ? missed : every, false);
+          $(".fc-show", deck).focus({ preventScroll: true });
+        });
+      };
+      const show = function () {
+        if (i >= list.length) { finish(); return; }
+        const n = list[i];
+        Flash.card(deck, C.cards[n], (i + 1) + " из " + list.length, function (ok) {
+          if (record && Review.record(id, "c" + n, ok, true)) fresh++;
+          if (ok) yes++; else missed.push(n);
+          i++;
+          show();
+          /* фокус на следующую кнопку, чтобы колоду можно было пройти с клавиатуры */
+          const b = $(".fc-show", deck) || $("#deckAgain");
+          if (b) b.focus({ preventScroll: true });
+        });
+      };
+      show();
+    };
+    runDeck(every, true);
   }
 
   /* ---------- эталон ---------- */

@@ -1729,7 +1729,7 @@ body.no-scroll { overflow: hidden; }
 
 @media print {
   .hdr, .secnav, .readbar, .actions, .lesson-nav, .toast, .warnbar,
-  .find, .modal-bg { display: none !important; }
+  .find, .modal-bg, #s-cards { display: none !important; }
   body { background: #FFFFFF; font-size: 12pt; }
   .drill[open] .drill-body, .drill-body { display: block !important; }
   .block { page-break-inside: avoid; }
