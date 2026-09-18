@@ -27,8 +27,9 @@ const required = args[0] === "--require" ? args.slice(1) : [];
 const TAGS = { code: true, pre: true };
 const errors = [];
 
+/* В формулах теории десятичная запятая записана как {,}: 0{,}05 */
 function plain(html) {
-  return html.replace(/<[^>]+>/g, "")
+  return html.replace(/<[^>]+>/g, "").replace(/\{,\}/g, ",")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
