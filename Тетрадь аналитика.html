@@ -61829,15 +61829,16 @@ const Offline = {
     if (!Offline.supported()) return;
     navigator.serviceWorker.register("sw.js").then(function (reg) {
       Offline.reg = reg;
-      /* Новая версия курса устанавливается в стороне и ждёт закрытия
-         вкладки. Пока человек не обновит страницу, он читает старую —
-         поэтому говорим об этом, но не перезагружаем под руками. */
+      /* Новая версия курса ставится сразу (sw.js, skipWaiting), но
+         открытая страница работает со старым кодом в памяти, пока
+         человек её не обновит, — говорим об этом, но не
+         перезагружаем под руками. */
       reg.addEventListener("updatefound", function () {
         const w = reg.installing;
         if (!w) return;
         w.addEventListener("statechange", function () {
           if (w.state === "installed" && navigator.serviceWorker.controller) {
-            Progress.toast("Вышла новая версия курса. Она откроется, когда обновите страницу.");
+            Progress.toast("Вышла новая версия курса. Обновите страницу, чтобы её открыть.");
           }
         });
       });
@@ -61846,8 +61847,8 @@ const Offline = {
 
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
-    const own = ["content-m1.js", "content-m2.js", "content-m3.js", "content-m4.js",
-                 "content-m5.js", "content-m6.js", "data.js"];
+    const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js"];
     /* редактор кода, движок SQL и вёрстка формул: без них урок
        откроется, но решать задачу будет нечем */
     const cdn = [CDN.cmBase + "codemirror.min.css", CDN.cmBase + "codemirror.min.js",
