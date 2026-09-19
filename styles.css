@@ -1265,7 +1265,23 @@ li > .term-x { margin: 8px 0 6px; }
   padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft); color: var(--ink);
 }
 .tx-when, .tx-ex { margin-top: 6px; }
-.tx-more { display: inline-block; margin-top: 6px; font-size: 13.5px; color: var(--pen); }
+.tx-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; }
+.tx-more { display: inline-block; font-size: 13.5px; color: var(--pen); }
+
+/* страница «Словарь»: термины строками, как заметки конспекта */
+.gl-item { padding: 14px 0 16px; border-top: 1px solid var(--rule-soft); scroll-margin-top: 90px; }
+.block-h + .gl-item { border-top: 0; padding-top: 0; }
+.gl-t { margin: 0 0 6px; font-family: var(--sans); font-size: 17px; font-weight: 600; color: var(--ink); }
+.gl-p, .gl-item .tx-when, .gl-item .tx-ex {
+  margin: 0 0 6px; max-width: var(--measure);
+  font-size: 15.5px; line-height: 1.6; color: var(--ink-2);
+}
+.gl-item .tx-when b { color: var(--ink); font-weight: 600; }
+.gl-item code {
+  font-family: var(--mono); font-size: .88em; background: var(--paper-2);
+  padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft); color: var(--ink);
+}
+.gl-item.on { margin: 0 -14px; padding-left: 14px; padding-right: 14px; background: var(--pen-soft); border-radius: var(--r-lg); }
 
 /* ============================================================
    12. Урок — самопроверка
