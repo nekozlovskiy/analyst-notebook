@@ -1440,9 +1440,10 @@ WHERE rn IN ((total + 1) / 2, (total + 2) / 2);`,
 
 window.CONTENT.m1l4 = {
   intro: "Запрос, который понимает коллега за минуту, стоит дороже запроса, который на десять строк короче. CTE — главный инструмент читаемости в SQL.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: WITH, шаги, именование, рекурсия" },
+    { m: "30 мин", w: "Практикум: WITH за шесть шагов — от одного шага до доли от общего" },
     { m: "40 мин", w: "Основная задача: Парето по каналам" },
     { m: "35 мин", w: "Тренажёр: рефакторинг и календарь дат" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -1543,6 +1544,143 @@ SELECT * FROM calendar;</code></pre>
   </ul>
 </div>
 `,
+
+  /* Практикум по WITH — тем же форматом, что в 1.2 (см. там). Шаги
+     учат части основной задачи на платформах, задача — на каналах.
+     Решения проверены: node инструменты/checksteps.js m1l4 */
+  practicum: {
+    intro: "Шесть коротких шагов: от одного именованного шага до доли от общего — ровно те части, из которых собирается основная задача. Здесь всё считается по платформам, в задаче то же самое понадобится для каналов. В каждом шаге — таблица «было → стало» на настоящих строках базы и запрос, который курс проверит сам.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. В основной задаче — то же самое для каналов: выручка канала в <code>WITH</code>, общая сумма одной строкой, доля. Новое там одно — накопленная доля, это <code>SUM() OVER (ORDER BY …)</code> из урока 1.2.",
+    steps: [
+      {
+        title: "Дать шагу имя: WITH … AS",
+        body: `
+<p>Длинный запрос удобнее писать по шагам. <code>WITH</code> даёт промежуточному результату имя, и дальше из него выбирают, как из обычной таблицы:</p>
+<pre><code>WITH paid AS (
+    SELECT order_id, user_id, revenue
+    FROM orders
+    WHERE status = 'paid'
+)
+SELECT ...
+FROM paid;</code></pre>
+<p>В скобках — обычный запрос. <code>paid</code> живёт только внутри этого запроса: в базе новой таблицы не появится. Зато основной <code>SELECT</code> теперь читается просто: «из оплаченных заказов посчитай…».</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue", "status"],
+            rows: [[190, 6310.9, "paid"], [191, 7524.11, "pending"], [192, 5494.59, "refunded"], [193, 2290.61, "paid"], [194, 2820.17, "pending"]] },
+          after: { columns: ["order_id", "revenue"], rows: [[190, 6310.9], [193, 2290.61]] },
+          hl: [], keep: [0, 3],
+          note: "«Было» — заказы пользователя 196 в <code>orders</code>. «Стало» — они же в <code>paid</code>: остались только оплаченные."
+        },
+        task: "<p><strong>Задание.</strong> Уберите запрос в <code>WITH paid AS (…)</code> и одной строкой выведите по оплаченным заказам <code>paid_cnt</code> — сколько их, и <code>revenue</code> — их сумму, округлённую до 2 знаков.</p>",
+        starter: "SELECT order_id, user_id, revenue\nFROM orders\nWHERE status = 'paid';",
+        expected: { ordered: false, columns: ["paid_cnt", "revenue"], rows: [[189, 653428.78]] },
+        hint: "Оберните запрос: <code>WITH paid AS (</code> перед ним и <code>)</code> после, точку с запятой уберите. Ниже: <code>SELECT COUNT(*) AS paid_cnt, ROUND(SUM(revenue), 2) AS revenue FROM paid;</code>",
+        solution: "WITH paid AS (\n    SELECT order_id, user_id, revenue\n    FROM orders\n    WHERE status = 'paid'\n)\nSELECT COUNT(*) AS paid_cnt,\n       ROUND(SUM(revenue), 2) AS revenue\nFROM paid;"
+      },
+      {
+        title: "Шаг из шага: второй WITH",
+        body: `
+<p>Шагов может быть несколько — их пишут через запятую, и каждый следующий может брать из предыдущего. Слово <code>WITH</code> пишут один раз, в самом начале:</p>
+<pre><code>WITH paid AS (
+    SELECT user_id, revenue FROM orders WHERE status = 'paid'
+),
+per_user AS (
+    SELECT user_id, SUM(revenue) AS total
+    FROM paid
+    GROUP BY user_id
+)
+SELECT ... FROM per_user;</code></pre>
+<p>Запрос читается сверху вниз, как рецепт: отобрали оплаченные — сложили по каждому клиенту — выбрали нужное. Каждый шаг можно проверить отдельно: напишите внизу <code>SELECT * FROM paid</code> и посмотрите, что в нём лежит.</p>`,
+        ba: {
+          before: { columns: ["user_id", "revenue"],
+            rows: [[3, 1361.84], [3, 9071.54], [3, 3071.02], [3, 1796.6], [65, 2523.12], [65, 3444.01], [65, 3873.51]] },
+          after: { columns: ["user_id", "total"], rows: [[3, 15301], [65, 9840.64]] },
+          hl: ["total"],
+          note: "«Было» — <code>paid</code> для двух клиентов. «Стало» — <code>per_user</code>: по строке на клиента."
+        },
+        task: "<p><strong>Задание.</strong> Добавьте шаг <code>per_user</code> и выведите клиентов, которые потратили больше 15 000 ₽: <code>user_id</code> и <code>total</code> — сумму их оплаченных заказов, 2 знака.</p>",
+        starter: "WITH paid AS (\n    SELECT user_id, revenue\n    FROM orders\n    WHERE status = 'paid'\n)\nSELECT user_id, revenue\nFROM paid;",
+        expected: { ordered: false, columns: ["user_id", "total"],
+          rows: [[3, 15301], [13, 15252.32], [14, 17683.24], [80, 15780.77], [103, 17772.89], [195, 15687.37]] },
+        hint: "После скобки <code>paid</code> поставьте запятую и второй шаг: <code>per_user AS (SELECT user_id, SUM(revenue) AS total FROM paid GROUP BY user_id)</code>. Внизу — <code>SELECT user_id, ROUND(total, 2) AS total FROM per_user WHERE total &gt; 15000;</code>",
+        solution: "WITH paid AS (\n    SELECT user_id, revenue\n    FROM orders\n    WHERE status = 'paid'\n),\nper_user AS (\n    SELECT user_id, SUM(revenue) AS total\n    FROM paid\n    GROUP BY user_id\n)\nSELECT user_id, ROUND(total, 2) AS total\nFROM per_user\nWHERE total > 15000;"
+      },
+      {
+        title: "Итог одной строкой: FROM b, t",
+        body: `
+<p>Чтобы посчитать долю платформы, нужны два числа: выручка платформы и выручка всех платформ. Второе — одна строка на весь магазин. Её считают отдельным шагом <code>total</code> из первого шага.</p>
+<p>Потом два шага ставят рядом через запятую: <code>FROM by_platform b, total t</code>. Такая запись соединяет каждую строку слева с каждой строкой справа. Справа строка одна, поэтому она просто подставляется к каждой платформе, и строк не прибавляется. Буквы <code>b</code> и <code>t</code> — короткие имена, как <code>o</code> и <code>u</code> в уроке 1.1.</p>`,
+        ba: {
+          before: { columns: ["platform", "revenue"],
+            rows: [["android", 277332.79], ["ios", 236652.83], ["web", 139443.16]] },
+          after: { columns: ["platform", "revenue", "all_revenue"],
+            rows: [["android", 277332.79, 653428.78], ["ios", 236652.83, 653428.78], ["web", 139443.16, 653428.78]] },
+          hl: ["all_revenue"],
+          note: "Строк по-прежнему три: единственная строка <code>total</code> встала рядом с каждой."
+        },
+        task: "<p><strong>Задание.</strong> Шаг <code>by_platform</code> уже написан. Добавьте шаг <code>total</code> с общей выручкой <code>all_revenue</code> и выведите <code>platform</code>, <code>revenue</code> и <code>all_revenue</code>.</p>",
+        starter: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n)\nSELECT platform, revenue\nFROM by_platform;",
+        expected: { ordered: false, columns: ["platform", "revenue", "all_revenue"],
+          rows: [["android", 277332.79, 653428.78], ["ios", 236652.83, 653428.78], ["web", 139443.16, 653428.78]] },
+        hint: "Второй шаг: <code>total AS (SELECT SUM(revenue) AS all_revenue FROM by_platform)</code>. Внизу: <code>SELECT b.platform, b.revenue, t.all_revenue FROM by_platform b, total t;</code>",
+        solution: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n),\ntotal AS (\n    SELECT SUM(revenue) AS all_revenue\n    FROM by_platform\n)\nSELECT b.platform, b.revenue, t.all_revenue\nFROM by_platform b, total t;"
+      },
+      {
+        title: "Доля в процентах",
+        body: `
+<p>Когда оба числа стоят в одной строке, доля — обычная арифметика: выручка платформы, умноженная на 100 и делённая на общую. <code>ROUND(…, 1)</code> оставляет один знак после точки.</p>
+<p>Пишите <code>100.0</code>, а не <code>100</code>. Если делить целые числа — например, число заказов, — база отбросит дробную часть: <code>46 / 189 * 100</code> даст 0. Точка превращает расчёт в дробный. Здесь выручка и так дробная, но привычка сбережёт вас в шаге 6.</p>`,
+        ba: {
+          before: { columns: ["platform", "revenue", "all_revenue"],
+            rows: [["android", 277332.79, 653428.78], ["ios", 236652.83, 653428.78], ["web", 139443.16, 653428.78]] },
+          after: { columns: ["platform", "revenue", "share_pct"],
+            rows: [["android", 277332.79, 42.4], ["ios", 236652.83, 36.2], ["web", 139443.16, 21.3]] },
+          hl: ["share_pct"],
+          note: "42,4 + 36,2 + 21,3 = 99,9: каждую долю округлили, поэтому в сумме не ровно 100."
+        },
+        task: "<p><strong>Задание.</strong> Вместо <code>all_revenue</code> выведите <code>share_pct</code> — долю платформы в выручке, в процентах, 1 знак.</p>",
+        starter: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n),\ntotal AS (\n    SELECT SUM(revenue) AS all_revenue\n    FROM by_platform\n)\nSELECT b.platform, b.revenue, t.all_revenue\nFROM by_platform b, total t;",
+        expected: { ordered: false, columns: ["platform", "revenue", "share_pct"],
+          rows: [["android", 277332.79, 42.4], ["ios", 236652.83, 36.2], ["web", 139443.16, 21.3]] },
+        hint: "Замените <code>t.all_revenue</code> на <code>ROUND(b.revenue * 100.0 / t.all_revenue, 1) AS share_pct</code>.",
+        solution: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n),\ntotal AS (\n    SELECT SUM(revenue) AS all_revenue\n    FROM by_platform\n)\nSELECT b.platform, b.revenue,\n       ROUND(b.revenue * 100.0 / t.all_revenue, 1) AS share_pct\nFROM by_platform b, total t;"
+      },
+      {
+        title: "То же окном: SUM() OVER ()",
+        body: `
+<p>Общую сумму можно не считать отдельным шагом. В уроке 1.2 была <code>SUM(revenue) OVER ()</code> — она ставит сумму всех строк рядом с каждой. Значит, делить можно прямо на неё:</p>
+<pre><code>ROUND(revenue * 100.0 / SUM(revenue) OVER (), 1) AS share_pct</code></pre>
+<p>Ответ тот же, запрос короче. Какой способ выбрать — дело вкуса: с шагом <code>total</code> общая сумма видна отдельно и её легко проверить, с окном меньше текста. В основной задаче подойдёт любой.</p>`,
+        ba: {
+          before: { columns: ["platform", "revenue"],
+            rows: [["android", 277332.79], ["ios", 236652.83], ["web", 139443.16]] },
+          after: { columns: ["platform", "revenue", "share_pct"],
+            rows: [["android", 277332.79, 42.4], ["ios", 236652.83, 36.2], ["web", 139443.16, 21.3]] },
+          hl: ["share_pct"],
+          note: "Те же доли, что в шаге 4, — без шага <code>total</code>."
+        },
+        task: "<p><strong>Задание.</strong> Оставлен только шаг <code>by_platform</code>. Выведите <code>platform</code>, <code>revenue</code> и <code>share_pct</code> через окно, без второго шага.</p>",
+        starter: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n)\nSELECT platform, revenue\nFROM by_platform;",
+        expected: { ordered: false, columns: ["platform", "revenue", "share_pct"],
+          rows: [["android", 277332.79, 42.4], ["ios", 236652.83, 36.2], ["web", 139443.16, 21.3]] },
+        hint: "Третий столбец: <code>ROUND(revenue * 100.0 / SUM(revenue) OVER (), 1) AS share_pct</code>.",
+        solution: "WITH by_platform AS (\n    SELECT u.platform, ROUND(SUM(o.revenue), 2) AS revenue\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.platform\n)\nSELECT platform, revenue,\n       ROUND(revenue * 100.0 / SUM(revenue) OVER (), 1) AS share_pct\nFROM by_platform;"
+      },
+      {
+        title: "Сами: доля городов в заказах",
+        body: `
+<p>Новых слов здесь нет — соберите запрос из того, что уже написали. Вопрос: какая доля <strong>оплаченных заказов</strong> приходится на каждый город? Теперь считаем не выручку, а число заказов.</p>
+<p>Число заказов — целое, поэтому тут и пригодится <code>100.0</code> из шага 4. Без точки у Москвы выйдут те же 28, и ошибку легко не заметить, а у Казани — 17 вместо 18,0. Проверка такое поймает.</p>`,
+        task: "<p><strong>Задание.</strong> Выведите <code>city</code>, <code>orders_cnt</code> — оплаченных заказов в городе и <code>share_pct</code> — долю города среди всех оплаченных заказов, в процентах, 1 знак.</p>",
+        starter: "-- 1. Шаг by_city: оплаченные заказы по городам (JOIN с users)\n-- 2. Общее число заказов — шагом total или окном\n-- 3. Доля: * 100.0 / общее, ROUND(…, 1)\n",
+        expected: { ordered: false, columns: ["city", "orders_cnt", "share_pct"],
+          rows: [["Екатеринбург", 46, 24.3], ["Казань", 34, 18], ["Москва", 53, 28], ["Новосибирск", 23, 12.2], ["Санкт-Петербург", 33, 17.5]] },
+        hint: "Шаг <code>by_city</code>: <code>SELECT u.city, COUNT(*) AS orders_cnt FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.status = 'paid' GROUP BY u.city</code>. Внизу: <code>SELECT city, orders_cnt, ROUND(orders_cnt * 100.0 / SUM(orders_cnt) OVER (), 1) AS share_pct FROM by_city;</code>",
+        solution: "WITH by_city AS (\n    SELECT u.city, COUNT(*) AS orders_cnt\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n    GROUP BY u.city\n),\ntotal AS (\n    SELECT SUM(orders_cnt) AS all_cnt\n    FROM by_city\n)\nSELECT b.city, b.orders_cnt,\n       ROUND(b.orders_cnt * 100.0 / t.all_cnt, 1) AS share_pct\nFROM by_city b, total t;"
+      }
+    ]
+  },
 
   ticket: {
     from: "Ира, performance-маркетинг",
