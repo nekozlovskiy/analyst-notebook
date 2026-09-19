@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Проверка карточек «вопрос → ответ» в content-m1.js … content-m6.js.
+/* Проверка карточек «вопрос → ответ» в content-m0.js … content-m6.js.
 
      node инструменты/checkcards.js                  — формат всех карточек, какие есть
      node инструменты/checkcards.js --require m1     — и у каждого урока модуля 1 есть 6–12 карточек
@@ -14,7 +14,7 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 global.window = { CONTENT: {}, SH: new Proxy({}, { get: function () { return ""; } }) };
 require(path.join(ROOT, "lessons.js"));
-for (let n = 1; n <= 6; n++) require(path.join(ROOT, "content-m" + n + ".js"));
+for (let n = 0; n <= 6; n++) require(path.join(ROOT, "content-m" + n + ".js"));
 
 /* Числа сравниваются целиком: «17» не должно найтись внутри «17.09».
    Запятая и точка в дробях считаются одним и тем же. */
@@ -27,8 +27,9 @@ const required = args[0] === "--require" ? args.slice(1) : [];
 const TAGS = { code: true, pre: true };
 const errors = [];
 
+/* В формулах теории десятичная запятая записана как {,}: 0{,}05 */
 function plain(html) {
-  return html.replace(/<[^>]+>/g, "")
+  return html.replace(/<[^>]+>/g, "").replace(/\{,\}/g, ",")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
@@ -59,7 +60,10 @@ window.COURSE.modules.forEach(function (m) {
     if (need && (cards.length < 6 || cards.length > 12)) {
       errors.push(l.id + ": карточек " + cards.length + ", нужно от 6 до 12");
     }
-    const theory = new Set(numbers(plain(C.theory || "")));
+    /* у пошагового урока теория — это тексты шагов и блок «как дальше» */
+    const text = (C.theory || "") +
+      (C.steps || []).map(function (s) { return s.body; }).join(" ") + (C.after || "");
+    const theory = new Set(numbers(plain(text)));
     cards.forEach(function (c, i) {
       const where = l.id + " карточка " + i;
       if (!c || typeof c.q !== "string" || !c.q.trim()) { errors.push(where + ": пустой вопрос q"); return; }

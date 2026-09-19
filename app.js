@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {} };
+                  days: {}, review: {}, prep: {}, steps: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -114,7 +114,7 @@ const Store = (function () {
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
-      ["done", "attempts", "time", "days"].forEach(function (b) {
+      ["done", "attempts", "time", "days", "steps"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -1612,6 +1612,539 @@ function defaultPlan(C) {
   return p;
 }
 
+/* ============================================================
+   Части страницы урока
+
+   Обычный урок и пошаговый (0.1) собраны из одних и тех же частей:
+   шапка с планом, якорная навигация, полоса прочитанного, колода
+   карточек, ссылки, нижняя навигация, таймер и редактор.
+   ============================================================ */
+
+/* шапка: реплика на поле, номер и вид урока, таймер, заголовок, план */
+function lessonHeadHtml(L, C, kindLabel) {
+  const plan = C.plan || defaultPlan(C);
+  let planHtml = '<div class="plan"><div class="plan-h"><span>План занятия</span>' +
+    '<span class="total">' + esc(C.duration || "≈ 2 часа") + "</span></div>" +
+    '<div class="plan-list" style="--plan-cols:' + Math.min(plan.length, 5) + '">';
+  plan.forEach(function (p) {
+    planHtml += '<div class="plan-item"><div class="m">' + esc(p.m) + '</div><div class="w">' + esc(p.w) + "</div></div>";
+  });
+  planHtml += "</div></div>";
+  return '<header class="lesson-head has-margin">' +
+      (L.say ? '<div class="aside"><p>' + esc(L.say) + "</p></div>" : "") +
+      '<div class="kicker"><span>Урок ' + L.num + ", " + esc(kindLabel) + "</span>" +
+        '<button class="timer" id="timer" type="button" title="Время урока считается само и видно на главной. Клик — пауза">время идёт</button></div>' +
+      "<h1>" + esc(L.title) + "</h1>" +
+      '<p class="sub">' + esc(C.intro || L.desc) + "</p>" +
+      planHtml +
+    "</header>";
+}
+
+/* якорная навигация по разделам урока */
+function secNavHtml(secs) {
+  let navHtml = '<nav class="secnav" id="secnav"><div class="secnav-in">';
+  secs.forEach(function (s, i) {
+    navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
+  });
+  return navHtml + "</div></nav>";
+}
+
+/* полоса прочитанного и подсветка активного раздела в навигации */
+function mountReadbar(secs) {
+  const bar = el("div", { class: "readbar", id: "readbar" });
+  document.body.appendChild(bar);
+  /* В уроке две полосы прогресса не нужны: здесь важно, сколько
+     осталось до конца страницы, а сколько пройдено курса — сказано
+     словами на кнопке в шапке. */
+  document.body.classList.add("reading");
+  const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
+  let ticking = false;
+
+  function upd() {
+    ticking = false;
+    const h = document.documentElement;
+    const max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + "%";
+
+    const line = h.scrollTop + h.clientHeight * 0.32;
+    let cur = secs[0].id;
+    for (let i = 0; i < secs.length; i++) {
+      const n = document.getElementById(secs[i].id);
+      if (n && n.offsetTop <= line) cur = secs[i].id;
+    }
+    links.forEach(function (a) { a.classList.toggle("on", a.dataset.sec === cur); });
+  }
+  function onScroll() {
+    if (!ticking) { ticking = true; requestAnimationFrame(upd); }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  upd();
+  Router.cleanup.push(function () {
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onScroll);
+    document.body.classList.remove("reading");
+    const b = document.getElementById("readbar");
+    if (b) b.remove();
+  });
+}
+
+/* Карточки — сразу после теории: прочитал — вспомнил без подсказки — применил в задаче. */
+function cardsBlockHtml() {
+  return '<section class="block" id="s-cards">' +
+    '<div class="block-h"><h2>Карточки</h2></div>' +
+    '<p class="block-intro">Не подглядывая в теорию: сначала ответьте в голове, потом откройте ответ ' +
+    "и честно оцените себя. С завтрашнего дня карточки будут возвращаться в повторение на главной.</p>" +
+    '<div class="deck" id="deck"></div></section>';
+}
+
+/* Колода карточек. Первый прогон ставит карточки в расписание повторения
+   (запись пропускается, если карточка там уже есть). Прогон «ещё раз»
+   только закрепляет и расписание не трогает. */
+function mountDeck(id, C) {
+  const deck = $("#deck");
+  const every = C.cards.map(function (c, k) { return k; });
+  const runDeck = function (list, record) {
+    let i = 0, yes = 0, fresh = 0;
+    const missed = [];
+    const finish = function () {
+      const tail = !record ? "Расписание повторения этот прогон не меняет."
+        : fresh ? "Завтра карточки вернутся в повторение на главной."
+        : "Эти карточки уже в расписании повторения, прогон его не сдвинул.";
+      deck.innerHTML = '<div class="fc-done"><p>Вспомнили ' + yes + " из " + list.length + ". " + tail + "</p>" +
+        '<button class="btn" id="deckAgain" type="button">' +
+        (missed.length ? "Ещё раз невспомненные: " + missed.length : "Прогнать ещё раз") + "</button></div>";
+      $("#deckAgain").addEventListener("click", function () {
+        runDeck(missed.length ? missed : every, false);
+        $(".fc-show", deck).focus({ preventScroll: true });
+      });
+    };
+    const show = function () {
+      if (i >= list.length) { finish(); return; }
+      const n = list[i];
+      Flash.card(deck, C.cards[n], (i + 1) + " из " + list.length, function (ok) {
+        if (record && Review.record(id, "c" + n, ok, true)) fresh++;
+        if (ok) yes++; else missed.push(n);
+        i++;
+        show();
+        /* фокус на следующую кнопку, чтобы колоду можно было пройти с клавиатуры */
+        const b = $(".fc-show", deck) || $("#deckAgain");
+        if (b) b.focus({ preventScroll: true });
+      });
+    };
+    show();
+  };
+  runDeck(every, true);
+}
+
+/* что почитать дальше */
+function linksBlockHtml(C) {
+  let html = '<section class="block" id="s-links">' +
+    '<div class="block-h"><h2>Что почитать дальше</h2></div>' +
+    '<p class="block-intro">Материалы открываются в новой вкладке. Помеченные EN на английском: ' +
+    "читать документацию по-английски аналитику всё равно придётся, лучше начать сейчас.</p>" +
+    '<div class="links">';
+  C.links.forEach(function (l) {
+    html += '<a class="link-card" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' +
+      '<div class="lk-src"><span>' + esc(l.src) + "</span>" +
+      (l.lang ? '<span class="lang">' + esc(l.lang) + "</span>" : "") + "</div>" +
+      '<div class="lk-t">' + esc(l.t) + "</div>" +
+      '<div class="lk-d">' + esc(l.d) + "</div></a>";
+  });
+  return html + "</div></section>";
+}
+
+/* Нижняя навигация: соседние уроки и отметка «пройден».
+   onUnmark — что ещё сбросить, когда отметку снимают (может быть null).
+   Возвращает функцию перерисовки. */
+function mountLessonNav(id, onUnmark) {
+  function update() {
+    const prev = Course.neighbour(id, -1), next = Course.neighbour(id, 1);
+    const done = Course.isDone(id);
+    /* Стрелка вынесена из подписи отдельным значком: тогда длинное
+       название урока обрезается многоточием, а стрелка остаётся
+       на месте — иначе на телефоне срезало бы именно её. */
+    const link = function (l, dir) {
+      const arrow = '<span class="nl-a">' + (dir < 0 ? "&larr;" : "&rarr;") + "</span>";
+      const text = '<span class="nl-t">' + esc(l ? l.num + " " + l.title
+        : dir < 0 ? "начало курса" : "дальше — новые уроки") + "</span>";
+      const body = dir < 0 ? arrow + text : text + arrow;
+      return l ? '<a class="navlink" href="#' + l.id + '">' + body + "</a>"
+               : '<span class="navlink dim">' + body + "</span>";
+    };
+    $("#lnav").innerHTML =
+      link(prev, -1) +
+      '<a class="navlink" href="#">Карта курса</a>' +
+      '<span class="spacer"></span>' +
+      '<button class="btn ' + (done ? "" : "check") + '" id="markBtn" type="button"' +
+        (done ? "" : " disabled") + ">" +
+        (done ? "&#10003; Пройден — снять отметку" : "Отметить как пройденный") + "</button>" +
+      link(next, 1);
+
+    const mb = $("#markBtn");
+    if (!done) mb.title = "Станет активной, когда «Проверить» покажет зелёный результат";
+    mb.addEventListener("click", function () {
+      if (Course.isDone(id)) {
+        Store.set("done", id, false);
+        if (onUnmark) onUnmark();
+      }
+      update();
+      refreshBar();
+    });
+  }
+  update();
+  return update;
+}
+
+/* Таймер урока. Секундомер на экране давит, поэтому времени не видно:
+   оно считается само и показывается на главной. Пауза — если отошли
+   от открытого урока. Время по календарным дням — для серии на главной. */
+function mountTimer(id) {
+  let secs = Store.get("time", id, 0);
+  let day = isoDay(), daySecs = Store.get("days", day, 0);
+  let running = true;
+  const btn = $("#timer");
+  const tick = setInterval(function () {
+    if (!running || document.hidden) return;
+    secs += 1;
+    const d = isoDay();
+    if (d !== day) { Store.set("days", day, daySecs); day = d; daySecs = Store.get("days", day, 0); }
+    daySecs += 1;
+    if (secs % 10 === 0) { Store.set("time", id, secs); Store.set("days", day, daySecs); }
+  }, 1000);
+  btn.addEventListener("click", function () {
+    running = !running;
+    btn.classList.toggle("paused", !running);
+    btn.textContent = running ? "время идёт" : "на паузе";
+    btn.title = running ? "Время урока считается само и видно на главной. Клик — пауза"
+                        : "Время не считается. Клик — продолжить";
+  });
+  Router.cleanup.push(function () {
+    clearInterval(tick);
+    if (secs > 0) Store.set("time", id, secs);
+    if (daySecs > 0) Store.set("days", day, daySecs);
+  });
+}
+
+/* Редактор кода: CodeMirror с подсветкой, а если он не загрузился —
+   обычное поле ввода. Промис отдаёт {get, set} или null, если страницу
+   успели сменить. onRun — Cmd/Ctrl+Enter в CodeMirror; onFail — вызвать,
+   когда пришлось обойтись полем без подсветки. */
+function mountEditor(ta, kind, value, onChange, onRun, onFail) {
+  loadCSS(CDN.cmBase + "codemirror.min.css");
+  return loadScript(CDN.cmBase + "codemirror.min.js").then(function () {
+    return loadScript(CDN.cmBase + "mode/" + (kind === "sql" ? "sql/sql" : "python/python") + ".min.js");
+  }).then(function () {
+    if (!ta || !document.body.contains(ta)) return null;   /* урок успели сменить */
+    const cm = window.CodeMirror.fromTextArea(ta, {
+      mode: kind === "sql" ? "text/x-sqlite" : "python",
+      lineNumbers: true, indentUnit: 4, tabSize: 4,
+      lineWrapping: true, viewportMargin: Infinity,
+      extraKeys: {
+        "Cmd-Enter": onRun, "Ctrl-Enter": onRun,
+        Tab: function (c) { c.replaceSelection("    "); }
+      }
+    });
+    cm.setValue(value);
+    cm.on("change", function () { onChange(cm.getValue()); });
+    return { get: function () { return cm.getValue(); }, set: function (v) { cm.setValue(v); } };
+  }).catch(function () {
+    if (!ta || !document.body.contains(ta)) return null;
+    ta.style.cssText = "width:100%;min-height:320px;font-family:var(--mono);font-size:14.5px;" +
+      "line-height:1.62;border:0;padding:14px 16px;background:transparent;color:var(--ink);resize:vertical";
+    ta.value = value;
+    ta.addEventListener("input", function () { onChange(ta.value); });
+    if (onFail) onFail();
+    return { get: function () { return ta.value; }, set: function (v) { ta.value = v; } };
+  });
+}
+
+/* ============================================================
+   Пошаговый урок
+
+   Урок 0.1 учит SQL с нуля, поэтому теория в нём нарезана на шаги
+   и у каждого шага своя маленькая задача. Открыт один шаг — первый
+   нерешённый; решённые сворачиваются в строку с запросом ученика,
+   будущие видны серыми заголовками. Редактор есть только у открытого
+   шага: на телефоне восемь редакторов сразу были бы лишними.
+   Пройденные шаги — корзина steps («урок:номер»), код шага —
+   корзина code («урок:sномер»).
+   ============================================================ */
+
+const Steps = {
+  key: function (id, n) { return id + ":" + n; },
+  passed: function (id, n) { return !!Store.get("steps", Steps.key(id, n), false); },
+  firstOpen: function (id, C) {
+    for (let n = 0; n < C.steps.length; n++) if (!Steps.passed(id, n)) return n;
+    return -1;
+  },
+  clear: function (id, C) {
+    C.steps.forEach(function (s, n) {
+      if (Steps.passed(id, n)) Store.set("steps", Steps.key(id, n), false);
+    });
+  },
+
+  /* Рисует ленту шагов урока L в box. onFinish(fresh) вызывается, когда
+     пройдены все шаги: fresh — только что, а не уже при открытии. */
+  render: function (L, C, box, onFinish) {
+    const id = L.id, total = C.steps.length;
+    const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
+    let open = Steps.firstOpen(id, C);
+    let justPassed = -1;
+    let editor = null, last = null, helped = false;
+
+    box.innerHTML =
+      '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
+        '<div class="schema-body">' + C.schema + "</div></details>" +
+      '<ol class="steps"></ol>';
+    const list = $(".steps", box);
+
+    function codeKey(n) { return id + ":s" + n; }
+    function codeOf(n) {
+      const saved = Store.get("code", codeKey(n), null);
+      return saved !== null ? saved : (C.steps[n].starter || "");
+    }
+    /* первая значимая строка запроса — подпись свёрнутого шага */
+    function firstLine(src) {
+      return (String(src).split("\n").filter(function (x) {
+        return x.trim() && !/^\s*--/.test(x);
+      })[0] || "").trim();
+    }
+    function mark(n) {
+      return '<span class="st-n">' + (Steps.passed(id, n)
+        ? penTick(Steps.key(id, n), n === justPassed ? "draw" : "")
+        : String(n + 1)) + "</span>";
+    }
+
+    function itemHtml(n) {
+      const s = C.steps[n];
+      if (n === open) {
+        return '<li class="st open" data-n="' + n + '">' +
+          '<div class="st-h">' + mark(n) + '<h3 class="st-t">' + esc(s.title) + "</h3>" +
+            '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
+          '<div class="st-b">' +
+            '<div class="theory">' + s.body + "</div>" +
+            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
+              '<textarea class="st-ta"></textarea></div>' +
+            '<div class="st-actions">' +
+              '<button class="btn primary st-run" type="button">' + ICON.play + "Запустить</button>" +
+              '<button class="btn check st-check" type="button">' + ICON.check + "Проверить</button>" +
+              '<button class="linkbtn st-help" type="button">Не получается</button>' +
+            "</div>" +
+            '<div class="st-hint" hidden></div>' +
+            '<div class="status st-status"></div>' +
+            '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
+              '<div class="io-body st-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
+          "</div></li>";
+      }
+      if (Steps.passed(id, n)) {
+        const shown = !!peek[n];
+        return '<li class="st done' + (shown ? " peek" : "") + '" data-n="' + n + '">' +
+          '<button class="st-h" type="button" aria-expanded="' + shown + '">' + mark(n) +
+            '<span class="st-t">' + esc(s.title) + "</span>" +
+            '<code class="st-q">' + esc(firstLine(codeOf(n))) + "</code></button>" +
+          (shown ? '<div class="st-b"><div class="theory">' + s.body + "</div>" +
+            '<pre class="st-code"><code>' + esc(codeOf(n)) + "</code></pre></div>" : "") +
+          "</li>";
+      }
+      return '<li class="st todo" data-n="' + n + '"><div class="st-h">' + mark(n) +
+        '<span class="st-t">' + esc(s.title) + "</span></div></li>";
+    }
+
+    /* пройденный шаг раскрывается и сворачивается на месте, остальные не трогаем */
+    function bindDone(li) {
+      $(".st-h", li).addEventListener("click", function () {
+        const n = +li.dataset.n;
+        peek[n] = !peek[n];
+        const tmp = document.createElement("div");
+        tmp.innerHTML = itemHtml(n);
+        const fresh = tmp.firstChild;
+        li.parentNode.replaceChild(fresh, li);
+        bindDone(fresh);
+      });
+    }
+
+    function draw() {
+      editor = null; last = null; helped = false;
+      let html = "";
+      for (let n = 0; n < total; n++) html += itemHtml(n);
+      justPassed = -1;
+      list.innerHTML = html;
+      Array.prototype.forEach.call(list.querySelectorAll(".st.done"), bindDone);
+      if (open >= 0) mountOpen();
+    }
+
+    function mountOpen() {
+      const n = open;
+      const li = $(".st.open", list);
+      const q = function (sel) { return $(sel, li); };
+
+      function status(kind, title, body) {
+        const s = q(".st-status");
+        if (!kind) { s.className = "status st-status"; s.innerHTML = ""; return; }
+        const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+        s.className = "status st-status show " + kind;
+        s.innerHTML = '<span class="s-ico">' + ico + "</span>" +
+          '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
+      }
+      function showRows(badRow) {
+        q(".st-res").innerHTML = renderTable(last.columns, last.values, badRow) +
+          '<div class="st-rows">' + last.values.length + " " +
+          plural(last.values.length, "строка", "строки", "строк") + "</div>";
+      }
+
+      /* true — запрос выполнен (строк может и не быть), false — пусто или ошибка */
+      async function run() {
+        if (open !== n || !document.body.contains(li)) return false;
+        status(null);
+        const code = editor ? editor.get() : q(".st-ta").value;
+        if (!code.trim()) { status("warn", "Пусто", "Сначала напишите запрос."); return false; }
+        const rb = q(".st-run");
+        rb.disabled = true;
+        if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
+        try {
+          const db = await Engine.sql();
+          if (open !== n || !document.body.contains(li)) return false;
+          let res;
+          try { res = db.exec(code); }
+          catch (e) {
+            last = null;
+            q(".st-res").innerHTML = '<pre><span class="err">' + esc("SQLite: " + e.message) + "</span></pre>";
+            status("bad", "Запрос упал с ошибкой",
+              "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась.");
+            return false;
+          }
+          last = res.length ? res[res.length - 1] : null;
+          if (last) showRows(-1);
+          else q(".st-res").innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          return true;
+        } catch (e) {
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        } finally {
+          if (document.body.contains(rb)) rb.disabled = false;
+        }
+      }
+
+      /* «Проверить» всегда выполняет то, что сейчас в редакторе */
+      async function check() {
+        const ran = await run();
+        if (!ran || open !== n) return;
+        const r = Check.sql(last, C.steps[n].expected);
+        if (r.ok) { pass(n); return; }
+        if (last) showRows(r.row === undefined ? -1 : r.row);
+        status("bad", "Пока не совпадает", esc(r.why));
+      }
+
+      /* первое нажатие — подсказка, второе — решение в редакторе */
+      function help() {
+        const s = C.steps[n], hint = q(".st-hint"), btn = q(".st-help");
+        if (!helped) {
+          hint.hidden = false;
+          hint.innerHTML = s.hint;
+          btn.textContent = "Показать решение";
+          helped = true;
+          return;
+        }
+        if (editor) editor.set(s.solution); else q(".st-ta").value = s.solution;
+        Store.set("code", codeKey(n), s.solution);
+        status("warn", "Решение в редакторе",
+          "Прочитайте его, запустите и проверьте: шаг засчитается после «Проверить».");
+        btn.hidden = true;
+      }
+
+      q(".st-run").addEventListener("click", run);
+      q(".st-check").addEventListener("click", check);
+      q(".st-help").addEventListener("click", help);
+
+      mountEditor(q(".st-ta"), "sql", codeOf(n),
+        function (v) { Store.set("code", codeKey(n), v); }, run,
+        function () {
+          status("warn", "Редактор без подсветки",
+            "CodeMirror не загрузился — похоже, нет интернета. Запрос всё равно можно писать и запускать.");
+        }
+      ).then(function (ed) { if (open === n && document.body.contains(li)) editor = ed; });
+    }
+
+    function pass(n) {
+      Store.set("steps", Steps.key(id, n), Date.now());
+      justPassed = n;
+      open = Steps.firstOpen(id, C);
+      draw();
+      if (open >= 0) {
+        const li = $(".st.open", list);
+        if (li) li.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (onFinish) {
+        onFinish(true);
+      }
+    }
+
+    draw();
+    if (open < 0 && onFinish) onFinish(false);
+  }
+};
+
+/* Страница пошагового урока: шапка, шаги, карточки, «как дальше», ссылки. */
+function renderStepsLesson(app, L, C) {
+  const id = L.id;
+  const hasCards = !!(C.cards && C.cards.length);
+  const hasLinks = !!(C.links && C.links.length);
+
+  const secs = [{ id: "s-steps", t: "Шаги" }];
+  if (hasCards) secs.push({ id: "s-cards", t: "Карточки" });
+  if (C.after) secs.push({ id: "s-after", t: "Как дальше" });
+  if (hasLinks) secs.push({ id: "s-links", t: "Что почитать" });
+
+  const main = el("main", { class: "wrap lesson-wrap" });
+  main.innerHTML =
+    lessonHeadHtml(L, C, "SQL с нуля") +
+    secNavHtml(secs) +
+    '<section class="block has-margin" id="s-steps">' +
+      (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
+      '<div class="block-h"><h2>Шаги</h2></div>' +
+      '<div id="stepsBox"></div>' +
+      '<div class="status st-final" id="stFinal"></div>' +
+    "</section>" +
+    (hasCards ? cardsBlockHtml() : "") +
+    (C.after ? '<section class="block" id="s-after">' +
+      '<div class="block-h"><h2>Как устроены следующие уроки</h2></div>' +
+      '<div class="theory">' + C.after + "</div></section>" : "") +
+    (hasLinks ? linksBlockHtml(C) : "") +
+    '<nav class="lesson-nav" id="lnav"></nav>';
+  app.appendChild(main);
+
+  mountReadbar(secs);
+  if (hasCards) mountDeck(id, C);
+
+  const box = $("#stepsBox"), fin = $("#stFinal");
+
+  function finished(fresh) {
+    if (!Course.isDone(id)) { Store.set("done", id, Date.now()); refreshBar(); }
+    fin.className = "status st-final show ok";
+    fin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
+        (fresh ? penTick(id, "draw") : ICON.ok) + "</span>" +
+      '<span class="s-body"><b>Урок пройден</b>Все шаги решены. Следующий урок — соединение таблиц, ' +
+        "и его задача опирается ровно на то, что вы здесь написали." +
+        '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button></span>';
+    $("#nextBtn").addEventListener("click", function () {
+      const nx = Course.neighbour(id, 1);
+      Router.go(nx ? "#" + nx.id : "#");
+    });
+    updateNav();
+  }
+
+  /* «снять отметку» у пошагового урока начинает его заново с шага 1; код остаётся */
+  const updateNav = mountLessonNav(id, function () {
+    Steps.clear(id, C);
+    fin.className = "status st-final";
+    fin.innerHTML = "";
+    Steps.render(L, C, box, finished);
+  });
+  Steps.render(L, C, box, finished);
+  mountTimer(id);
+}
+
 function renderLesson(app, id) {
   const L = Course.byId(id);
 
@@ -1663,6 +2196,15 @@ function renderLesson(app, id) {
   document.title = L.num + " " + L.title + " — Тетрадь аналитика";
   mountHeader("<b>Модуль " + M.num + ":</b> " + esc(M.title) + ", урок " + L.num);
 
+  /* Пошаговый урок (0.1) устроен иначе: вместо теории и одной задачи —
+     лента шагов со своими редакторами. Движок SQL поднимаем заранее,
+     чтобы первое «Запустить» не ждало загрузки. */
+  if (C.steps) {
+    idle(function () { Engine.sql().catch(function () {}); });
+    renderStepsLesson(app, L, C);
+    return;
+  }
+
   if (C.math) {
     if (!window.MathJax) {
       window.MathJax = {
@@ -1677,20 +2219,10 @@ function renderLesson(app, id) {
 
   const isText = L.kind === "text";
   const kindLabel = isText ? "разбор кейса" : (L.kind === "sql" ? "SQL" : "Python");
-  const plan = C.plan || defaultPlan(C);
   const hasDrills = !!(C.drills && C.drills.length);
   const hasQuiz = !!(C.quiz && C.quiz.length);
   const hasCards = !!(C.cards && C.cards.length);
   const hasLinks = !!(C.links && C.links.length);
-
-  /* ---------- план урока ---------- */
-  let planHtml = '<div class="plan"><div class="plan-h"><span>План занятия</span>' +
-    '<span class="total">' + esc(C.duration || "≈ 2 часа") + "</span></div>" +
-    '<div class="plan-list" style="--plan-cols:' + Math.min(plan.length, 5) + '">';
-  plan.forEach(function (p) {
-    planHtml += '<div class="plan-item"><div class="m">' + esc(p.m) + '</div><div class="w">' + esc(p.w) + "</div></div>";
-  });
-  planHtml += "</div></div>";
 
   /* ---------- якорная навигация ---------- */
   const secs = [{ id: "s-theory", t: "Теория" }];
@@ -1700,23 +2232,6 @@ function renderLesson(app, id) {
   if (hasQuiz) secs.push({ id: "s-quiz", t: "Самопроверка" });
   if (hasLinks) secs.push({ id: "s-links", t: "Что почитать" });
   secs.push({ id: "s-notes", t: "Заметки" });
-
-  let navHtml = '<nav class="secnav" id="secnav"><div class="secnav-in">';
-  secs.forEach(function (s, i) {
-    navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
-  });
-  navHtml += "</div></nav>";
-
-  /* ---------- карточки ---------- */
-  /* Сразу после теории: прочитал — вспомнил без подсказки — применил в задаче. */
-  let cardsHtml = "";
-  if (hasCards) {
-    cardsHtml = '<section class="block" id="s-cards">' +
-      '<div class="block-h"><h2>Карточки</h2></div>' +
-      '<p class="block-intro">Не подглядывая в теорию: сначала ответьте в голове, потом откройте ответ ' +
-      "и честно оцените себя. С завтрашнего дня карточки будут возвращаться в повторение на главной.</p>" +
-      '<div class="deck" id="deck"></div></section>';
-  }
 
   /* ---------- тренажёр ---------- */
   let drillsHtml = "";
@@ -1774,43 +2289,18 @@ function renderLesson(app, id) {
     quizHtml += '</div><div class="quiz-score" id="quizScore">отвечено <b>0</b> из ' + C.quiz.length + "</div></section>";
   }
 
-  /* ---------- ссылки ---------- */
-  let linksHtml = "";
-  if (hasLinks) {
-    linksHtml = '<section class="block" id="s-links">' +
-      '<div class="block-h"><h2>Что почитать дальше</h2></div>' +
-      '<p class="block-intro">Материалы открываются в новой вкладке. Помеченные EN на английском: ' +
-      "читать документацию по-английски аналитику всё равно придётся, лучше начать сейчас.</p>" +
-      '<div class="links">';
-    C.links.forEach(function (l) {
-      linksHtml += '<a class="link-card" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' +
-        '<div class="lk-src"><span>' + esc(l.src) + "</span>" +
-        (l.lang ? '<span class="lang">' + esc(l.lang) + "</span>" : "") + "</div>" +
-        '<div class="lk-t">' + esc(l.t) + "</div>" +
-        '<div class="lk-d">' + esc(l.d) + "</div></a>";
-    });
-    linksHtml += "</div></section>";
-  }
-
   const main = el("main", { class: "wrap lesson-wrap" });
   main.innerHTML =
-    '<header class="lesson-head has-margin">' +
-      (L.say ? '<div class="aside"><p>' + esc(L.say) + "</p></div>" : "") +
-      '<div class="kicker"><span>Урок ' + L.num + ", " + esc(kindLabel) + "</span>" +
-        '<button class="timer" id="timer" type="button" title="Время урока считается само и видно на главной. Клик — пауза">время идёт</button></div>' +
-      "<h1>" + esc(L.title) + "</h1>" +
-      '<p class="sub">' + esc(C.intro || L.desc) + "</p>" +
-      planHtml +
-    "</header>" +
+    lessonHeadHtml(L, C, kindLabel) +
 
-    navHtml +
+    secNavHtml(secs) +
 
     '<section class="block" id="s-theory">' +
       '<div class="block-h"><h2>Теория</h2></div>' +
       '<div class="theory">' + C.theory + "</div>" +
     "</section>" +
 
-    cardsHtml +
+    (hasCards ? cardsBlockHtml() : "") +
 
     '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
@@ -1862,7 +2352,7 @@ function renderLesson(app, id) {
       "</div>" +
     "</section>" +
 
-    drillsHtml + quizHtml + linksHtml +
+    drillsHtml + quizHtml + (hasLinks ? linksBlockHtml(C) : "") +
 
     '<section class="block" id="s-notes">' +
       '<div class="block-h"><h2>Мои заметки</h2></div>' +
@@ -1878,44 +2368,7 @@ function renderLesson(app, id) {
 
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
-  (function () {
-    const bar = el("div", { class: "readbar", id: "readbar" });
-    document.body.appendChild(bar);
-    /* В уроке две полосы прогресса не нужны: здесь важно, сколько
-       осталось до конца страницы, а сколько пройдено курса — сказано
-       словами на кнопке в шапке. */
-    document.body.classList.add("reading");
-    const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
-    let ticking = false;
-
-    function upd() {
-      ticking = false;
-      const h = document.documentElement;
-      const max = h.scrollHeight - h.clientHeight;
-      bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + "%";
-
-      const line = h.scrollTop + h.clientHeight * 0.32;
-      let cur = secs[0].id;
-      for (let i = 0; i < secs.length; i++) {
-        const n = document.getElementById(secs[i].id);
-        if (n && n.offsetTop <= line) cur = secs[i].id;
-      }
-      links.forEach(function (a) { a.classList.toggle("on", a.dataset.sec === cur); });
-    }
-    function onScroll() {
-      if (!ticking) { ticking = true; requestAnimationFrame(upd); }
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    upd();
-    Router.cleanup.push(function () {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      document.body.classList.remove("reading");
-      const b = document.getElementById("readbar");
-      if (b) b.remove();
-    });
-  })();
+  mountReadbar(secs);
 
   /* ---------- самопроверка ---------- */
   if (hasQuiz) {
@@ -1946,44 +2399,7 @@ function renderLesson(app, id) {
   }
 
   /* ---------- колода карточек ---------- */
-  /* Первый прогон ставит карточки в расписание повторения (запись
-     пропускается, если карточка там уже есть). Прогон «ещё раз» только
-     закрепляет и расписание не трогает. */
-  if (hasCards) {
-    const deck = $("#deck");
-    const every = C.cards.map(function (c, k) { return k; });
-    const runDeck = function (list, record) {
-      let i = 0, yes = 0, fresh = 0;
-      const missed = [];
-      const finish = function () {
-        const tail = !record ? "Расписание повторения этот прогон не меняет."
-          : fresh ? "Завтра карточки вернутся в повторение на главной."
-          : "Эти карточки уже в расписании повторения, прогон его не сдвинул.";
-        deck.innerHTML = '<div class="fc-done"><p>Вспомнили ' + yes + " из " + list.length + ". " + tail + "</p>" +
-          '<button class="btn" id="deckAgain" type="button">' +
-          (missed.length ? "Ещё раз невспомненные: " + missed.length : "Прогнать ещё раз") + "</button></div>";
-        $("#deckAgain").addEventListener("click", function () {
-          runDeck(missed.length ? missed : every, false);
-          $(".fc-show", deck).focus({ preventScroll: true });
-        });
-      };
-      const show = function () {
-        if (i >= list.length) { finish(); return; }
-        const n = list[i];
-        Flash.card(deck, C.cards[n], (i + 1) + " из " + list.length, function (ok) {
-          if (record && Review.record(id, "c" + n, ok, true)) fresh++;
-          if (ok) yes++; else missed.push(n);
-          i++;
-          show();
-          /* фокус на следующую кнопку, чтобы колоду можно было пройти с клавиатуры */
-          const b = $(".fc-show", deck) || $("#deckAgain");
-          if (b) b.focus({ preventScroll: true });
-        });
-      };
-      show();
-    };
-    runDeck(every, true);
-  }
+  if (hasCards) mountDeck(id, C);
 
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");
@@ -2017,7 +2433,7 @@ function renderLesson(app, id) {
   }
 
   /* ---------- редактор ---------- */
-  let cm = null, answerEl = null;
+  let editor = null, answerEl = null;
   const savedCode = Store.get("code", id, null);
 
   if (isText) {
@@ -2025,44 +2441,24 @@ function renderLesson(app, id) {
     answerEl.value = savedCode || "";
     answerEl.addEventListener("input", function () { Store.set("code", id, answerEl.value); });
   } else {
-    loadCSS(CDN.cmBase + "codemirror.min.css");
-    loadScript(CDN.cmBase + "codemirror.min.js").then(function () {
-      return loadScript(CDN.cmBase + "mode/" + (L.kind === "sql" ? "sql/sql" : "python/python") + ".min.js");
-    }).then(function () {
-      const ta = $("#editor");
-      if (!ta || !document.body.contains(ta)) return;   /* урок успели сменить */
-      cm = window.CodeMirror.fromTextArea(ta, {
-        mode: L.kind === "sql" ? "text/x-sqlite" : "python",
-        lineNumbers: true, indentUnit: 4, tabSize: 4,
-        lineWrapping: true, viewportMargin: Infinity,
-        extraKeys: {
-          "Cmd-Enter": run, "Ctrl-Enter": run,
-          Tab: function (c) { c.replaceSelection("    "); }
-        }
-      });
-      cm.setValue(savedCode !== null ? savedCode : (C.starter || ""));
-      cm.on("change", function () { Store.set("code", id, cm.getValue()); });
-    }).catch(function () {
-      const ta = $("#editor");
-      if (!ta) return;
-      ta.style.cssText = "width:100%;min-height:320px;font-family:var(--mono);font-size:14.5px;" +
-        "line-height:1.62;border:0;padding:14px 16px;background:transparent;color:var(--ink);resize:vertical";
-      ta.value = savedCode !== null ? savedCode : (C.starter || "");
-      ta.addEventListener("input", function () { Store.set("code", id, ta.value); });
-      setStatus("warn", "Редактор без подсветки синтаксиса",
-        "CodeMirror не загрузился — похоже, нет интернета. Код всё равно можно писать и запускать.");
-    });
+    mountEditor($("#editor"), L.kind, savedCode !== null ? savedCode : (C.starter || ""),
+      function (v) { Store.set("code", id, v); }, run,
+      function () {
+        setStatus("warn", "Редактор без подсветки синтаксиса",
+          "CodeMirror не загрузился — похоже, нет интернета. Код всё равно можно писать и запускать.");
+      }
+    ).then(function (ed) { editor = ed; });
     $("#resetBtn").addEventListener("click", function () {
       if (!confirm("Вернуть начальный шаблон? Ваш код будет потерян.")) return;
       const v = C.starter || "";
-      if (cm) cm.setValue(v); else $("#editor").value = v;
+      if (editor) editor.set(v); else $("#editor").value = v;
       Store.set("code", id, v);
     });
   }
 
   function getCode() {
     if (isText) return answerEl.value;
-    return cm ? cm.getValue() : $("#editor").value;
+    return editor ? editor.get() : $("#editor").value;
   }
 
   /* ---------- заметки ---------- */
@@ -2300,73 +2696,14 @@ function renderLesson(app, id) {
   Router.cleanup.push(function () { document.removeEventListener("keydown", onKey); });
 
   /* ---------- нижняя навигация ---------- */
-  function updateNav() {
-    const prev = Course.neighbour(id, -1), next = Course.neighbour(id, 1);
-    const done = Course.isDone(id);
-    /* Стрелка вынесена из подписи отдельным значком: тогда длинное
-       название урока обрезается многоточием, а стрелка остаётся
-       на месте — иначе на телефоне срезало бы именно её. */
-    const link = function (l, dir) {
-      const arrow = '<span class="nl-a">' + (dir < 0 ? "&larr;" : "&rarr;") + "</span>";
-      const text = '<span class="nl-t">' + esc(l ? l.num + " " + l.title
-        : dir < 0 ? "начало курса" : "дальше — новые уроки") + "</span>";
-      const body = dir < 0 ? arrow + text : text + arrow;
-      return l ? '<a class="navlink" href="#' + l.id + '">' + body + "</a>"
-               : '<span class="navlink dim">' + body + "</span>";
-    };
-    $("#lnav").innerHTML =
-      link(prev, -1) +
-      '<a class="navlink" href="#">Карта курса</a>' +
-      '<span class="spacer"></span>' +
-      '<button class="btn ' + (done ? "" : "check") + '" id="markBtn" type="button"' +
-        (done ? "" : " disabled") + ">" +
-        (done ? "&#10003; Пройден — снять отметку" : "Отметить как пройденный") + "</button>" +
-      link(next, 1);
-
-    const mb = $("#markBtn");
-    if (!done) mb.title = "Станет активной, когда «Проверить» покажет зелёный результат";
-    mb.addEventListener("click", function () {
-      if (Course.isDone(id)) Store.set("done", id, false);
-      updateNav();
-      refreshBar();
-    });
-  }
-  updateNav();
+  const updateNav = mountLessonNav(id, null);
   if (Course.isDone(id)) {
     setStatus("ok", "Урок уже пройден",
       "Можно перерешать: код сохранён, кнопка «Показать решение» открыта.");
   }
 
   /* ---------- таймер ---------- */
-  (function () {
-    let secs = Store.get("time", id, 0);
-    /* время по календарным дням — для серии «дней подряд» на главной */
-    let day = isoDay(), daySecs = Store.get("days", day, 0);
-    let running = true;
-    const btn = $("#timer");
-    const tick = setInterval(function () {
-      if (!running || document.hidden) return;
-      secs += 1;
-      const d = isoDay();
-      if (d !== day) { Store.set("days", day, daySecs); day = d; daySecs = Store.get("days", day, 0); }
-      daySecs += 1;
-      if (secs % 10 === 0) { Store.set("time", id, secs); Store.set("days", day, daySecs); }
-    }, 1000);
-    /* Секундомер на экране давит, поэтому времени не видно: оно считается
-       само и показывается на главной. Пауза — если отошли от открытого урока. */
-    btn.addEventListener("click", function () {
-      running = !running;
-      btn.classList.toggle("paused", !running);
-      btn.textContent = running ? "время идёт" : "на паузе";
-      btn.title = running ? "Время урока считается само и видно на главной. Клик — пауза"
-                          : "Время не считается. Клик — продолжить";
-    });
-    Router.cleanup.push(function () {
-      clearInterval(tick);
-      if (secs > 0) Store.set("time", id, secs);
-      if (daySecs > 0) Store.set("days", day, daySecs);
-    });
-  })();
+  mountTimer(id);
 }
 
 /* ============================================================
