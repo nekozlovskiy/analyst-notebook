@@ -38,7 +38,11 @@ window.COURSE = {
         { id: "m0l1", title: "Первый запрос", kind: "sql", ready: true, steps: true,
           desc: "SELECT, WHERE, ORDER BY, GROUP BY — с нуля до группировки",
           say: "запрос — это вежливая просьба к базе показать нужное",
-          sayTask: "каждый шаг — одна новая мысль и одна проверка" }
+          sayTask: "каждый шаг — одна новая мысль и одна проверка" },
+        { id: "m0l2", title: "Python с нуля", kind: "python", ready: true, steps: true,
+          desc: "print, списки и таблица pandas на знакомых заказах — перед модулем 2",
+          say: "pandas — это тот же SQL, только другими словами",
+          sayTask: "печатайте всё: print — ваши глаза в Python" }
       ]
     },
     {

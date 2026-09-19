@@ -1415,6 +1415,7 @@ function fillFromCsv(db, csv, sql, conv) {
 const Engine = {
   db: null,
   py: null,
+  pyReady: null,
   pyPkgs: {},
 
   sql: async function () {
@@ -1440,12 +1441,21 @@ const Engine = {
   },
 
   python: async function (pkgs) {
-    if (!Engine.py) {
-      await loadScript(CDN.pyBase + "pyodide.js");
-      Engine.py = await window.loadPyodide({ indexURL: CDN.pyBase });
+    /* прогрев урока и «Запустить» могут прийти одновременно —
+       интерпретатор и пакеты грузятся один раз */
+    if (!Engine.pyReady) {
+      Engine.pyReady = loadScript(CDN.pyBase + "pyodide.js").then(function () {
+        return window.loadPyodide({ indexURL: CDN.pyBase });
+      });
+      Engine.pyReady.catch(function () { Engine.pyReady = null; });
     }
+    Engine.py = await Engine.pyReady;
     for (const p of (pkgs || [])) {
-      if (!Engine.pyPkgs[p]) { await Engine.py.loadPackage(p); Engine.pyPkgs[p] = true; }
+      if (!Engine.pyPkgs[p]) {
+        Engine.pyPkgs[p] = Engine.py.loadPackage(p);
+        Engine.pyPkgs[p].catch(function () { delete Engine.pyPkgs[p]; });
+      }
+      await Engine.pyPkgs[p];
     }
     return Engine.py;
   }
@@ -2117,10 +2127,11 @@ const Steps = {
      только что, а не уже при открытии. */
   render: function (L, S, box, onFinish, tag) {
     const id = L.id, total = S.steps.length;
+    const py = L.kind === "python";  /* урок 0.2: шаги на Python, проверка по напечатанному */
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
-    let editor = null, last = null, helped = false;
+    let editor = null, last = null, lastOut = null, helped = false;
 
     box.innerHTML =
       '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
@@ -2158,7 +2169,7 @@ const Steps = {
             '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
           '<div class="st-b">' +
             textOf(s) +
-            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
+            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + (py ? ".py" : ".sql") + "</span></div>" +
               '<textarea class="st-ta"></textarea></div>' +
             '<div class="st-actions">' +
               '<button class="btn primary st-run" type="button">' + ICON.play + "Запустить</button>" +
@@ -2200,7 +2211,7 @@ const Steps = {
     }
 
     function draw() {
-      editor = null; last = null; helped = false;
+      editor = null; last = null; lastOut = null; helped = false;
       let html = "";
       for (let n = 0; n < total; n++) html += itemHtml(n);
       justPassed = -1;
@@ -2229,14 +2240,22 @@ const Steps = {
           plural(last.values.length, "строка", "строки", "строк") + "</div>";
       }
 
-      /* true — запрос выполнен (строк может и не быть), false — пусто или ошибка */
+      /* true — код выполнен (вывода может и не быть), false — пусто или ошибка */
       async function run() {
         if (open !== n || !document.body.contains(li)) return false;
         status(null);
         const code = editor ? editor.get() : q(".st-ta").value;
-        if (!code.trim()) { status("warn", "Пусто", "Сначала напишите запрос."); return false; }
+        if (!code.trim()) {
+          status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос.");
+          return false;
+        }
         const rb = q(".st-run");
         rb.disabled = true;
+        try { return await (py ? runPy(code) : runSql(code)); }
+        finally { if (document.body.contains(rb)) rb.disabled = false; }
+      }
+
+      async function runSql(code) {
         if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
         try {
           const db = await Engine.sql();
@@ -2258,15 +2277,74 @@ const Steps = {
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
-        } finally {
-          if (document.body.contains(rb)) rb.disabled = false;
         }
+      }
+
+      /* Код шага идёт после пролога модуля 2: users, orders и events уже
+         загружены. Каждый запуск — в чистом пространстве имён: иначе
+         переменная из соседнего шага «помогла» бы, а после перезагрузки
+         код сломался бы. Сверяется только напечатанное — stdout. */
+      async function runPy(code) {
+        q(".st-res").innerHTML = '<div class="empty">' + (Engine.py ? "Выполняю…"
+          : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
+        let pyi;
+        try {
+          const got = await Promise.all([Engine.python(S.packages || []), Lazy.data()]);
+          pyi = got[0];
+        } catch (e) {
+          lastOut = null;
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        }
+        if (open !== n || !document.body.contains(li)) return false;
+        const ns = pyi.toPy({});
+        (S.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
+        const out = [];
+        pyi.setStdout({ batched: function (s) { out.push(s); } });
+        pyi.setStderr({ batched: function () {} });
+        try {
+          if (S.prelude) await pyi.runPythonAsync(S.prelude, { globals: ns });
+          await pyi.runPythonAsync(code, { globals: ns });
+        } catch (e) {
+          lastOut = null;
+          /* трассировку показываем с кадра кода ученика — внутренние
+             кадры Pyodide новичку ничего не скажут */
+          const all = String(e.message || e).split("\n");
+          let from = -1;
+          all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
+          const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
+            return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
+          }).slice(-8);
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(lines.join("\n").trim()) + "</span></pre>";
+          status("bad", "Код упал с ошибкой",
+            "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python.");
+          return false;
+        } finally {
+          ns.destroy();
+        }
+        lastOut = out.join("\n");
+        q(".st-res").innerHTML = lastOut.trim()
+          ? "<pre>" + esc(lastOut) + "</pre>"
+          : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+        return true;
       }
 
       /* «Проверить» всегда выполняет то, что сейчас в редакторе */
       async function check() {
         const ran = await run();
         if (!ran || open !== n) return;
+        /* у шага нет окна «ожидаемый результат», поэтому строку эталона
+           показываем в причине — как значения в SQL-шагах */
+        if (py) {
+          const want = S.steps[n].expected.stdout;
+          const rp = Check.python(lastOut, want);
+          if (rp.ok) { pass(n); return; }
+          const a = Check.normLines(lastOut)[rp.line], b = Check.normLines(want)[rp.line];
+          status("bad", "Пока не совпадает", esc(a !== undefined && b !== undefined
+            ? "строка " + (rp.line + 1) + ": получилось «" + a + "», ожидается «" + b + "»" : rp.why));
+          return;
+        }
         const r = Check.sql(last, S.steps[n].expected);
         if (r.ok) { pass(n); return; }
         if (last) showRows(r.row === undefined ? -1 : r.row);
@@ -2295,7 +2373,7 @@ const Steps = {
       q(".st-check").addEventListener("click", check);
       q(".st-help").addEventListener("click", help);
 
-      mountEditor(q(".st-ta"), "sql", codeOf(n),
+      mountEditor(q(".st-ta"), py ? "python" : "sql", codeOf(n),
         function (v) { Store.set("code", codeKey(n), v); }, run,
         function () {
           status("warn", "Редактор без подсветки",
@@ -2335,11 +2413,13 @@ function renderStepsLesson(app, L, C) {
 
   const main = el("main", { class: "wrap lesson-wrap" });
   main.innerHTML =
-    lessonHeadHtml(L, C, "SQL с нуля") +
+    lessonHeadHtml(L, C, L.kind === "python" ? "Python с нуля" : "SQL с нуля") +
     secNavHtml(secs) +
     '<section class="block has-margin" id="s-steps">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
       '<div class="block-h"><h2>Шаги</h2></div>' +
+      (L.kind === "python" ? '<div class="st-warm" id="pyWarm">Готовлю Python в браузере — ' +
+        "15–40 секунд, можно читать первый шаг.</div>" : "") +
       '<div id="stepsBox"></div>' +
       '<div class="status st-final" id="stFinal"></div>' +
     "</section>" +
@@ -2350,6 +2430,23 @@ function renderStepsLesson(app, L, C) {
     (hasLinks ? linksBlockHtml(C) : "") +
     '<nav class="lesson-nav" id="lnav"></nav>';
   app.appendChild(main);
+
+  /* Python качается долго — начинаем сразу, пока человек читает.
+     pandas импортируется несколько секунд — делаем и это заранее,
+     иначе первое «Запустить» надолго замолчит. */
+  if (L.kind === "python") {
+    const warm = $("#pyWarm");
+    Engine.python(C.packages || []).then(function (pyi) {
+      return (C.packages || []).indexOf("pandas") >= 0 ? pyi.runPythonAsync("import pandas") : null;
+    }).then(function () {
+      if (document.body.contains(warm)) warm.remove();
+    }, function () {
+      if (document.body.contains(warm)) warm.textContent =
+        "Python не загрузился — похоже, пропал интернет. «Запустить» попробует ещё раз.";
+    });
+  } else {
+    idle(function () { Engine.sql().catch(function () {}); });
+  }
 
   Terms.mark($("#s-after .theory"));
   mountReadbar(secs);
@@ -2362,8 +2459,7 @@ function renderStepsLesson(app, L, C) {
     fin.className = "status st-final show ok";
     fin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
         (fresh ? penTick(id, "draw") : ICON.ok) + "</span>" +
-      '<span class="s-body"><b>Урок пройден</b>Все шаги решены. Следующий урок — соединение таблиц, ' +
-        "и его задача опирается ровно на то, что вы здесь написали." +
+      '<span class="s-body"><b>Урок пройден</b>' + (C.finish || "Все шаги решены.") +
         '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button></span>';
     $("#nextBtn").addEventListener("click", function () {
       const nx = Course.neighbour(id, 1);
@@ -2434,11 +2530,10 @@ function renderLesson(app, id) {
   document.title = L.num + " " + L.title + " — Тетрадь аналитика";
   mountHeader("<b>Модуль " + M.num + ":</b> " + esc(M.title) + ", урок " + L.num);
 
-  /* Пошаговый урок (0.1) устроен иначе: вместо теории и одной задачи —
-     лента шагов со своими редакторами. Движок SQL поднимаем заранее,
-     чтобы первое «Запустить» не ждало загрузки. */
+  /* Пошаговый урок (0.1, 0.2) устроен иначе: вместо теории и одной
+     задачи — лента шагов со своими редакторами. Движок поднимает сама
+     страница урока, чтобы первое «Запустить» не ждало загрузки. */
   if (C.steps) {
-    idle(function () { Engine.sql().catch(function () {}); });
     renderStepsLesson(app, L, C);
     return;
   }
