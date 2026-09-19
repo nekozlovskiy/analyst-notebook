@@ -1,8 +1,8 @@
 /* ============================================================
-   Модуль 0. Старт — пошаговый урок 0.1.
-   Вместо теории и одной задачи — восемь шагов, у каждого свой
-   редактор и своя проверка. Решения шагов проверены на учебной
-   базе: node инструменты/checksteps.js m0l1
+   Модуль 0. Старт — пошаговые уроки 0.1 (SQL) и 0.2 (Python).
+   Вместо теории и одной задачи — шаги, у каждого свой редактор и
+   своя проверка. Решения шагов проверены:
+   node инструменты/checksteps.js m0l1, … m0l2
    ============================================================ */
 
 window.CONTENT.m0l1 = {
@@ -13,6 +13,7 @@ window.CONTENT.m0l1 = {
     { m: "5 мин", w: "Карточки" },
     { m: "5 мин", w: "Как устроены следующие уроки" }
   ],
+  finish: "Все шаги решены. Следующий урок — соединение таблиц, и его задача опирается ровно на то, что вы здесь написали.",
   schema: window.SH.sqlSchema,
 
   steps: [
@@ -193,5 +194,168 @@ window.CONTENT.m0l1 = {
       d: "Продолжение того же учебника: COUNT, SUM, AVG, GROUP BY и чем WHERE отличается от HAVING — к этому вернётся урок 1.3." },
     { t: "SQLBolt", url: "https://sqlbolt.com/", src: "sqlbolt.com", lang: "EN",
       d: "Интерактивные упражнения по основам SQL прямо в браузере. Хорошо закрепляет шаги этого урока, если хочется ещё практики." }
+  ]
+};
+
+/* ------------------------------------------------------------
+   Урок 0.2 «Python с нуля» — мост от SQL к pandas. В карте стоит
+   в модуле 0, проходят его перед модулем 2 (поле before в
+   lessons.js). Шаги проверяются по напечатанному: expected.stdout.
+   ------------------------------------------------------------ */
+
+window.CONTENT.m0l2 = {
+  intro: "Первые строки на Python — от print до группировки. SQL вы уже знаете, поэтому pandas окажется тем же самым, только другими словами: WHERE, ORDER BY и GROUP BY на тех же заказах.",
+  duration: "≈ 55 минут",
+  plan: [
+    { m: "20 мин", w: "Язык: print, переменные, функции, списки" },
+    { m: "35 мин", w: "Таблица pandas: столбец, отбор строк, сортировка, группировка" }
+  ],
+  finish: "Все шаги решены. Следующий урок — pandas всерьёз: тот же отчёт по каналам, что в SQL, и первый merge.",
+  schema: window.SH.pySchema,
+  data: window.SH.pyData,
+  packages: ["pandas"],
+  prelude: window.SH.pyPrelude,
+
+  steps: [
+    {
+      title: "Python как калькулятор: print",
+      body: `
+<p>Python выполняет код строка за строкой, сверху вниз. В SQL результат показывала база, а здесь на экран попадает только то, что вы попросили напечатать. Для этого есть <code>print(…)</code>: что стоит в скобках, то и появится под редактором.</p>
+<p>Считать можно прямо в скобках: <code>+</code> — сложить, <code>-</code> — вычесть, <code>*</code> — умножить, <code>/</code> — разделить. <code>print(2 * 3)</code> напечатает <code>6</code>.</p>
+<p><strong>Задание.</strong> Оплаченных заказов в магазине 189, возвратов 13 и ещё 13 в обработке. Напечатайте, сколько заказов всего: сумму этих трёх чисел.</p>`,
+      starter: "print(1 + 1)",
+      expected: { stdout: "215" },
+      hint: "Замените <code>1 + 1</code> в скобках на <code>189 + 13 + 13</code> и нажмите «Запустить».",
+      solution: "print(189 + 13 + 13)"
+    },
+    {
+      title: "Переменные и текст",
+      body: `
+<p>Числу можно дать имя и дальше писать имя вместо числа. <code>paid = 189</code> значит «запомни 189 под именем paid». Такое имя называют переменной. Знак <code>=</code> здесь не сравнивает, а кладёт значение в переменную.</p>
+<p>Текст пишут в кавычках: <code>"Оплачено:"</code>. Без кавычек Python решит, что это имя переменной, и не найдёт его. В <code>print</code> можно перечислить несколько вещей через запятую — он напечатает их в одну строку через пробел.</p>
+<p><strong>Задание.</strong> Переменные уже заданы. Напечатайте одной строкой: <code>Оплачено: 189 из 215</code> — текст и числа берите из переменных, а не пишите цифрами.</p>`,
+      starter: "paid = 189\ntotal = 215\nprint(paid)",
+      expected: { stdout: "Оплачено: 189 из 215" },
+      hint: "В скобках <code>print</code> через запятую: текст <code>\"Оплачено:\"</code>, переменная <code>paid</code>, текст <code>\"из\"</code>, переменная <code>total</code>.",
+      solution: "paid = 189\ntotal = 215\nprint(\"Оплачено:\", paid, \"из\", total)"
+    },
+    {
+      title: "Функции и аргументы: round",
+      body: `
+<p>Функция — готовое действие с именем. После имени в скобках пишут, с чем работать. Одну вы уже знаете — <code>print</code>. Ещё одна — <code>round</code>, округление: <code>round(87.906, 1)</code> даёт <code>87.9</code>. Здесь два аргумента через запятую: число и сколько знаков после точки оставить.</p>
+<p>Аргумент можно назвать по имени: <code>round(87.906, ndigits=1)</code> — то же самое. В pandas так пишут почти всё: <code>how="left"</code>, <code>ascending=False</code>. Имя перед <code>=</code> говорит, какую настройку вы задаёте, а после — её значение.</p>
+<p><strong>Задание.</strong> Переменные уже заданы, заготовка печатает долю оплаченных заказов в процентах — с длинным хвостом. Напечатайте её округлённой до одного знака.</p>`,
+      starter: "paid = 189\ntotal = 215\nprint(paid / total * 100)",
+      expected: { stdout: "87.9" },
+      hint: "Оберните выражение в <code>round</code>: <code>print(round(paid / total * 100, 1))</code>. Скобок станет две пары — каждая открытая должна закрыться.",
+      solution: "paid = 189\ntotal = 215\nprint(round(paid / total * 100, 1))"
+    },
+    {
+      title: "Списки",
+      body: `
+<p>Список — несколько значений в квадратных скобках через запятую: <code>[2997.2, 4968.24, 1994.76]</code> — суммы трёх заказов одного клиента. Список кладут в переменную, как число.</p>
+<p>Для списков есть функции: <code>len(r)</code> — сколько в нём элементов, <code>sum(r)</code> — сумма, <code>max(r)</code> — самый большой, <code>min(r)</code> — самый маленький. Функцию можно вложить в функцию: <code>round(sum(r), 2)</code> — сначала сложить, потом округлить.</p>
+<p>Округлять деньги придётся часто. Компьютер хранит дробные числа с крошечной погрешностью, и <code>sum(r)</code> здесь напечатает <code>9960.199999999999</code>, а не <code>9960.2</code>.</p>
+<p><strong>Задание.</strong> Напечатайте одной строкой: сколько заказов в списке, их сумму с двумя знаками и самый дорогой заказ.</p>`,
+      starter: "r = [2997.2, 4968.24, 1994.76]\nprint(r)",
+      expected: { stdout: "3 9960.2 4968.24" },
+      hint: "Три значения через запятую в одном <code>print</code>: <code>len(r)</code>, <code>round(sum(r), 2)</code> и <code>max(r)</code>.",
+      solution: "r = [2997.2, 4968.24, 1994.76]\nprint(len(r), round(sum(r), 2), max(r))"
+    },
+    {
+      title: "Таблица pandas",
+      body: `
+<p>pandas — библиотека для работы с таблицами. Таблица в ней называется DataFrame. Три таблицы учебной базы уже загружены под теми же именами, что в SQL: <code>users</code>, <code>orders</code>, <code>events</code>. Заготовка печатает <code>orders.head(3)</code> — первые три строки, как <code>SELECT * FROM orders LIMIT 3</code>. Числа слева — номера строк, их называют индексом.</p>
+<p><code>len(orders)</code> — сколько в таблице строк. Один столбец берут квадратными скобками с именем в кавычках: <code>orders["revenue"]</code>. У столбца есть свои действия, их пишут через точку: <code>orders["revenue"].sum()</code> — сумма, <code>.mean()</code> — среднее, <code>.max()</code> — максимум. Действие через точку называют методом.</p>`,
+      ba: {
+        before: { columns: ["order_id", "user_id", "revenue", "status"],
+          rows: [[1, 1, 2997.2, "paid"], [2, 1, 4968.24, "paid"], [3, 1, 1994.76, "paid"]] },
+        after: { columns: ["revenue"], rows: [[2997.2], [4968.24], [1994.76]] },
+        hl: ["revenue"],
+        note: "«Было» — <code>orders.head(3)</code>. «Стало» — <code>orders[\"revenue\"]</code>: от таблицы остался один столбец."
+      },
+      task: "<p><strong>Задание.</strong> Напечатайте двумя строками: сколько всего заказов и их общую сумму с двумя знаками.</p>",
+      starter: "print(orders.head(3))",
+      expected: { stdout: "215\n765476.25" },
+      hint: "Два <code>print</code> подряд: <code>print(len(orders))</code> и <code>print(round(orders[\"revenue\"].sum(), 2))</code>.",
+      solution: "print(len(orders))\nprint(round(orders[\"revenue\"].sum(), 2))"
+    },
+    {
+      title: "Отбор строк — это WHERE",
+      body: `
+<p>В SQL строки отбирали так: <code>WHERE status = 'paid'</code>. В pandas — в два приёма. Сначала сравнение: <code>orders["status"] == "paid"</code> проверяет каждую строку и даёт <code>True</code> — «да» или <code>False</code> — «нет». Сравнивают двумя знаками <code>==</code>: один <code>=</code> в Python кладёт значение в переменную.</p>
+<p>Потом сравнение ставят в квадратные скобки таблицы: <code>orders[orders["status"] == "paid"]</code>. Останутся только строки с <code>True</code>. Получится снова таблица — её кладут в переменную и считают дальше, как <code>orders</code>.</p>`,
+      ba: {
+        before: { columns: ["order_id", "status"],
+          rows: [[190, "paid"], [191, "pending"], [192, "refunded"], [193, "paid"], [194, "pending"]] },
+        after: { columns: ["order_id", "status", "status == \"paid\""],
+          rows: [[190, "paid", "True"], [191, "pending", "False"], [192, "refunded", "False"], [193, "paid", "True"], [194, "pending", "False"]] },
+        hl: ["status == \"paid\""], keep: [0, 3],
+        note: "Заказы пользователя 196. В квадратных скобках таблицы останутся строки с <code>True</code> — они выделены в «было»."
+      },
+      task: "<p><strong>Задание.</strong> Положите оплаченные заказы в переменную <code>paid</code> и напечатайте двумя строками: сколько их и их сумму с двумя знаками.</p>",
+      starter: "mask = orders[\"status\"] == \"paid\"\nprint(mask.head())",
+      expected: { stdout: "189\n653428.78" },
+      hint: "<code>paid = orders[orders[\"status\"] == \"paid\"]</code>, потом <code>print(len(paid))</code> и <code>print(round(paid[\"revenue\"].sum(), 2))</code>.",
+      solution: "paid = orders[orders[\"status\"] == \"paid\"]\nprint(len(paid))\nprint(round(paid[\"revenue\"].sum(), 2))"
+    },
+    {
+      title: "Сортировка и первые строки — это ORDER BY и LIMIT",
+      body: `
+<p><code>ORDER BY revenue DESC LIMIT 3</code> в pandas — два метода подряд: <code>orders.sort_values("revenue", ascending=False).head(3)</code>. <code>sort_values</code> сортирует по столбцу, по умолчанию от меньшего к большему, а <code>ascending=False</code> переворачивает порядок. <code>.head(3)</code> оставляет три верхние строки. Методы ставят цепочкой: каждый работает с тем, что вернул предыдущий.</p>
+<p>Нужные столбцы, как в <code>SELECT order_id, revenue</code>, выбирают списком имён: <code>top[["order_id", "revenue"]]</code>. Скобки двойные: внешние — «возьми из таблицы», внутренние — список. Индекс слева сохраняет номера строк из исходной таблицы.</p>`,
+      ba: {
+        before: { columns: ["order_id", "revenue"], rows: [[4, 1361.84], [5, 9071.54], [6, 3071.02], [7, 1796.6]] },
+        after: { columns: ["order_id", "revenue"], rows: [[5, 9071.54], [6, 3071.02], [7, 1796.6]] },
+        hl: [],
+        note: "Заказы пользователя 3: <code>sort_values</code> поставила самый дорогой наверх, <code>head(3)</code> оставила три верхних."
+      },
+      task: "<p><strong>Задание.</strong> Заготовка показывает три самых дешёвых заказа. Напечатайте три самых дорогих — только столбцы <code>order_id</code> и <code>revenue</code>.</p>",
+      starter: "print(orders.sort_values(\"revenue\").head(3))",
+      expected: { stdout: `     order_id   revenue
+195       196  14473.88
+197       198  10177.29
+155       156   9550.87` },
+      hint: "<code>top = orders.sort_values(\"revenue\", ascending=False).head(3)</code>, потом <code>print(top[[\"order_id\", \"revenue\"]])</code>.",
+      solution: "top = orders.sort_values(\"revenue\", ascending=False).head(3)\nprint(top[[\"order_id\", \"revenue\"]])"
+    },
+    {
+      title: "Группировка — это GROUP BY",
+      body: `
+<p><code>GROUP BY status</code> в pandas — <code>groupby("status")</code>. Дальше выбирают столбец и говорят, что с ним сделать: <code>orders.groupby("status")["order_id"].count()</code> — сколько заказов в каждом статусе, как <code>SELECT status, COUNT(order_id) FROM orders GROUP BY status</code>.</p>
+<p>Вместо <code>count</code> бывают <code>sum</code>, <code>mean</code>, <code>max</code>. Результат печатается столбиком: слева статусы, справа итоги, внизу — имя столбца и тип чисел. <code>.round(2)</code> на конце округляет все итоги сразу.</p>`,
+      ba: {
+        before: { columns: ["status", "revenue"],
+          rows: [["paid", 6310.9], ["pending", 7524.11], ["refunded", 5494.59], ["paid", 2290.61], ["pending", 2820.17]] },
+        after: { columns: ["status", "revenue"], rows: [["paid", 8601.51], ["pending", 10344.28], ["refunded", 5494.59]] },
+        hl: ["revenue"],
+        note: "Заказы пользователя 196: строки с одинаковым статусом сложились в одну — как <code>SUM(revenue) … GROUP BY status</code>."
+      },
+      task: "<p><strong>Задание.</strong> Заготовка считает заказы в каждом статусе. Напечатайте вместо этого выручку по статусам — сумму <code>revenue</code>, 2 знака.</p>",
+      starter: "print(orders.groupby(\"status\")[\"order_id\"].count())",
+      expected: { stdout: `status
+paid        653428.78
+pending      56028.51
+refunded     56018.96
+Name: revenue, dtype: float64` },
+      hint: "Поменяйте столбец на <code>\"revenue\"</code>, <code>count()</code> — на <code>sum()</code> и допишите <code>.round(2)</code>: <code>orders.groupby(\"status\")[\"revenue\"].sum().round(2)</code>.",
+      solution: "print(orders.groupby(\"status\")[\"revenue\"].sum().round(2))"
+    },
+    {
+      title: "Сами: самые дорогие оплаченные заказы",
+      body: `
+<p>Новых слов здесь нет — соберите код из шагов 6 и 7. Вопрос: какие пять <strong>оплаченных</strong> заказов самые дорогие?</p>
+<p>Отбор нужен до сортировки. Без него первым окажется заказ 196 на 14 473,88 ₽ — это возврат, выручки от него нет.</p>`,
+      task: "<p><strong>Задание.</strong> Напечатайте пять самых дорогих оплаченных заказов — столбцы <code>order_id</code>, <code>user_id</code> и <code>revenue</code>.</p>",
+      starter: "# 1. Оставить оплаченные заказы\n# 2. Отсортировать по revenue от большего к меньшему, взять пять\n# 3. Напечатать три столбца\n",
+      expected: { stdout: `     order_id  user_id   revenue
+197       198      205  10177.29
+155       156      156   9550.87
+4           5        3   9071.54
+88         89       91   8835.71
+73         74       80   8173.74` },
+      hint: "<code>paid = orders[orders[\"status\"] == \"paid\"]</code>, <code>top = paid.sort_values(\"revenue\", ascending=False).head(5)</code> и <code>print(top[[\"order_id\", \"user_id\", \"revenue\"]])</code>.",
+      solution: "paid = orders[orders[\"status\"] == \"paid\"]\ntop = paid.sort_values(\"revenue\", ascending=False).head(5)\nprint(top[[\"order_id\", \"user_id\", \"revenue\"]])"
+    }
   ]
 };

@@ -7,6 +7,11 @@
    значений в строке равно числу столбцов, hl — среди столбцов «стало»,
    keep — номера существующих строк «было».
 
+   Шаги урока на Python (0.2) — те, у кого expected.stdout: решение
+   прогоняется локальным python3 после пролога урока и сверяется по
+   правилам Check.python — построчно, без пробелов по краям. Локальный
+   pandas новее браузерного, поэтому окончательная проверка — в браузере.
+
      node инструменты/checksteps.js m0l1                     — все шаги
      node инструменты/checksteps.js m0l1 --try 3 "SELECT 1"  — что увидит
                                                                ученик на шаге 3
@@ -15,6 +20,7 @@
 "use strict";
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const { DatabaseSync } = require("node:sqlite");
+const { spawnSync } = require("child_process");
 
 const base = path.resolve(__dirname, "..");
 const ctx = { window: { SH: {}, CONTENT: {}, DATA: {} }, console };
@@ -28,6 +34,39 @@ const id = args[0];
 const L = ctx.window.CONTENT[id];
 const C = L && (L.steps ? L : L.practicum);
 if (!C || !Array.isArray(C.steps)) { console.error(id + ": нет урока с шагами"); process.exit(1); }
+const isPy = C.steps.some(function (s) { return s.expected && s.expected.stdout !== undefined; });
+if (isPy) {
+  const v = spawnSync("python3", ["-c", "import pandas; print(pandas.__version__)"], { encoding: "utf8" });
+  console.log("локально pandas " + (v.stdout || "?").trim() + ", в браузере 2.2 — окончательная проверка там");
+}
+
+/* ---- Python: данные и пролог урока, потом код; как runPy в Steps ---- */
+function runPy(code) {
+  const head = (C.data || []).map(function (k) {
+    return k + " = " + JSON.stringify(ctx.window.DATA[k]);
+  }).join("\n");
+  const r = spawnSync("python3", ["-"], {
+    input: head + "\n" + (C.prelude || "") + "\n" + code,
+    encoding: "utf8", maxBuffer: 1 << 26
+  });
+  if (r.status !== 0) return { err: (r.stderr || "").trim().split("\n").pop() };
+  return { out: r.stdout };
+}
+/* ---- копия Check.normLines и Check.python из app.js ---- */
+function normLines(s) {
+  return String(s).replace(/\r/g, "").split("\n")
+    .map(function (l) { return l.trim().replace(/\s+/g, " "); })
+    .filter(function (l) { return l.length > 0; });
+}
+function checkPy(got, want) {
+  const a = normLines(got), b = normLines(want);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] !== b[i]) {
+      return { ok: false, why: "строка " + (i + 1) + ": получилось " + JSON.stringify(a[i]) + ", ожидается " + JSON.stringify(b[i]) };
+    }
+  }
+  return { ok: true };
+}
 
 const db = new DatabaseSync(":memory:");
 db.exec(ctx.window.DATA.shopSQL);
@@ -90,6 +129,14 @@ function checkBa(n, ba) {
 }
 function report(n, sql) {
   const label = "шаг " + (n + 1);
+  if (isPy) {
+    const p = runPy(sql);
+    if (p.err) { console.log(label + "  ОШИБКА  " + p.err); bad++; return; }
+    const rp = checkPy(p.out, C.steps[n].expected.stdout);
+    console.log(label + "  " + (rp.ok ? "ок" : "РАСХОЖДЕНИЕ  " + rp.why));
+    if (!rp.ok) { bad++; console.log(p.out.replace(/^/gm, "    | ")); }
+    return;
+  }
   let res;
   try { res = query(sql); }
   catch (e) { console.log(label + "  ОШИБКА  " + e.message); bad++; return; }
