@@ -368,14 +368,14 @@ git commit -m "Движок шагов запускает Python; урок 0.2, 
 **Files:**
 - Modify: `README.md`, `sw.js`, `Тетрадь аналитика.html` (сборка)
 
-- [ ] **Step 1:** README: «все 41 урок, включая вводный 0.1» → «все 42
+- [x] **Step 1:** README: «все 41 урок, включая вводный 0.1» → «все 42
   урока, включая вводные 0.1 и 0.2»; в «Как добавить шаги в пошаговый
   урок» — абзац про Python-шаги (`kind: "python"`, `expected.stdout`,
   `packages/data/prelude`, `C.finish`, локальный pandas новее браузерного)
   и про поле `before`.
-- [ ] **Step 2:** `sw.js` VERSION → следующая; `python3 build.py`.
-- [ ] **Step 3:** все проверки: `checksteps` m0l1, m0l2, m1l2–m1l4;
+- [x] **Step 2:** `sw.js` VERSION → следующая; `python3 build.py`.
+- [x] **Step 3:** все проверки: `checksteps` m0l1, m0l2, m1l2–m1l4;
   `checkterms`; `checkcards`. Однофайловая сборка открывает `#m0l2`.
-- [ ] **Step 4:** коммит, пуш ветки `intro-python`, PR в `main`, слияние
+- [x] **Step 4:** коммит, пуш ветки `intro-python`, PR в `main`, слияние
   (если фильтр не пустит — команда для Run), дождаться
   pages-build-deployment, проверить файлы сайта `curl`.

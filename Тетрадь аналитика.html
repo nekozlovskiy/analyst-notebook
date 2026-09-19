@@ -817,6 +817,8 @@ body.reading .hdr-bar { display: none; }
   font-size: 20px; line-height: 1.6; color: var(--ink-2);
   margin-bottom: 26px;
 }
+/* строка перед вводным абзацем: куда идти, если тема совсем новая */
+.theory .lead-note { font-family: var(--sans); font-size: 15px; line-height: 1.5; color: var(--ink-2); }
 
 /* врезки */
 /* Врезка — отчёркнутый кусок той же страницы, а не карточка поверх
@@ -1255,6 +1257,8 @@ button.st-h:hover .st-t { color: var(--ink); }
 .st-rows { margin-top: 7px; font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
 .st-code { margin: 0; }
 .st-final { margin-top: 22px; }
+/* урок на Python: строка, пока интерпретатор качается в браузер */
+.st-warm { margin: 0 0 12px; font-family: var(--sans); font-size: 14px; color: var(--ink-3); }
 
 /* «Было → стало» у шага практикума (1.2): две маленькие таблицы на
    одних и тех же строках. Без рамок — только линейки строк; новый
@@ -1940,6 +1944,8 @@ body.no-scroll { overflow: hidden; }
    Карта курса: модули и уроки.
    ready:true — урок с теорией и практикой, готов к прохождению.
    kind: sql | python | text — тип практики (влияет на редактор).
+   before: "id" — урок проходят прямо перед указанным (0.2 — перед 2.1),
+   хотя в карте он стоит в своём модуле.
    Содержание готовых уроков лежит в content.js.
    ============================================================ */
 
@@ -1967,16 +1973,21 @@ window.COURSE = {
     {
       id: "m0", num: 0,
       title: "Старт",
-      sub: "Первый запрос к базе: от SELECT до группировки за сорок пять минут.",
+      sub: "Первый запрос к базе и первые строки на Python — каждый урок в своё время.",
       say: "даже если SQL видели мельком, начните отсюда",
-      sayDone: "запросы больше не пугают, дальше — соединения",
-      weeks: "≈ 45 минут",
+      sayDone: "первый запрос и первые строки на Python позади",
+      weeks: "≈ 45 минут + час",
       summary: false,
       lessons: [
         { id: "m0l1", title: "Первый запрос", kind: "sql", ready: true, steps: true,
           desc: "SELECT, WHERE, ORDER BY, GROUP BY — с нуля до группировки",
           say: "запрос — это вежливая просьба к базе показать нужное",
-          sayTask: "каждый шаг — одна новая мысль и одна проверка" }
+          sayTask: "каждый шаг — одна новая мысль и одна проверка" },
+        { id: "m0l2", title: "Python с нуля", kind: "python", ready: true, steps: true,
+          before: "m2l1",
+          desc: "print, списки и таблица pandas на знакомых заказах — перед модулем 2",
+          say: "pandas — это тот же SQL, только другими словами",
+          sayTask: "печатайте всё: print — ваши глаза в Python" }
       ]
     },
     {
@@ -2877,10 +2888,10 @@ window.GLOSSARY = (function () {
 </script>
 <script>
 /* ============================================================
-   Модуль 0. Старт — пошаговый урок 0.1.
-   Вместо теории и одной задачи — восемь шагов, у каждого свой
-   редактор и своя проверка. Решения шагов проверены на учебной
-   базе: node инструменты/checksteps.js m0l1
+   Модуль 0. Старт — пошаговые уроки 0.1 (SQL) и 0.2 (Python).
+   Вместо теории и одной задачи — шаги, у каждого свой редактор и
+   своя проверка. Решения шагов проверены:
+   node инструменты/checksteps.js m0l1, … m0l2
    ============================================================ */
 
 window.CONTENT.m0l1 = {
@@ -2891,6 +2902,7 @@ window.CONTENT.m0l1 = {
     { m: "5 мин", w: "Карточки" },
     { m: "5 мин", w: "Как устроены следующие уроки" }
   ],
+  finish: "Все шаги решены. Следующий урок — соединение таблиц, и его задача опирается ровно на то, что вы здесь написали.",
   schema: window.SH.sqlSchema,
 
   steps: [
@@ -3071,6 +3083,169 @@ window.CONTENT.m0l1 = {
       d: "Продолжение того же учебника: COUNT, SUM, AVG, GROUP BY и чем WHERE отличается от HAVING — к этому вернётся урок 1.3." },
     { t: "SQLBolt", url: "https://sqlbolt.com/", src: "sqlbolt.com", lang: "EN",
       d: "Интерактивные упражнения по основам SQL прямо в браузере. Хорошо закрепляет шаги этого урока, если хочется ещё практики." }
+  ]
+};
+
+/* ------------------------------------------------------------
+   Урок 0.2 «Python с нуля» — мост от SQL к pandas. В карте стоит
+   в модуле 0, проходят его перед модулем 2 (поле before в
+   lessons.js). Шаги проверяются по напечатанному: expected.stdout.
+   ------------------------------------------------------------ */
+
+window.CONTENT.m0l2 = {
+  intro: "Первые строки на Python — от print до группировки. SQL вы уже знаете, поэтому pandas окажется тем же самым, только другими словами: WHERE, ORDER BY и GROUP BY на тех же заказах.",
+  duration: "≈ 55 минут",
+  plan: [
+    { m: "20 мин", w: "Язык: print, переменные, функции, списки" },
+    { m: "35 мин", w: "Таблица pandas: столбец, отбор строк, сортировка, группировка" }
+  ],
+  finish: "Все шаги решены. Следующий урок — pandas всерьёз: тот же отчёт по каналам, что в SQL, и первый merge.",
+  schema: window.SH.pySchema,
+  data: window.SH.pyData,
+  packages: ["pandas"],
+  prelude: window.SH.pyPrelude,
+
+  steps: [
+    {
+      title: "Python как калькулятор: print",
+      body: `
+<p>Python выполняет код строка за строкой, сверху вниз. В SQL результат показывала база, а здесь на экран попадает только то, что вы попросили напечатать. Для этого есть <code>print(…)</code>: что стоит в скобках, то и появится под редактором.</p>
+<p>Считать можно прямо в скобках: <code>+</code> — сложить, <code>-</code> — вычесть, <code>*</code> — умножить, <code>/</code> — разделить. <code>print(2 * 3)</code> напечатает <code>6</code>.</p>
+<p><strong>Задание.</strong> Оплаченных заказов в магазине 189, возвратов 13 и ещё 13 в обработке. Напечатайте, сколько заказов всего: сумму этих трёх чисел.</p>`,
+      starter: "print(1 + 1)",
+      expected: { stdout: "215" },
+      hint: "Замените <code>1 + 1</code> в скобках на <code>189 + 13 + 13</code> и нажмите «Запустить».",
+      solution: "print(189 + 13 + 13)"
+    },
+    {
+      title: "Переменные и текст",
+      body: `
+<p>Числу можно дать имя и дальше писать имя вместо числа. <code>paid = 189</code> значит «запомни 189 под именем paid». Такое имя называют переменной. Знак <code>=</code> здесь не сравнивает, а кладёт значение в переменную.</p>
+<p>Текст пишут в кавычках: <code>"Оплачено:"</code>. Без кавычек Python решит, что это имя переменной, и не найдёт его. В <code>print</code> можно перечислить несколько вещей через запятую — он напечатает их в одну строку через пробел.</p>
+<p><strong>Задание.</strong> Переменные уже заданы. Напечатайте одной строкой: <code>Оплачено: 189 из 215</code> — текст и числа берите из переменных, а не пишите цифрами.</p>`,
+      starter: "paid = 189\ntotal = 215\nprint(paid)",
+      expected: { stdout: "Оплачено: 189 из 215" },
+      hint: "В скобках <code>print</code> через запятую: текст <code>\"Оплачено:\"</code>, переменная <code>paid</code>, текст <code>\"из\"</code>, переменная <code>total</code>.",
+      solution: "paid = 189\ntotal = 215\nprint(\"Оплачено:\", paid, \"из\", total)"
+    },
+    {
+      title: "Функции и аргументы: round",
+      body: `
+<p>Функция — готовое действие с именем. После имени в скобках пишут, с чем работать. Одну вы уже знаете — <code>print</code>. Ещё одна — <code>round</code>, округление: <code>round(87.906, 1)</code> даёт <code>87.9</code>. Здесь два аргумента через запятую: число и сколько знаков после точки оставить.</p>
+<p>Аргумент можно назвать по имени: <code>round(87.906, ndigits=1)</code> — то же самое. В pandas так пишут почти всё: <code>how="left"</code>, <code>ascending=False</code>. Имя перед <code>=</code> говорит, какую настройку вы задаёте, а после — её значение.</p>
+<p><strong>Задание.</strong> Переменные уже заданы, заготовка печатает долю оплаченных заказов в процентах — с длинным хвостом. Напечатайте её округлённой до одного знака.</p>`,
+      starter: "paid = 189\ntotal = 215\nprint(paid / total * 100)",
+      expected: { stdout: "87.9" },
+      hint: "Оберните выражение в <code>round</code>: <code>print(round(paid / total * 100, 1))</code>. Скобок станет две пары — каждая открытая должна закрыться.",
+      solution: "paid = 189\ntotal = 215\nprint(round(paid / total * 100, 1))"
+    },
+    {
+      title: "Списки",
+      body: `
+<p>Список — несколько значений в квадратных скобках через запятую: <code>[2997.2, 4968.24, 1994.76]</code> — суммы трёх заказов одного клиента. Список кладут в переменную, как число.</p>
+<p>Для списков есть функции: <code>len(r)</code> — сколько в нём элементов, <code>sum(r)</code> — сумма, <code>max(r)</code> — самый большой, <code>min(r)</code> — самый маленький. Функцию можно вложить в функцию: <code>round(sum(r), 2)</code> — сначала сложить, потом округлить.</p>
+<p>Округлять деньги придётся часто. Компьютер хранит дробные числа с крошечной погрешностью, и <code>sum(r)</code> здесь напечатает <code>9960.199999999999</code>, а не <code>9960.2</code>.</p>
+<p><strong>Задание.</strong> Напечатайте одной строкой: сколько заказов в списке, их сумму с двумя знаками и самый дорогой заказ.</p>`,
+      starter: "r = [2997.2, 4968.24, 1994.76]\nprint(r)",
+      expected: { stdout: "3 9960.2 4968.24" },
+      hint: "Три значения через запятую в одном <code>print</code>: <code>len(r)</code>, <code>round(sum(r), 2)</code> и <code>max(r)</code>.",
+      solution: "r = [2997.2, 4968.24, 1994.76]\nprint(len(r), round(sum(r), 2), max(r))"
+    },
+    {
+      title: "Таблица pandas",
+      body: `
+<p>pandas — библиотека для работы с таблицами. Таблица в ней называется DataFrame. Три таблицы учебной базы уже загружены под теми же именами, что в SQL: <code>users</code>, <code>orders</code>, <code>events</code>. Заготовка печатает <code>orders.head(3)</code> — первые три строки, как <code>SELECT * FROM orders LIMIT 3</code>. Числа слева — номера строк, их называют индексом.</p>
+<p><code>len(orders)</code> — сколько в таблице строк. Один столбец берут квадратными скобками с именем в кавычках: <code>orders["revenue"]</code>. У столбца есть свои действия, их пишут через точку: <code>orders["revenue"].sum()</code> — сумма, <code>.mean()</code> — среднее, <code>.max()</code> — максимум. Действие через точку называют методом.</p>`,
+      ba: {
+        before: { columns: ["order_id", "user_id", "revenue", "status"],
+          rows: [[1, 1, 2997.2, "paid"], [2, 1, 4968.24, "paid"], [3, 1, 1994.76, "paid"]] },
+        after: { columns: ["revenue"], rows: [[2997.2], [4968.24], [1994.76]] },
+        hl: ["revenue"],
+        note: "«Было» — <code>orders.head(3)</code>. «Стало» — <code>orders[\"revenue\"]</code>: от таблицы остался один столбец."
+      },
+      task: "<p><strong>Задание.</strong> Напечатайте двумя строками: сколько всего заказов и их общую сумму с двумя знаками.</p>",
+      starter: "print(orders.head(3))",
+      expected: { stdout: "215\n765476.25" },
+      hint: "Два <code>print</code> подряд: <code>print(len(orders))</code> и <code>print(round(orders[\"revenue\"].sum(), 2))</code>.",
+      solution: "print(len(orders))\nprint(round(orders[\"revenue\"].sum(), 2))"
+    },
+    {
+      title: "Отбор строк — это WHERE",
+      body: `
+<p>В SQL строки отбирали так: <code>WHERE status = 'paid'</code>. В pandas — в два приёма. Сначала сравнение: <code>orders["status"] == "paid"</code> проверяет каждую строку и даёт <code>True</code> — «да» или <code>False</code> — «нет». Сравнивают двумя знаками <code>==</code>: один <code>=</code> в Python кладёт значение в переменную.</p>
+<p>Потом сравнение ставят в квадратные скобки таблицы: <code>orders[orders["status"] == "paid"]</code>. Останутся только строки с <code>True</code>. Получится снова таблица — её кладут в переменную и считают дальше, как <code>orders</code>.</p>`,
+      ba: {
+        before: { columns: ["order_id", "status"],
+          rows: [[190, "paid"], [191, "pending"], [192, "refunded"], [193, "paid"], [194, "pending"]] },
+        after: { columns: ["order_id", "status", "status == \"paid\""],
+          rows: [[190, "paid", "True"], [191, "pending", "False"], [192, "refunded", "False"], [193, "paid", "True"], [194, "pending", "False"]] },
+        hl: ["status == \"paid\""], keep: [0, 3],
+        note: "Заказы пользователя 196. В квадратных скобках таблицы останутся строки с <code>True</code> — они выделены в «было»."
+      },
+      task: "<p><strong>Задание.</strong> Положите оплаченные заказы в переменную <code>paid</code> и напечатайте двумя строками: сколько их и их сумму с двумя знаками.</p>",
+      starter: "mask = orders[\"status\"] == \"paid\"\nprint(mask.head())",
+      expected: { stdout: "189\n653428.78" },
+      hint: "<code>paid = orders[orders[\"status\"] == \"paid\"]</code>, потом <code>print(len(paid))</code> и <code>print(round(paid[\"revenue\"].sum(), 2))</code>.",
+      solution: "paid = orders[orders[\"status\"] == \"paid\"]\nprint(len(paid))\nprint(round(paid[\"revenue\"].sum(), 2))"
+    },
+    {
+      title: "Сортировка и первые строки — это ORDER BY и LIMIT",
+      body: `
+<p><code>ORDER BY revenue DESC LIMIT 3</code> в pandas — два метода подряд: <code>orders.sort_values("revenue", ascending=False).head(3)</code>. <code>sort_values</code> сортирует по столбцу, по умолчанию от меньшего к большему, а <code>ascending=False</code> переворачивает порядок. <code>.head(3)</code> оставляет три верхние строки. Методы ставят цепочкой: каждый работает с тем, что вернул предыдущий.</p>
+<p>Нужные столбцы, как в <code>SELECT order_id, revenue</code>, выбирают списком имён: <code>top[["order_id", "revenue"]]</code>. Скобки двойные: внешние — «возьми из таблицы», внутренние — список. Индекс слева сохраняет номера строк из исходной таблицы.</p>`,
+      ba: {
+        before: { columns: ["order_id", "revenue"], rows: [[4, 1361.84], [5, 9071.54], [6, 3071.02], [7, 1796.6]] },
+        after: { columns: ["order_id", "revenue"], rows: [[5, 9071.54], [6, 3071.02], [7, 1796.6]] },
+        hl: [],
+        note: "Заказы пользователя 3: <code>sort_values</code> поставила самый дорогой наверх, <code>head(3)</code> оставила три верхних."
+      },
+      task: "<p><strong>Задание.</strong> Заготовка показывает три самых дешёвых заказа. Напечатайте три самых дорогих — только столбцы <code>order_id</code> и <code>revenue</code>.</p>",
+      starter: "print(orders.sort_values(\"revenue\").head(3))",
+      expected: { stdout: `     order_id   revenue
+195       196  14473.88
+197       198  10177.29
+155       156   9550.87` },
+      hint: "<code>top = orders.sort_values(\"revenue\", ascending=False).head(3)</code>, потом <code>print(top[[\"order_id\", \"revenue\"]])</code>.",
+      solution: "top = orders.sort_values(\"revenue\", ascending=False).head(3)\nprint(top[[\"order_id\", \"revenue\"]])"
+    },
+    {
+      title: "Группировка — это GROUP BY",
+      body: `
+<p><code>GROUP BY status</code> в pandas — <code>groupby("status")</code>. Дальше выбирают столбец и говорят, что с ним сделать: <code>orders.groupby("status")["order_id"].count()</code> — сколько заказов в каждом статусе, как <code>SELECT status, COUNT(order_id) FROM orders GROUP BY status</code>.</p>
+<p>Вместо <code>count</code> бывают <code>sum</code>, <code>mean</code>, <code>max</code>. Результат печатается столбиком: слева статусы, справа итоги, внизу — имя столбца и тип чисел. <code>.round(2)</code> на конце округляет все итоги сразу.</p>`,
+      ba: {
+        before: { columns: ["status", "revenue"],
+          rows: [["paid", 6310.9], ["pending", 7524.11], ["refunded", 5494.59], ["paid", 2290.61], ["pending", 2820.17]] },
+        after: { columns: ["status", "revenue"], rows: [["paid", 8601.51], ["pending", 10344.28], ["refunded", 5494.59]] },
+        hl: ["revenue"],
+        note: "Заказы пользователя 196: строки с одинаковым статусом сложились в одну — как <code>SUM(revenue) … GROUP BY status</code>."
+      },
+      task: "<p><strong>Задание.</strong> Заготовка считает заказы в каждом статусе. Напечатайте вместо этого выручку по статусам — сумму <code>revenue</code>, 2 знака.</p>",
+      starter: "print(orders.groupby(\"status\")[\"order_id\"].count())",
+      expected: { stdout: `status
+paid        653428.78
+pending      56028.51
+refunded     56018.96
+Name: revenue, dtype: float64` },
+      hint: "Поменяйте столбец на <code>\"revenue\"</code>, <code>count()</code> — на <code>sum()</code> и допишите <code>.round(2)</code>: <code>orders.groupby(\"status\")[\"revenue\"].sum().round(2)</code>.",
+      solution: "print(orders.groupby(\"status\")[\"revenue\"].sum().round(2))"
+    },
+    {
+      title: "Сами: самые дорогие оплаченные заказы",
+      body: `
+<p>Новых слов здесь нет — соберите код из шагов 6 и 7. Вопрос: какие пять <strong>оплаченных</strong> заказов самые дорогие?</p>
+<p>Отбор нужен до сортировки. Без него первым окажется заказ 196 на 14 473,88 ₽ — это возврат, выручки от него нет.</p>`,
+      task: "<p><strong>Задание.</strong> Напечатайте пять самых дорогих оплаченных заказов — столбцы <code>order_id</code>, <code>user_id</code> и <code>revenue</code>.</p>",
+      starter: "# 1. Оставить оплаченные заказы\n# 2. Отсортировать по revenue от большего к меньшему, взять пять\n# 3. Напечатать три столбца\n",
+      expected: { stdout: `     order_id  user_id   revenue
+197       198      205  10177.29
+155       156      156   9550.87
+4           5        3   9071.54
+88         89       91   8835.71
+73         74       80   8173.74` },
+      hint: "<code>paid = orders[orders[\"status\"] == \"paid\"]</code>, <code>top = paid.sort_values(\"revenue\", ascending=False).head(5)</code> и <code>print(top[[\"order_id\", \"user_id\", \"revenue\"]])</code>.",
+      solution: "paid = orders[orders[\"status\"] == \"paid\"]\ntop = paid.sort_values(\"revenue\", ascending=False).head(5)\nprint(top[[\"order_id\", \"user_id\", \"revenue\"]])"
+    }
   ]
 };
 
@@ -6761,6 +6936,7 @@ window.CONTENT.m2l1 = {
   ],
 
   theory: `
+<p class="lead-note">Python впервые? Начните с урока <a href="#m0l2">0.2 «Python с нуля»</a>: около часа, и код ниже станет читаться.</p>
 <p class="lead">SQL достаёт данные, pandas с ними работает. Граница проходит там, где нужно посчитать что-то, чего в SQL нет: скользящее среднее, перцентили, сложную чистку, или просто сохранить промежуточный результат и покрутить его так и эдак.</p>
 
 <h3>Две структуры, и всё</h3>
@@ -61967,7 +62143,16 @@ const Course = (function () {
       flat.push(l);
     });
   });
-  const readyList = flat.filter(function (l) { return l.ready; });
+  /* Порядок прохождения: урок с полем before встаёт прямо перед
+     указанным уроком (0.2 «Python с нуля» — перед 2.1). Карта курса и
+     номера уроков остаются по местам в модулях. */
+  const order = flat.filter(function (l) { return !l.before; });
+  flat.forEach(function (l) {
+    if (!l.before) return;
+    const at = order.findIndex(function (x) { return x.id === l.before; });
+    order.splice(at < 0 ? order.length : at, 0, l);
+  });
+  const readyList = order.filter(function (l) { return l.ready; });
 
   const api = {
     data: C,
@@ -63008,14 +63193,21 @@ function renderSummary(app, id) {
   const work = mins ? ", " + (mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
                                         : hrs + " " + plural(hrs, "час", "часа", "часов")) + " работы" : "";
 
-  const next = closed ? mods[mods.indexOf(m) + 1] : m;
-  const target = next ? (next.lessons.filter(function (l) { return !Course.isDone(l.id); })[0] || next.lessons[0]) : null;
+  /* Что дальше — по порядку прохождения, а не по карте: первый
+     непройденный урок после последнего урока модуля. Если он не из
+     следующего модуля (0.2 после модуля 1, 2.1 после модуля 0), зовём
+     прямо в урок. */
+  const at = Math.max.apply(null, m.lessons.map(function (l) { return Course.ready.indexOf(l); }));
+  const after = closed ? Course.ready.slice(at + 1).filter(function (l) { return !Course.isDone(l.id); })[0] || null : null;
+  const detour = !!after && after.module !== mods[mods.indexOf(m) + 1];
+  const next = closed ? (after ? after.module : null) : m;
+  const target = detour ? after : next ? (next.lessons.filter(function (l) { return !Course.isDone(l.id); })[0] || next.lessons[0]) : null;
   const nextHtml = !target
     ? '<p class="page-empty">Это был последний модуль. Дальше — <a href="#interview">подготовка к собеседованию</a>.</p>'
     : '<a class="resume" href="#' + target.id + '"><span class="resume-txt">' +
-        '<span class="resume-k">' + (closed ? "Дальше — модуль " + next.num : "Осталось в модуле") + "</span>" +
-        '<span class="resume-t">' + (closed ? esc(next.title) : target.num + " " + esc(target.title)) + "</span>" +
-        '<span class="resume-d">' + esc(closed ? next.sub : target.desc) + "</span>" +
+        '<span class="resume-k">' + (detour ? "Дальше по порядку" : closed ? "Дальше — модуль " + next.num : "Осталось в модуле") + "</span>" +
+        '<span class="resume-t">' + (closed && !detour ? esc(next.title) : target.num + " " + esc(target.title)) + "</span>" +
+        '<span class="resume-d">' + esc(closed && !detour ? next.sub : target.desc) + "</span>" +
       '</span><span class="resume-go">' + (closed ? "Начать" : "Продолжить") + "</span></a>";
 
   const main = el("main", { class: "wrap lesson-wrap page" });
@@ -63227,6 +63419,7 @@ function fillFromCsv(db, csv, sql, conv) {
 const Engine = {
   db: null,
   py: null,
+  pyReady: null,
   pyPkgs: {},
 
   sql: async function () {
@@ -63252,12 +63445,21 @@ const Engine = {
   },
 
   python: async function (pkgs) {
-    if (!Engine.py) {
-      await loadScript(CDN.pyBase + "pyodide.js");
-      Engine.py = await window.loadPyodide({ indexURL: CDN.pyBase });
+    /* прогрев урока и «Запустить» могут прийти одновременно —
+       интерпретатор и пакеты грузятся один раз */
+    if (!Engine.pyReady) {
+      Engine.pyReady = loadScript(CDN.pyBase + "pyodide.js").then(function () {
+        return window.loadPyodide({ indexURL: CDN.pyBase });
+      });
+      Engine.pyReady.catch(function () { Engine.pyReady = null; });
     }
+    Engine.py = await Engine.pyReady;
     for (const p of (pkgs || [])) {
-      if (!Engine.pyPkgs[p]) { await Engine.py.loadPackage(p); Engine.pyPkgs[p] = true; }
+      if (!Engine.pyPkgs[p]) {
+        Engine.pyPkgs[p] = Engine.py.loadPackage(p);
+        Engine.pyPkgs[p].catch(function () { delete Engine.pyPkgs[p]; });
+      }
+      await Engine.pyPkgs[p];
     }
     return Engine.py;
   }
@@ -63929,10 +64131,11 @@ const Steps = {
      только что, а не уже при открытии. */
   render: function (L, S, box, onFinish, tag) {
     const id = L.id, total = S.steps.length;
+    const py = L.kind === "python";  /* урок 0.2: шаги на Python, проверка по напечатанному */
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
-    let editor = null, last = null, helped = false;
+    let editor = null, last = null, lastOut = null, helped = false;
 
     box.innerHTML =
       '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
@@ -63970,7 +64173,7 @@ const Steps = {
             '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
           '<div class="st-b">' +
             textOf(s) +
-            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
+            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + (py ? ".py" : ".sql") + "</span></div>" +
               '<textarea class="st-ta"></textarea></div>' +
             '<div class="st-actions">' +
               '<button class="btn primary st-run" type="button">' + ICON.play + "Запустить</button>" +
@@ -64012,7 +64215,7 @@ const Steps = {
     }
 
     function draw() {
-      editor = null; last = null; helped = false;
+      editor = null; last = null; lastOut = null; helped = false;
       let html = "";
       for (let n = 0; n < total; n++) html += itemHtml(n);
       justPassed = -1;
@@ -64041,14 +64244,22 @@ const Steps = {
           plural(last.values.length, "строка", "строки", "строк") + "</div>";
       }
 
-      /* true — запрос выполнен (строк может и не быть), false — пусто или ошибка */
+      /* true — код выполнен (вывода может и не быть), false — пусто или ошибка */
       async function run() {
         if (open !== n || !document.body.contains(li)) return false;
         status(null);
         const code = editor ? editor.get() : q(".st-ta").value;
-        if (!code.trim()) { status("warn", "Пусто", "Сначала напишите запрос."); return false; }
+        if (!code.trim()) {
+          status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос.");
+          return false;
+        }
         const rb = q(".st-run");
         rb.disabled = true;
+        try { return await (py ? runPy(code) : runSql(code)); }
+        finally { if (document.body.contains(rb)) rb.disabled = false; }
+      }
+
+      async function runSql(code) {
         if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
         try {
           const db = await Engine.sql();
@@ -64070,15 +64281,74 @@ const Steps = {
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
-        } finally {
-          if (document.body.contains(rb)) rb.disabled = false;
         }
+      }
+
+      /* Код шага идёт после пролога модуля 2: users, orders и events уже
+         загружены. Каждый запуск — в чистом пространстве имён: иначе
+         переменная из соседнего шага «помогла» бы, а после перезагрузки
+         код сломался бы. Сверяется только напечатанное — stdout. */
+      async function runPy(code) {
+        q(".st-res").innerHTML = '<div class="empty">' + (Engine.py ? "Выполняю…"
+          : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
+        let pyi;
+        try {
+          const got = await Promise.all([Engine.python(S.packages || []), Lazy.data()]);
+          pyi = got[0];
+        } catch (e) {
+          lastOut = null;
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        }
+        if (open !== n || !document.body.contains(li)) return false;
+        const ns = pyi.toPy({});
+        (S.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
+        const out = [];
+        pyi.setStdout({ batched: function (s) { out.push(s); } });
+        pyi.setStderr({ batched: function () {} });
+        try {
+          if (S.prelude) await pyi.runPythonAsync(S.prelude, { globals: ns });
+          await pyi.runPythonAsync(code, { globals: ns });
+        } catch (e) {
+          lastOut = null;
+          /* трассировку показываем с кадра кода ученика — внутренние
+             кадры Pyodide новичку ничего не скажут */
+          const all = String(e.message || e).split("\n");
+          let from = -1;
+          all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
+          const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
+            return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
+          }).slice(-8);
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(lines.join("\n").trim()) + "</span></pre>";
+          status("bad", "Код упал с ошибкой",
+            "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python.");
+          return false;
+        } finally {
+          ns.destroy();
+        }
+        lastOut = out.join("\n");
+        q(".st-res").innerHTML = lastOut.trim()
+          ? "<pre>" + esc(lastOut) + "</pre>"
+          : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+        return true;
       }
 
       /* «Проверить» всегда выполняет то, что сейчас в редакторе */
       async function check() {
         const ran = await run();
         if (!ran || open !== n) return;
+        /* у шага нет окна «ожидаемый результат», поэтому строку эталона
+           показываем в причине — как значения в SQL-шагах */
+        if (py) {
+          const want = S.steps[n].expected.stdout;
+          const rp = Check.python(lastOut, want);
+          if (rp.ok) { pass(n); return; }
+          const a = Check.normLines(lastOut)[rp.line], b = Check.normLines(want)[rp.line];
+          status("bad", "Пока не совпадает", esc(a !== undefined && b !== undefined
+            ? "строка " + (rp.line + 1) + ": получилось «" + a + "», ожидается «" + b + "»" : rp.why));
+          return;
+        }
         const r = Check.sql(last, S.steps[n].expected);
         if (r.ok) { pass(n); return; }
         if (last) showRows(r.row === undefined ? -1 : r.row);
@@ -64107,7 +64377,7 @@ const Steps = {
       q(".st-check").addEventListener("click", check);
       q(".st-help").addEventListener("click", help);
 
-      mountEditor(q(".st-ta"), "sql", codeOf(n),
+      mountEditor(q(".st-ta"), py ? "python" : "sql", codeOf(n),
         function (v) { Store.set("code", codeKey(n), v); }, run,
         function () {
           status("warn", "Редактор без подсветки",
@@ -64147,11 +64417,13 @@ function renderStepsLesson(app, L, C) {
 
   const main = el("main", { class: "wrap lesson-wrap" });
   main.innerHTML =
-    lessonHeadHtml(L, C, "SQL с нуля") +
+    lessonHeadHtml(L, C, L.kind === "python" ? "Python с нуля" : "SQL с нуля") +
     secNavHtml(secs) +
     '<section class="block has-margin" id="s-steps">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
       '<div class="block-h"><h2>Шаги</h2></div>' +
+      (L.kind === "python" ? '<div class="st-warm" id="pyWarm">Готовлю Python в браузере — ' +
+        "15–40 секунд, можно читать первый шаг.</div>" : "") +
       '<div id="stepsBox"></div>' +
       '<div class="status st-final" id="stFinal"></div>' +
     "</section>" +
@@ -64162,6 +64434,23 @@ function renderStepsLesson(app, L, C) {
     (hasLinks ? linksBlockHtml(C) : "") +
     '<nav class="lesson-nav" id="lnav"></nav>';
   app.appendChild(main);
+
+  /* Python качается долго — начинаем сразу, пока человек читает.
+     pandas импортируется несколько секунд — делаем и это заранее,
+     иначе первое «Запустить» надолго замолчит. */
+  if (L.kind === "python") {
+    const warm = $("#pyWarm");
+    Engine.python(C.packages || []).then(function (pyi) {
+      return (C.packages || []).indexOf("pandas") >= 0 ? pyi.runPythonAsync("import pandas") : null;
+    }).then(function () {
+      if (document.body.contains(warm)) warm.remove();
+    }, function () {
+      if (document.body.contains(warm)) warm.textContent =
+        "Python не загрузился — похоже, пропал интернет. «Запустить» попробует ещё раз.";
+    });
+  } else {
+    idle(function () { Engine.sql().catch(function () {}); });
+  }
 
   Terms.mark($("#s-after .theory"));
   mountReadbar(secs);
@@ -64174,8 +64463,7 @@ function renderStepsLesson(app, L, C) {
     fin.className = "status st-final show ok";
     fin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
         (fresh ? penTick(id, "draw") : ICON.ok) + "</span>" +
-      '<span class="s-body"><b>Урок пройден</b>Все шаги решены. Следующий урок — соединение таблиц, ' +
-        "и его задача опирается ровно на то, что вы здесь написали." +
+      '<span class="s-body"><b>Урок пройден</b>' + (C.finish || "Все шаги решены.") +
         '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button></span>';
     $("#nextBtn").addEventListener("click", function () {
       const nx = Course.neighbour(id, 1);
@@ -64246,11 +64534,10 @@ function renderLesson(app, id) {
   document.title = L.num + " " + L.title + " — Тетрадь аналитика";
   mountHeader("<b>Модуль " + M.num + ":</b> " + esc(M.title) + ", урок " + L.num);
 
-  /* Пошаговый урок (0.1) устроен иначе: вместо теории и одной задачи —
-     лента шагов со своими редакторами. Движок SQL поднимаем заранее,
-     чтобы первое «Запустить» не ждало загрузки. */
+  /* Пошаговый урок (0.1, 0.2) устроен иначе: вместо теории и одной
+     задачи — лента шагов со своими редакторами. Движок поднимает сама
+     страница урока, чтобы первое «Запустить» не ждало загрузки. */
   if (C.steps) {
-    idle(function () { Engine.sql().catch(function () {}); });
     renderStepsLesson(app, L, C);
     return;
   }
