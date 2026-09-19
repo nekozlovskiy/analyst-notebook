@@ -19,6 +19,11 @@
      cards      — [{q, a}] — карточки «вопрос → ответ», 6–12 на урок;
                   проверка: node инструменты/checkcards.js --require <урок>
      links      — [{t, url, src, d, lang}] — что почитать
+     steps      — пошаговый урок (0.1): [{title, body, starter, expected,
+                  hint, solution}] вместо theory, ticket, starter, expected,
+                  hints, drills и quiz; шаги дописывают только в конец;
+                  проверка: node инструменты/checksteps.js <урок>
+     after      — HTML после шагов: как устроены следующие уроки
    ============================================================ */
 
 window.CONTENT = {};
