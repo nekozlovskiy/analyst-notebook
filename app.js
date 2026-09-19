@@ -540,7 +540,9 @@ function mountHeader(crumbHtml) {
      туда ведут строка на главной и поиск */
   const here = location.hash.replace(/^#/, "");
   function navLink(to, t) {
-    return '<a href="#' + to + '"' + (here === to ? ' aria-current="page"' : "") + ">" + t + "</a>";
+    /* #glossary/left-join — тоже страница словаря */
+    const on = here === to || here.indexOf(to + "/") === 0;
+    return '<a href="#' + to + '"' + (on ? ' aria-current="page"' : "") + ">" + t + "</a>";
   }
 
   const hdr = el("header", { class: "hdr" });
@@ -550,7 +552,7 @@ function mountHeader(crumbHtml) {
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
       '<nav class="hdr-nav" aria-label="Разделы">' + navLink("interview", "К собеседованию") +
-        navLink("my-notes", "Конспект") + "</nav>" +
+        navLink("my-notes", "Конспект") + navLink("glossary", "Словарь") + "</nav>" +
       '<button class="iconbtn" id="findBtn" type="button" aria-label="Найти урок" ' +
         'title="Найти урок — косая черта или Cmd K">' + ICON.find +
         '<span class="bl">Найти</span><span class="k">/</span></button>' +
@@ -980,6 +982,7 @@ const Pages = {
   find: function (id) {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
+    if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
     if (/^summary-m\d+$/.test(id)) return renderSummary;
     return null;
   }
@@ -1116,6 +1119,63 @@ function renderMyNotes(app) {
 }
 
 /* ---------- итог модуля ---------- */
+/* Словарь: все термины курса на одной странице, в порядке курса.
+   В уроке слово объясняет себя по тапу; сюда приходят, когда хотят
+   найти слово самим, — из шапки, из поиска или по ссылке «Весь
+   словарь» под объяснением. Адрес #glossary/<id> открывает страницу
+   на нужном термине. */
+function renderGlossary(app, id) {
+  document.title = "Словарь — Тетрадь аналитика";
+  mountHeader("<b>Словарь</b>");
+  const G = window.GLOSSARY;
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  if (!G) {
+    main.innerHTML = pageHead("Словарь",
+      "Словарь не загрузился — похоже, пропал интернет. Обновите страницу, когда связь вернётся.");
+    app.appendChild(main);
+    return;
+  }
+  /* объяснение в словаре пишется со строчной — оно продолжает «Термин — …»;
+     на странице оно стоит отдельным абзацем */
+  function upper(s) { return /^[а-яёa-z]/.test(s) ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  const n = G.terms.length;
+  let h = pageHead("Словарь",
+    "Все " + n + " " + plural(n, "термин", "термина", "терминов") + " курса простыми словами. " +
+    "В уроках они подчёркнуты пунктиром: нажмите на слово, и объяснение раскроется прямо в тексте.",
+    "непонятное слово — не повод бросать абзац");
+  [["sql", "Конструкции SQL"], ["ch", "ClickHouse"], ["db", "Базы данных"], ["word", "Слова аналитика"]]
+    .forEach(function (g) {
+      const list = G.terms.filter(function (t) { return t.kind === g[0]; });
+      if (!list.length) return;
+      h += '<section class="block"><div class="block-h"><h2>' + g[1] + "</h2></div>" +
+        list.map(function (t) {
+          const L = t.lesson ? Course.byId(t.lesson) : null;
+          return '<article class="gl-item" id="g-' + t.id + '">' +
+            '<h3 class="gl-t">' + (t.code ? "<code>" + t.t + "</code>" : t.t) + "</h3>" +
+            '<p class="gl-p">' + upper(t.plain) + "</p>" +
+            (t.when ? '<p class="tx-when"><b>Когда нужно:</b> ' + t.when + "</p>" : "") +
+            (t.ex ? '<p class="tx-ex">Например: ' + t.ex + "</p>" : "") +
+            (L ? '<a class="tx-more" href="#' + L.id + '">Подробно — урок ' + L.num + " " + esc(L.title) + "</a>" : "") +
+            "</article>";
+        }).join("") + "</section>";
+    });
+  main.innerHTML = h;
+  app.appendChild(main);
+  const want = id.split("/")[1];
+  const target = want && document.getElementById("g-" + want);
+  if (target) {
+    target.classList.add("on");
+    /* при первом заходе шрифты приходят позже и удлиняют текст выше —
+       прокрутка до них уезжала на полэкрана мимо термина. Сразу, без
+       плавности из styles.css: иначе страница заметно едет через весь
+       словарь. */
+    const fonts = document.fonts ? document.fonts.ready : Promise.resolve();
+    fonts.then(function () {
+      if (target.isConnected) target.scrollIntoView({ block: "center", behavior: "instant" });
+    });
+  }
+}
+
 function renderSummary(app, id) {
   const mods = Course.data.modules;
   const m = mods.filter(function (x) { return "summary-" + x.id === id; })[0];
@@ -1257,7 +1317,8 @@ function renderHome(app) {
   /* о страницах для собеседования — одна строка, а не ещё один блок карточек */
   main.insertAdjacentHTML("beforeend",
     '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
-    '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>.</p>');
+    '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
+    'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
   /* ---------- программа: оглавление тетради ---------- */
   /* Не карточки, а оглавление: номер, название, отточие, вид практики
@@ -1708,7 +1769,10 @@ const Terms = {
     return (t.code ? "<code>" + t.t + "</code>" : "<b>" + t.t + "</b>") + " — " + t.plain +
       (t.when ? '<div class="tx-when"><b>Когда нужно:</b> ' + t.when + "</div>" : "") +
       (t.ex ? '<div class="tx-ex">Например: ' + t.ex + "</div>" : "") +
-      (L ? '<a class="tx-more" href="#' + L.id + '">Подробно — урок ' + L.num + "</a>" : "");
+      '<div class="tx-links">' +
+        (L ? '<a class="tx-more" href="#' + L.id + '">Подробно — урок ' + L.num + "</a>" : "") +
+        '<a class="tx-more" href="#glossary/' + t.id + '">Весь словарь</a>' +
+      "</div>";
   },
 
   /* Объяснение встаёт под абзацем: в пункте списка — в конец пункта,
@@ -2895,6 +2959,16 @@ const Find = {
     out.push({ href: "#my-notes", title: "Мой конспект", where: "Раздел",
                note: "ваши заметки из всех уроков",
                hay: "заметки конспект записи" });
+    out.push({ href: "#glossary", title: "Словарь", where: "Раздел",
+               note: "все термины курса простыми словами",
+               hay: "словарь термины глоссарий понятия слова что значит" });
+    /* термины словаря — чтобы найти слово, не вспоминая урок */
+    (window.GLOSSARY ? window.GLOSSARY.terms : []).forEach(function (t) {
+      const plain = t.plain.replace(/<[^>]+>/g, " ");
+      out.push({ href: "#glossary/" + t.id, title: t.t.replace(/<[^>]+>/g, ""), where: "Словарь",
+                 note: plain, gloss: true,
+                 hay: t.forms.join(" ").replace(/[`$()|?]/g, " ") + " " + plain });
+    });
     out.push({ href: "#", title: "Карта курса", where: "Раздел",
                note: "оглавление и как идут дела",
                hay: "оглавление главная программа календарь прогресс" });
@@ -2917,7 +2991,7 @@ const Find = {
       const r = Stats.resume();
       const first = r ? all.filter(function (x) { return x.key === r.lesson.id; }) : [];
       return first.concat(all.filter(function (x) {
-        return first.indexOf(x) < 0 && (!x.key || (!x.done && !x.soon));
+        return first.indexOf(x) < 0 && !x.gloss && (!x.key || (!x.done && !x.soon));
       })).slice(0, 7);
     }
     const words = Find.norm(q).split(/\s+/).filter(Boolean);
