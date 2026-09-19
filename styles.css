@@ -1234,6 +1234,40 @@ button.st-h:hover .st-t { color: var(--ink); }
 }
 
 /* ============================================================
+   11б. Термины из словаря
+   Пунктир ручкой — наставник отметил слово, которое стоит
+   объяснить. Объяснение раскрывается строкой под абзацем, с линией
+   ручки слева, как подсказка шага, — без рамки и тени.
+   ============================================================ */
+
+.term {
+  display: inline; margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: none; font: inherit; color: inherit; text-align: inherit;
+  letter-spacing: inherit; cursor: pointer;
+  text-decoration: underline dotted var(--pen);
+  text-decoration-thickness: 1.5px; text-underline-offset: 4px;
+}
+.term:hover, .term[aria-expanded="true"] { color: var(--pen); }
+.term:focus-visible { outline: 2px solid var(--pen); outline-offset: 2px; border-radius: 2px; }
+.term-code { text-underline-offset: 6px; }
+.term-code code { color: inherit; }
+.term-x {
+  margin: 10px 0 18px; padding: 2px 0 2px 14px; max-width: var(--measure);
+  border-left: 2px solid var(--pen-line); border-radius: 0;
+  font-family: var(--sans); font-size: 15px; line-height: 1.6;
+  font-style: normal; font-weight: 400; color: var(--ink-2); text-align: left;
+  animation: ink-in .26s var(--ease) both;
+}
+li > .term-x { margin: 8px 0 6px; }
+.term-x b { color: var(--ink); font-weight: 600; }
+.term-x code {
+  font-family: var(--mono); font-size: .86em; background: var(--paper-2);
+  padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft); color: var(--ink);
+}
+.tx-when, .tx-ex { margin-top: 6px; }
+.tx-more { display: inline-block; margin-top: 6px; font-size: 13.5px; color: var(--pen); }
+
+/* ============================================================
    12. Урок — самопроверка
    ============================================================ */
 
@@ -1798,4 +1832,6 @@ body.no-scroll { overflow: hidden; }
   .page-actions, .prep-mark, .page .aside { display: none !important; }
   .nt-item { page-break-inside: avoid; }
   .nt-h a, .prep-from { color: #000000; }
+  .term { text-decoration: none; }
+  .term-x { display: none !important; }
 }

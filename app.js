@@ -755,11 +755,13 @@ const Flash = {
       "</div>";
     const root = $(".fc", box), act = $(".fc-act", root), ans = $(".fc-a", root);
     let rated = false;
+    Terms.mark($(".fc-q", root));
 
     function show() {
       if (root.classList.contains("open")) return;
       root.classList.add("open");
       ans.innerHTML = card.a;
+      Terms.mark(ans);
       act.innerHTML =
         '<button class="btn fc-no" type="button">Не вспомнил</button>' +
         '<button class="btn primary fc-yes" type="button">Вспомнил</button>';
@@ -1613,6 +1615,138 @@ function defaultPlan(C) {
 }
 
 /* ============================================================
+   Термины из словаря
+
+   Ученик с нуля спотыкается о слова, которые автор считает
+   очевидными. Словарь (glossary.js) знает, как каждый термин
+   выглядит в тексте; Terms.mark(root) подчёркивает в root первое
+   упоминание каждого термина, а тап по подчёркнутому раскрывает
+   объяснение строкой под абзацем. Корень — один раздел: теория,
+   тикет, одна задача тренажёра, один вопрос, одна карточка, один
+   шаг. Если словарь не загрузился, текст остаётся как был.
+   ============================================================ */
+
+const Terms = {
+  seq: 0,
+  /* Куда термины не ставим: заголовки, кнопки и ссылки (кнопку
+     в кнопку не вложить), код блоком, формулы, реплики на полях,
+     варианты ответа (объяснение подсказало бы ответ) и сами
+     объяснения. */
+  SKIP_TAG: /^(PRE|A|BUTTON|H1|H2|H3|H4|H5|H6|SUMMARY|TEXTAREA|SCRIPT|STYLE|SVG|MJX-CONTAINER|LABEL|SELECT|INPUT)$/,
+  SKIP_CLASS: ["aside", "term-x", "q-opt", "CodeMirror", "kicker", "hs-n"],
+
+  mark: function (root) {
+    const G = window.GLOSSARY;
+    if (!G || !root) return;
+    const mod = /^m\d+/.test(Router.current || "") ? Router.current.match(/^m\d+/)[0] : "";
+    const used = {};
+
+    function skipped(n) {
+      if (Terms.SKIP_TAG.test(n.tagName)) return true;
+      for (let i = 0; i < Terms.SKIP_CLASS.length; i++) {
+        if (n.classList.contains(Terms.SKIP_CLASS[i])) return true;
+      }
+      return false;
+    }
+    function text(node) {
+      const s = node.nodeValue;
+      /* формулы MathJax ещё не отрисованы: такой кусок текста не трогаем */
+      if (!s || s.length < 2 || /\\\(|\\\[|\$\$/.test(s)) return;
+      const hits = G.find(s, { code: false, mod: mod }).filter(function (h) {
+        if (used[h.id]) return false;
+        used[h.id] = true;
+        return true;
+      });
+      if (!hits.length) return;
+      const frag = document.createDocumentFragment();
+      let at = 0;
+      hits.forEach(function (h) {
+        frag.appendChild(document.createTextNode(s.slice(at, h.start)));
+        frag.appendChild(Terms.button(h.id, document.createTextNode(s.slice(h.start, h.end))));
+        at = h.end;
+      });
+      frag.appendChild(document.createTextNode(s.slice(at)));
+      node.parentNode.replaceChild(frag, node);
+    }
+    /* <code> внутри текста подчёркивается целиком, по первому новому термину в нём */
+    function code(node) {
+      const hits = G.find(node.textContent, { code: true, mod: mod });
+      for (let i = 0; i < hits.length; i++) {
+        if (used[hits[i].id]) continue;
+        used[hits[i].id] = true;
+        const b = Terms.button(hits[i].id, null);
+        b.classList.add("term-code");
+        node.parentNode.replaceChild(b, node);
+        b.appendChild(node);
+        return;
+      }
+    }
+    function walk(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (ch) {
+        if (ch.nodeType === 3) text(ch);
+        else if (ch.nodeType === 1 && !skipped(ch)) {
+          if (ch.tagName === "CODE") code(ch); else walk(ch);
+        }
+      });
+    }
+    walk(root);
+  },
+
+  button: function (id, child) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "term";
+    b.dataset.term = id;
+    b.setAttribute("aria-expanded", "false");
+    if (child) b.appendChild(child);
+    return b;
+  },
+
+  html: function (t) {
+    const L = t.lesson && t.lesson !== Router.current ? Course.byId(t.lesson) : null;
+    return (t.code ? "<code>" + t.t + "</code>" : "<b>" + t.t + "</b>") + " — " + t.plain +
+      (t.when ? '<div class="tx-when"><b>Когда нужно:</b> ' + t.when + "</div>" : "") +
+      (t.ex ? '<div class="tx-ex">Например: ' + t.ex + "</div>" : "") +
+      (L ? '<a class="tx-more" href="#' + L.id + '">Подробно — урок ' + L.num + "</a>" : "");
+  },
+
+  /* Объяснение встаёт под абзацем: в пункте списка — в конец пункта,
+     в ячейке — под таблицей, в вопросе — под формулировкой. */
+  toggle: function (b) {
+    const was = b.getAttribute("aria-controls");
+    const old = was && document.getElementById(was);
+    if (old) {
+      old.remove();
+      b.removeAttribute("aria-controls");
+      b.setAttribute("aria-expanded", "false");
+      return;
+    }
+    const t = window.GLOSSARY && window.GLOSSARY.byId[b.dataset.term];
+    if (!t) return;
+    const id = "tx-" + (++Terms.seq);
+    const box = el("div", { class: "term-x", id: id, role: "note" }, Terms.html(t));
+    const cell = b.closest("td, th");
+    const li = !cell && b.closest("li");
+    if (li) li.appendChild(box);
+    else {
+      const host = (cell && cell.closest("table")) ||
+        b.closest("p, blockquote, dd, .q-t, .q-why, .fc-q, .fc-a, .st-hint, .ticket-h") ||
+        b.parentElement;
+      host.insertAdjacentElement("afterend", box);
+    }
+    b.setAttribute("aria-controls", id);
+    b.setAttribute("aria-expanded", "true");
+  }
+};
+
+document.addEventListener("click", function (e) {
+  const b = e.target.closest ? e.target.closest("button.term") : null;
+  if (!b) return;
+  e.preventDefault();
+  Terms.toggle(b);
+});
+
+/* ============================================================
    Части страницы урока
 
    Обычный урок и пошаговый (0.1) собраны из одних и тех же частей:
@@ -1960,6 +2094,7 @@ const Steps = {
         tmp.innerHTML = itemHtml(n);
         const fresh = tmp.firstChild;
         li.parentNode.replaceChild(fresh, li);
+        Terms.mark($(".st-b .theory", fresh));
         bindDone(fresh);
       });
     }
@@ -1970,6 +2105,7 @@ const Steps = {
       for (let n = 0; n < total; n++) html += itemHtml(n);
       justPassed = -1;
       list.innerHTML = html;
+      Array.prototype.forEach.call(list.querySelectorAll(".st-b .theory"), function (n) { Terms.mark(n); });
       Array.prototype.forEach.call(list.querySelectorAll(".st.done"), bindDone);
       if (open >= 0) mountOpen();
     }
@@ -2043,6 +2179,7 @@ const Steps = {
         if (!helped) {
           hint.hidden = false;
           hint.innerHTML = s.hint;
+          Terms.mark(hint);
           btn.textContent = "Показать решение";
           helped = true;
           return;
@@ -2114,6 +2251,7 @@ function renderStepsLesson(app, L, C) {
     '<nav class="lesson-nav" id="lnav"></nav>';
   app.appendChild(main);
 
+  Terms.mark($("#s-after .theory"));
   mountReadbar(secs);
   if (hasCards) mountDeck(id, C);
 
@@ -2366,6 +2504,10 @@ function renderLesson(app, id) {
 
   app.appendChild(main);
 
+  /* ---------- термины из словаря ---------- */
+  Terms.mark($("#s-theory .theory"));
+  Terms.mark($(".ticket-b"));
+  Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   mountReadbar(secs);
@@ -2407,6 +2549,7 @@ function renderLesson(app, id) {
     refBox.innerHTML = '<div class="empty">Скрыт, чтобы не подсматривать. Сначала напишите свой ответ.</div>';
     $("#refBtn").addEventListener("click", function () {
       refBox.innerHTML = '<div class="theory" style="font-size:15px">' + C.reference + "</div>";
+      Terms.mark(refBox);
       this.remove();
     });
   } else if (C.expected.stdout !== undefined) {
@@ -2674,6 +2817,7 @@ function renderLesson(app, id) {
               "после ещё одной попытки — так больше шансов, что решение останется вашим.</p>";
     }
     modal("Подсказка", html);
+    Terms.mark($("#modalB"));
   });
 
   $("#solBtn").addEventListener("click", function () {
@@ -2681,6 +2825,7 @@ function renderLesson(app, id) {
       "<p>Эталонный код с комментариями. Сравнивайте не синтаксис, а подход: где вы пошли другим путём и почему.</p>" +
       "<pre>" + esc(C.solution) + "</pre>") + (C.solutionNote || C.reference || "");
     modal("Решение", '<div class="theory" style="font-size:16px">' + body + "</div>");
+    Terms.mark($("#modalB"));
   });
 
   $("#checkBtn").addEventListener("click", check);
@@ -3008,11 +3153,13 @@ const Router = {
     const app = document.getElementById("app");
     app.innerHTML = "";
 
+    /* текущий урок известен уже во время отрисовки: по нему словарь
+       терминов решает, какие слова подчёркивать в этом модуле */
+    Router.current = lesson ? id : null;
     if (page) page(app, id);
     else if (id) renderLesson(app, id);
     else renderHome(app);
 
-    Router.current = lesson ? id : null;
     window.scrollTo(0, 0);
   }
 };
