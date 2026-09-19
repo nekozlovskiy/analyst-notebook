@@ -4022,9 +4022,10 @@ ORDER BY order_date;`,
 
 window.CONTENT.m1l3 = {
   intro: "Считать суммы умеет любой. Аналитика начинается там, где надо объяснить, почему средний чек 3 457 ₽, а средние траты клиента — 6 283 ₽, и какое из чисел вставлять в отчёт.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: агрегаты, гранулярность, WHERE против HAVING" },
+    { m: "30 мин", w: "Практикум: CASE WHEN за шесть шагов — от подписи до условного подсчёта" },
     { m: "40 мин", w: "Основная задача: отчёт по городам с порогом" },
     { m: "35 мин", w: "Тренажёр: 5 задач на подсчёты и ловушки среднего" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -4117,6 +4118,136 @@ FROM orders;</code></pre>
   </ul>
 </div>
 `,
+
+  /* Практикум по CASE WHEN — тем же форматом, что в 1.2 (см. там).
+     Решения проверены: node инструменты/checksteps.js m1l3 */
+  practicum: {
+    intro: "CASE WHEN встречается в каждом втором рабочем запросе, а в теории выше — только одной строкой. Шесть коротких шагов: от подписи «крупный / обычный» до подсчёта по условию. В каждом — таблица «было → стало» на настоящих строках базы и запрос, который курс проверит сам.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача ниже — про группировку и <code>HAVING</code>, CASE в ней не нужен. Он понадобится в тренажёре: задача 3 «Сводная таблица через CASE» — это шаг 5, только по городам.",
+    steps: [
+      {
+        title: "Подпись по условию: CASE WHEN",
+        body: `
+<p>Часто нужно не число, а подпись: «крупный заказ» или «обычный», «новый клиент» или «вернувшийся». Для этого есть <code>CASE</code> — «если условие верно, написать одно, иначе — другое»:</p>
+<pre><code>CASE WHEN revenue &gt;= 5000 THEN 'крупный'
+     ELSE 'обычный'
+END AS order_size</code></pre>
+<p>Читается по словам: <code>WHEN</code> — «когда», <code>THEN</code> — «тогда», <code>ELSE</code> — «иначе», <code>END</code> закрывает конструкцию. Всё вместе — один столбец, поэтому ему дают имя через <code>AS</code>. База проверяет условие в каждой строке отдельно.</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue"], rows: [[4, 1361.84], [5, 9071.54], [6, 3071.02], [7, 1796.6]] },
+          after: { columns: ["order_id", "revenue", "order_size"],
+            rows: [[4, 1361.84, "обычный"], [5, 9071.54, "крупный"], [6, 3071.02, "обычный"], [7, 1796.6, "обычный"]] },
+          hl: ["order_size"],
+          note: "Только в заказе 5 сумма не меньше 5 000 — он и получил «крупный»."
+        },
+        task: "<p><strong>Задание.</strong> Для заказов пользователя 3 выведите <code>order_id</code>, <code>revenue</code> и <code>order_size</code>: «крупный», если сумма не меньше 5 000, иначе «обычный».</p>",
+        starter: "SELECT order_id, revenue\nFROM orders\nWHERE user_id = 3;",
+        expected: { ordered: false, columns: ["order_id", "revenue", "order_size"],
+          rows: [[4, 1361.84, "обычный"], [5, 9071.54, "крупный"], [6, 3071.02, "обычный"], [7, 1796.6, "обычный"]] },
+        hint: "Третий столбец: <code>CASE WHEN revenue &gt;= 5000 THEN 'крупный' ELSE 'обычный' END AS order_size</code>. Подписи — в одинарных кавычках, как любой текст.",
+        solution: "SELECT order_id, revenue,\n       CASE WHEN revenue >= 5000 THEN 'крупный'\n            ELSE 'обычный'\n       END AS order_size\nFROM orders\nWHERE user_id = 3;"
+      },
+      {
+        title: "Несколько условий: WHEN по очереди",
+        body: `
+<p>Вариантов может быть больше двух. Тогда пишут несколько <code>WHEN</code> подряд:</p>
+<pre><code>CASE WHEN revenue &lt; 2000 THEN 'маленький'
+     WHEN revenue &lt; 5000 THEN 'средний'
+     ELSE 'крупный'
+END AS order_size</code></pre>
+<p>База проверяет условия сверху вниз и берёт <strong>первое</strong> верное — остальные уже не смотрит. Поэтому во втором условии не нужно писать «и больше 2 000»: маленькие заказы до него не дойдут. Зато порядок важен: поставьте <code>&lt; 5000</code> первым — и заказ на 1 361 ₽ станет «средним», ведь 1 361 тоже меньше 5 000.</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue"],
+            rows: [[4, 1361.84], [5, 9071.54], [6, 3071.02], [7, 1796.6], [74, 8173.74], [75, 2052.96], [76, 5554.07]] },
+          after: { columns: ["order_id", "revenue", "order_size"],
+            rows: [[4, 1361.84, "маленький"], [5, 9071.54, "крупный"], [6, 3071.02, "средний"], [7, 1796.6, "маленький"],
+                   [74, 8173.74, "крупный"], [75, 2052.96, "средний"], [76, 5554.07, "крупный"]] },
+          hl: ["order_size"],
+          note: "Заказ 75 на 2 052,96 не прошёл первое условие, но прошёл второе — «средний»."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 3 и 80 выведите <code>order_id</code>, <code>revenue</code> и <code>order_size</code>: до 2 000 — «маленький», до 5 000 — «средний», остальное — «крупный».</p>",
+        starter: "SELECT order_id, revenue\nFROM orders\nWHERE user_id IN (3, 80);",
+        expected: { ordered: false, columns: ["order_id", "revenue", "order_size"],
+          rows: [[4, 1361.84, "маленький"], [5, 9071.54, "крупный"], [6, 3071.02, "средний"], [7, 1796.6, "маленький"],
+                 [74, 8173.74, "крупный"], [75, 2052.96, "средний"], [76, 5554.07, "крупный"]] },
+        hint: "Два <code>WHEN</code> и <code>ELSE</code>: сначала <code>WHEN revenue &lt; 2000 THEN 'маленький'</code>, потом <code>WHEN revenue &lt; 5000 THEN 'средний'</code>, в конце <code>ELSE 'крупный'</code>. Если заказы 4 и 7 вышли «средними» — условия стоят в обратном порядке.",
+        solution: "SELECT order_id, revenue,\n       CASE WHEN revenue < 2000 THEN 'маленький'\n            WHEN revenue < 5000 THEN 'средний'\n            ELSE 'крупный'\n       END AS order_size\nFROM orders\nWHERE user_id IN (3, 80);"
+      },
+      {
+        title: "Забыли вариант — получили NULL",
+        body: `
+<p>Что будет со строкой, для которой не подошло ни одно условие, а <code>ELSE</code> нет? База поставит <code>NULL</code> — пустое значение. Ошибки при этом не будет, поэтому такой пропуск легко не заметить.</p>
+<p>Пример — перевести статус заказа на русский. Перечислили <code>paid</code> и <code>refunded</code>, а про <code>pending</code> забыли: у таких заказов в новом столбце пусто. <code>ELSE</code> ловит всё, что не перечислено, — поэтому его пишут почти всегда.</p>`,
+        ba: {
+          before: { columns: ["order_id", "status"],
+            rows: [[190, "paid"], [191, "pending"], [192, "refunded"], [193, "paid"], [194, "pending"]] },
+          after: { columns: ["order_id", "status", "status_ru"],
+            rows: [[190, "paid", "оплачен"], [191, "pending", null], [192, "refunded", "возврат"], [193, "paid", "оплачен"], [194, "pending", null]] },
+          hl: ["status_ru"],
+          note: "Так выглядит <code>CASE</code> без <code>ELSE</code>: у двух заказов в обработке — <code>NULL</code>."
+        },
+        task: "<p><strong>Задание.</strong> Для заказов пользователя 196 выведите <code>order_id</code>, <code>status</code> и <code>status_ru</code>: paid — «оплачен», refunded — «возврат», всё остальное — «в обработке». Пустых значений быть не должно.</p>",
+        starter: "SELECT order_id, status,\n       CASE WHEN status = 'paid' THEN 'оплачен'\n            WHEN status = 'refunded' THEN 'возврат'\n       END AS status_ru\nFROM orders\nWHERE user_id = 196;",
+        expected: { ordered: false, columns: ["order_id", "status", "status_ru"],
+          rows: [[190, "paid", "оплачен"], [191, "pending", "в обработке"], [192, "refunded", "возврат"], [193, "paid", "оплачен"], [194, "pending", "в обработке"]] },
+        hint: "Запустите запрос как есть — у заказов pending будет <code>NULL</code>. Перед <code>END</code> допишите строку <code>ELSE 'в обработке'</code>.",
+        solution: "SELECT order_id, status,\n       CASE WHEN status = 'paid' THEN 'оплачен'\n            WHEN status = 'refunded' THEN 'возврат'\n            ELSE 'в обработке'\n       END AS status_ru\nFROM orders\nWHERE user_id = 196;"
+      },
+      {
+        title: "Сгруппировать по подписи",
+        body: `
+<p>Подпись — такой же столбец, как город или канал, и по ней можно группировать. Так из тысячи сумм получается короткий ответ: сколько заказов маленьких, сколько средних, сколько крупных.</p>
+<p>В <code>GROUP BY</code> пишут имя, которое дали через <code>AS</code>: <code>GROUP BY order_size</code>. Весь <code>CASE</code> второй раз повторять не нужно — SQLite и PostgreSQL понимают имя столбца.</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue", "order_size"],
+            rows: [[4, 1361.84, "маленький"], [5, 9071.54, "крупный"], [6, 3071.02, "средний"], [7, 1796.6, "маленький"]] },
+          after: { columns: ["order_size", "orders_cnt"],
+            rows: [["маленький", 2], ["средний", 1], ["крупный", 1]] },
+          hl: ["orders_cnt"],
+          note: "Четыре заказа пользователя 3 сложились в три строки — по одной на размер."
+        },
+        task: "<p><strong>Задание.</strong> По всем <strong>оплаченным</strong> заказам посчитайте, сколько их каждого размера: <code>order_size</code> (подписи из шага 2) и <code>orders_cnt</code>.</p>",
+        starter: "SELECT CASE WHEN revenue < 2000 THEN 'маленький'\n            WHEN revenue < 5000 THEN 'средний'\n            ELSE 'крупный'\n       END AS order_size\nFROM orders;",
+        expected: { ordered: false, columns: ["order_size", "orders_cnt"],
+          rows: [["крупный", 28], ["маленький", 32], ["средний", 129]] },
+        hint: "Добавьте после <code>END AS order_size</code> запятую и <code>COUNT(*) AS orders_cnt</code>, после <code>FROM orders</code> — <code>WHERE status = 'paid'</code>, в конце — <code>GROUP BY order_size</code>.",
+        solution: "SELECT CASE WHEN revenue < 2000 THEN 'маленький'\n            WHEN revenue < 5000 THEN 'средний'\n            ELSE 'крупный'\n       END AS order_size,\n       COUNT(*) AS orders_cnt\nFROM orders\nWHERE status = 'paid'\nGROUP BY order_size;"
+      },
+      {
+        title: "Считать по условию: SUM(CASE …)",
+        body: `
+<p>Бывает нужно одной строкой: сколько всего заказов, сколько из них оплачено и сколько вернули. Три запроса с разными <code>WHERE</code> — долго. Выручает приём с единичками.</p>
+<p><code>CASE WHEN status = 'paid' THEN 1 ELSE 0 END</code> ставит 1 оплаченному заказу и 0 остальным. Сложите такой столбец — получится число оплаченных. <code>SUM</code> и <code>CASE</code> пишут вместе, и столбцов с условиями в одном запросе может быть сколько угодно:</p>
+<pre><code>SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt</code></pre>`,
+        ba: {
+          before: { columns: ["order_id", "status"],
+            rows: [[190, "paid"], [191, "pending"], [192, "refunded"], [193, "paid"], [194, "pending"]] },
+          after: { columns: ["order_id", "status", "is_paid"],
+            rows: [[190, "paid", 1], [191, "pending", 0], [192, "refunded", 0], [193, "paid", 1], [194, "pending", 0]] },
+          hl: ["is_paid"],
+          note: "Сумма столбца <code>is_paid</code> — 2: ровно столько оплаченных заказов у пользователя 196."
+        },
+        task: "<p><strong>Задание.</strong> Одной строкой по всем заказам: <code>orders_cnt</code> — всего, <code>paid_cnt</code> — оплаченных, <code>refunded_cnt</code> — возвратов.</p>",
+        starter: "SELECT COUNT(*) AS orders_cnt\nFROM orders;",
+        expected: { ordered: false, columns: ["orders_cnt", "paid_cnt", "refunded_cnt"], rows: [[215, 189, 13]] },
+        hint: "Ещё два столбца через запятую: <code>SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt</code> и такой же с <code>'refunded'</code> — <code>AS refunded_cnt</code>. <code>WHERE</code> здесь не нужен: он выкинул бы строки из общего счёта.",
+        solution: "SELECT COUNT(*) AS orders_cnt,\n       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt,\n       SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) AS refunded_cnt\nFROM orders;"
+      },
+      {
+        title: "Сами: крупные заказы по городам",
+        body: `
+<p>Новых слов здесь нет — соберите запрос из того, что уже написали. Вопрос: где у нас покупают крупно? Для каждого города нужно число <strong>оплаченных</strong> заказов и сколько из них крупных — от 5 000 ₽.</p>
+<p>Город хранится в <code>users</code>, поэтому понадобится <code>JOIN</code> из урока 1.1. Дальше — группировка по городу, как в шаге 4, и подсчёт по условию, как в шаге 5.</p>`,
+        task: "<p><strong>Задание.</strong> Выведите <code>city</code>, <code>orders_cnt</code> — оплаченных заказов в городе и <code>big_cnt</code> — сколько из них на 5 000 ₽ и больше.</p>",
+        starter: "-- 1. Соединить orders и users, оставить оплаченные заказы\n-- 2. Сгруппировать по городу\n-- 3. Посчитать все заказы и крупные\n",
+        expected: { ordered: false, columns: ["city", "orders_cnt", "big_cnt"],
+          rows: [["Екатеринбург", 46, 2], ["Казань", 34, 6], ["Москва", 53, 11], ["Новосибирск", 23, 4], ["Санкт-Петербург", 33, 5]] },
+        hint: "<code>FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.status = 'paid' GROUP BY u.city</code>. Столбцы: <code>u.city</code>, <code>COUNT(*) AS orders_cnt</code> и <code>SUM(CASE WHEN o.revenue &gt;= 5000 THEN 1 ELSE 0 END) AS big_cnt</code>.",
+        solution: "SELECT u.city,\n       COUNT(*) AS orders_cnt,\n       SUM(CASE WHEN o.revenue >= 5000 THEN 1 ELSE 0 END) AS big_cnt\nFROM orders o\nJOIN users u ON u.user_id = o.user_id\nWHERE o.status = 'paid'\nGROUP BY u.city;"
+      }
+    ]
+  },
 
   ticket: {
     from: "Марина, операционный директор",
