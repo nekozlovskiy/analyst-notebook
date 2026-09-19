@@ -23,7 +23,7 @@
    у тех, кто уже заходил, останется старая страница из кеша.
    ============================================================ */
 
-const VERSION = "2026-09-19";
+const VERSION = "2026-09-19b";
 const CACHE = "notebook-" + VERSION;
 
 /* На своей машине курс правят и обновляют страницу — и «сначала кеш»
@@ -40,6 +40,7 @@ const SHELL = [
   "./styles.css",
   "./lessons.js",
   "./content-core.js",
+  "./glossary.js",
   "./app.js",
   "./favicon.svg",
   "./apple-touch-icon.png",
