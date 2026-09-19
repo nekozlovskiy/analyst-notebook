@@ -1226,11 +1226,43 @@ button.st-h:hover .st-t { color: var(--ink); }
 .st-code { margin: 0; }
 .st-final { margin-top: 22px; }
 
+/* «Было → стало» у шага практикума (1.2): две маленькие таблицы на
+   одних и тех же строках. Без рамок — только линейки строк; новый
+   столбец выделен ручкой. На телефоне таблицы встают друг под другом. */
+.theory > .ba { max-width: 100%; }
+.ba { display: flex; align-items: flex-start; gap: 10px 16px; margin: 4px 0 8px; }
+.ba-side { margin: 0; min-width: 0; max-width: 100%; overflow-x: auto; }
+.ba-side figcaption {
+  margin: 0 0 4px; font-family: var(--sans); font-size: 13px; color: var(--ink-3);
+}
+.ba-arrow { align-self: center; flex: none; font-family: var(--sans); font-size: 20px; color: var(--ink-4); }
+.theory .ba-t {
+  width: auto; margin: 0; border-collapse: collapse;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
+  font-variant-ligatures: none; font-variant-numeric: lining-nums tabular-nums;
+}
+.theory .ba-t th, .theory .ba-t td {
+  border: 0; border-bottom: 1px solid var(--rule-soft);
+  padding: 5px 10px; white-space: nowrap; vertical-align: baseline;
+}
+/* без «зебры» из .theory table: строк мало, линеек достаточно */
+.theory .ba-t tbody tr td { background: none; }
+.theory .ba-t th { border-bottom-color: var(--rule); font-weight: 500; font-size: 12px; color: var(--ink-2); }
+.theory .ba-t td.num { text-align: right; }
+.theory .ba-t td.nul { color: var(--ink-4); }
+.theory .ba-t .hl { background: var(--pen-soft); }
+.theory .ba-t th.hl { color: var(--pen); }
+.ba-note {
+  font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-3);
+}
+
 @media (max-width: 720px) {
   .st-b { padding-left: 0; }
   .st-of { display: none; }
   .st-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
   .st-help { width: 100%; margin: 4px 0 0; text-align: center; min-height: 44px; }
+  .ba { flex-direction: column; }
+  .ba-arrow { align-self: flex-start; margin-left: 10px; transform: rotate(90deg); }
 }
 
 /* ============================================================

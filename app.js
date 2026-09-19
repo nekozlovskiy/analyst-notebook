@@ -1603,6 +1603,32 @@ function renderTable(cols, rows, badRow) {
   return h;
 }
 
+/* Таблицы «было → стало» у шага практикума: те же строки базы до новой
+   конструкции и после неё. Ручкой выделено то, на что смотреть: новые
+   столбцы в «стало» (hl) или строки «было», которые останутся (keep). */
+function baHtml(ba) {
+  function table(t, hl, keep) {
+    const on = t.columns.map(function (c) { return hl.indexOf(c) >= 0; });
+    return '<table class="ba-t"><thead><tr>' + t.columns.map(function (c, i) {
+        return "<th" + (on[i] ? ' class="hl"' : "") + ">" + esc(c) + "</th>";
+      }).join("") + "</tr></thead><tbody>" +
+      t.rows.map(function (r, ri) {
+        const kept = keep.indexOf(ri) >= 0;
+        return "<tr>" + r.map(function (v, i) {
+          const cls = [typeof v === "number" ? "num" : "", v === null ? "nul" : "", on[i] || kept ? "hl" : ""]
+            .filter(Boolean).join(" ");
+          return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + (v === null ? "NULL" : esc(v)) + "</td>";
+        }).join("") + "</tr>";
+      }).join("") + "</tbody></table>";
+  }
+  return '<div class="ba">' +
+      '<figure class="ba-side"><figcaption>Было</figcaption>' + table(ba.before, [], ba.keep || []) + "</figure>" +
+      '<span class="ba-arrow" aria-hidden="true">→</span>' +
+      '<figure class="ba-side"><figcaption>Стало</figcaption>' + table(ba.after, ba.hl || [], []) + "</figure>" +
+    "</div>" +
+    (ba.note ? '<p class="ba-note">' + ba.note + "</p>" : "");
+}
+
 /* ---------- модальное окно ---------- */
 function modal(title, html) {
   let bg = $("#modalBg");
@@ -1695,7 +1721,7 @@ const Terms = {
      варианты ответа (объяснение подсказало бы ответ) и сами
      объяснения. */
   SKIP_TAG: /^(PRE|A|BUTTON|H1|H2|H3|H4|H5|H6|SUMMARY|TEXTAREA|SCRIPT|STYLE|SVG|MJX-CONTAINER|LABEL|SELECT|INPUT)$/,
-  SKIP_CLASS: ["aside", "term-x", "q-opt", "CodeMirror", "kicker", "hs-n"],
+  SKIP_CLASS: ["aside", "term-x", "q-opt", "CodeMirror", "kicker", "hs-n", "ba"],
 
   mark: function (root) {
     const G = window.GLOSSARY;
@@ -2068,40 +2094,49 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
    шага: на телефоне восемь редакторов сразу были бы лишними.
    Пройденные шаги — корзина steps («урок:номер»), код шага —
    корзина code («урок:sномер»).
+   Тот же движок ведёт практикум внутри обычного урока (1.2): у его
+   ключей метка tag = "p" — «m1l2:p0» и «m1l2:ps0», — чтобы шаги
+   практикума не смешались с шагами урока.
    ============================================================ */
 
 const Steps = {
-  key: function (id, n) { return id + ":" + n; },
-  passed: function (id, n) { return !!Store.get("steps", Steps.key(id, n), false); },
-  firstOpen: function (id, C) {
-    for (let n = 0; n < C.steps.length; n++) if (!Steps.passed(id, n)) return n;
+  key: function (id, n, tag) { return id + ":" + (tag || "") + n; },
+  passed: function (id, n, tag) { return !!Store.get("steps", Steps.key(id, n, tag), false); },
+  firstOpen: function (id, S, tag) {
+    for (let n = 0; n < S.steps.length; n++) if (!Steps.passed(id, n, tag)) return n;
     return -1;
   },
-  clear: function (id, C) {
-    C.steps.forEach(function (s, n) {
-      if (Steps.passed(id, n)) Store.set("steps", Steps.key(id, n), false);
+  clear: function (id, S, tag) {
+    S.steps.forEach(function (s, n) {
+      if (Steps.passed(id, n, tag)) Store.set("steps", Steps.key(id, n, tag), false);
     });
   },
 
-  /* Рисует ленту шагов урока L в box. onFinish(fresh) вызывается, когда
-     пройдены все шаги: fresh — только что, а не уже при открытии. */
-  render: function (L, C, box, onFinish) {
-    const id = L.id, total = C.steps.length;
+  /* Рисует в box ленту шагов S (урок 0.1 или практикум урока L).
+     onFinish(fresh) вызывается, когда пройдены все шаги: fresh —
+     только что, а не уже при открытии. */
+  render: function (L, S, box, onFinish, tag) {
+    const id = L.id, total = S.steps.length;
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
-    let open = Steps.firstOpen(id, C);
+    let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
     let editor = null, last = null, helped = false;
 
     box.innerHTML =
       '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
-        '<div class="schema-body">' + C.schema + "</div></details>" +
+        '<div class="schema-body">' + S.schema + "</div></details>" +
       '<ol class="steps"></ol>';
     const list = $(".steps", box);
 
-    function codeKey(n) { return id + ":s" + n; }
+    function codeKey(n) { return id + ":" + (tag || "") + "s" + n; }
     function codeOf(n) {
       const saved = Store.get("code", codeKey(n), null);
-      return saved !== null ? saved : (C.steps[n].starter || "");
+      return saved !== null ? saved : (S.steps[n].starter || "");
+    }
+    /* объяснение шага, таблицы «было → стало» и задание — один текст:
+       термины в нём подчёркиваются по первому упоминанию */
+    function textOf(s) {
+      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + "</div>";
     }
     /* первая значимая строка запроса — подпись свёрнутого шага */
     function firstLine(src) {
@@ -2110,19 +2145,19 @@ const Steps = {
       })[0] || "").trim();
     }
     function mark(n) {
-      return '<span class="st-n">' + (Steps.passed(id, n)
-        ? penTick(Steps.key(id, n), n === justPassed ? "draw" : "")
+      return '<span class="st-n">' + (Steps.passed(id, n, tag)
+        ? penTick(Steps.key(id, n, tag), n === justPassed ? "draw" : "")
         : String(n + 1)) + "</span>";
     }
 
     function itemHtml(n) {
-      const s = C.steps[n];
+      const s = S.steps[n];
       if (n === open) {
         return '<li class="st open" data-n="' + n + '">' +
           '<div class="st-h">' + mark(n) + '<h3 class="st-t">' + esc(s.title) + "</h3>" +
             '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
           '<div class="st-b">' +
-            '<div class="theory">' + s.body + "</div>" +
+            textOf(s) +
             '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
               '<textarea class="st-ta"></textarea></div>' +
             '<div class="st-actions">' +
@@ -2136,13 +2171,13 @@ const Steps = {
               '<div class="io-body st-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
           "</div></li>";
       }
-      if (Steps.passed(id, n)) {
+      if (Steps.passed(id, n, tag)) {
         const shown = !!peek[n];
         return '<li class="st done' + (shown ? " peek" : "") + '" data-n="' + n + '">' +
           '<button class="st-h" type="button" aria-expanded="' + shown + '">' + mark(n) +
             '<span class="st-t">' + esc(s.title) + "</span>" +
             '<code class="st-q">' + esc(firstLine(codeOf(n))) + "</code></button>" +
-          (shown ? '<div class="st-b"><div class="theory">' + s.body + "</div>" +
+          (shown ? '<div class="st-b">' + textOf(s) +
             '<pre class="st-code"><code>' + esc(codeOf(n)) + "</code></pre></div>" : "") +
           "</li>";
       }
@@ -2232,7 +2267,7 @@ const Steps = {
       async function check() {
         const ran = await run();
         if (!ran || open !== n) return;
-        const r = Check.sql(last, C.steps[n].expected);
+        const r = Check.sql(last, S.steps[n].expected);
         if (r.ok) { pass(n); return; }
         if (last) showRows(r.row === undefined ? -1 : r.row);
         status("bad", "Пока не совпадает", esc(r.why));
@@ -2240,7 +2275,7 @@ const Steps = {
 
       /* первое нажатие — подсказка, второе — решение в редакторе */
       function help() {
-        const s = C.steps[n], hint = q(".st-hint"), btn = q(".st-help");
+        const s = S.steps[n], hint = q(".st-hint"), btn = q(".st-help");
         if (!helped) {
           hint.hidden = false;
           hint.innerHTML = s.hint;
@@ -2270,9 +2305,9 @@ const Steps = {
     }
 
     function pass(n) {
-      Store.set("steps", Steps.key(id, n), Date.now());
+      Store.set("steps", Steps.key(id, n, tag), Date.now());
       justPassed = n;
-      open = Steps.firstOpen(id, C);
+      open = Steps.firstOpen(id, S, tag);
       draw();
       if (open >= 0) {
         const li = $(".st.open", list);
@@ -2426,10 +2461,12 @@ function renderLesson(app, id) {
   const hasQuiz = !!(C.quiz && C.quiz.length);
   const hasCards = !!(C.cards && C.cards.length);
   const hasLinks = !!(C.links && C.links.length);
+  const P = C.practicum;
 
   /* ---------- якорная навигация ---------- */
   const secs = [{ id: "s-theory", t: "Теория" }];
   if (hasCards) secs.push({ id: "s-cards", t: "Карточки" });
+  if (P) secs.push({ id: "s-practice", t: "Практикум" });
   secs.push({ id: "s-task", t: "Задача" });
   if (hasDrills) secs.push({ id: "s-drills", t: "Тренажёр" });
   if (hasQuiz) secs.push({ id: "s-quiz", t: "Самопроверка" });
@@ -2504,6 +2541,14 @@ function renderLesson(app, id) {
     "</section>" +
 
     (hasCards ? cardsBlockHtml() : "") +
+
+    /* практикум — шаги от одной конструкции к другой перед основной задачей */
+    (P ? '<section class="block" id="s-practice">' +
+      '<div class="block-h"><h2>Практикум</h2></div>' +
+      (P.intro ? '<p class="block-intro">' + P.intro + "</p>" : "") +
+      '<div id="practiceBox"></div>' +
+      '<div class="status st-final" id="practiceFinal"></div>' +
+    "</section>" : "") +
 
     '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
@@ -2607,6 +2652,21 @@ function renderLesson(app, id) {
 
   /* ---------- колода карточек ---------- */
   if (hasCards) mountDeck(id, C);
+
+  /* ---------- практикум ----------
+     Урок он не отмечает: пройденным урок делает основная задача. По
+     окончании — ссылка к ней, приёмы практикума там собираются вместе. */
+  if (P) {
+    idle(function () { Engine.sql().catch(function () {}); });
+    const pfin = $("#practiceFinal");
+    Steps.render(L, P, $("#practiceBox"), function (fresh) {
+      pfin.className = "status st-final show ok";
+      pfin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
+          (fresh ? penTick(id + ":p", "draw") : ICON.ok) + "</span>" +
+        '<span class="s-body"><b>Практикум пройден</b>' + (P.done || "Все шаги решены.") +
+          '<br><a href="#s-task">Перейти к основной задаче</a></span>';
+    }, "p");
+  }
 
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");

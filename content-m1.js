@@ -394,9 +394,10 @@ ORDER BY revenue DESC;`,
 
 window.CONTENT.m1l2 = {
   intro: "Считаем «внутри группы», не схлопывая строки: номер заказа по счёту, предыдущее значение, накопительный итог. Половина продуктовых метрик держится на этом.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: устройство окна и четыре рабочие функции" },
+    { m: "30 мин", w: "Практикум: шесть шагов от SUM() OVER () до «самый дорогой в городе»" },
     { m: "40 мин", w: "Основная задача: скорость возврата за вторым заказом" },
     { m: "35 мин", w: "Тренажёр: топы, накопительные итоги, доли" },
     { m: "10 мин", w: "Самопроверка вопросами" }
@@ -487,6 +488,148 @@ SELECT * FROM numbered WHERE n = 1;   -- вот тут фильтр уже ра�
   </ul>
 </div>
 `,
+
+  /* Практикум — пошаговые мини-задачи между карточками и основной
+     задачей, на движке шагов урока 0.1. У шага есть ba — таблицы
+     «было → стало» на реальных строках базы; ручка выделяет новые
+     столбцы (hl) или строки «было», которые останутся (keep, номера
+     с нуля). Решения проверены: node инструменты/checksteps.js m1l2 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. В каждом — одна новая конструкция, таблица «было → стало» на настоящих строках базы и маленький запрос, который курс проверит сам. Всё, что здесь напишете, пригодится в задаче ниже.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача собирает их вместе: номер заказа и дата предыдущего — внутри <code>WITH</code>, фильтр по номеру — снаружи.",
+    steps: [
+      {
+        title: "Сумма рядом с каждой строкой: SUM() OVER ()",
+        body: `
+<p>Вы уже знаете <code>SUM(revenue)</code> с <code>GROUP BY</code>: строки группы схлопываются в одну, и остаётся только итог. Иногда нужно другое — оставить все строки и рядом с каждой написать сумму. Например, чтобы потом посчитать, какую долю в тратах клиента занимает каждый заказ.</p>
+<p>Для этого после функции пишут <code>OVER ()</code>. Слово <code>OVER</code> превращает обычную функцию в оконную: она считает по всем строкам, но ни одной не убирает. Пустые скобки значат «окно — все строки, которые остались после <code>WHERE</code>».</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue"], rows: [[51, 2523.12], [52, 3444.01], [53, 3873.51]] },
+          after: { columns: ["order_id", "revenue", "total"],
+            rows: [[51, 2523.12, 9840.64], [52, 3444.01, 9840.64], [53, 3873.51, 9840.64]] },
+          hl: ["total"],
+          note: "Строк осталось три. С <code>GROUP BY</code> была бы одна — и без номеров заказов."
+        },
+        task: "<p><strong>Задание.</strong> Для заказов пользователя 65 выведите <code>order_id</code>, <code>revenue</code> и столбец <code>total</code> — сумму всех его заказов в каждой строке.</p>",
+        starter: "SELECT order_id, revenue\nFROM orders\nWHERE user_id = 65;",
+        expected: { ordered: false, columns: ["order_id", "revenue", "total"],
+          rows: [[51, 2523.12, 9840.64], [52, 3444.01, 9840.64], [53, 3873.51, 9840.64]] },
+        hint: "Добавьте после <code>revenue</code> запятую и третий столбец: <code>SUM(revenue) OVER () AS total</code>. <code>AS total</code> даёт столбцу имя, которое ждёт проверка.",
+        solution: "SELECT order_id, revenue,\n       SUM(revenue) OVER () AS total\nFROM orders\nWHERE user_id = 65;"
+      },
+      {
+        title: "Отдельно для каждого: PARTITION BY",
+        body: `
+<p>Возьмём двух пользователей, 65 и 76. <code>SUM(revenue) OVER ()</code> сложит заказы обоих — 21 524,37 ₽ в каждой строке. А нужна сумма каждого клиента отдельно.</p>
+<p>Для этого в скобках <code>OVER</code> пишут <code>PARTITION BY user_id</code> — «раздели строки на группы по пользователю и считай в каждой группе отдельно». Похоже на <code>GROUP BY</code>, только строки остаются на месте.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id", "revenue"],
+            rows: [[65, 51, 2523.12], [65, 52, 3444.01], [65, 53, 3873.51], [76, 69, 5991.43], [76, 70, 2885.19], [76, 71, 2807.11]] },
+          after: { columns: ["user_id", "order_id", "revenue", "user_total"],
+            rows: [[65, 51, 2523.12, 9840.64], [65, 52, 3444.01, 9840.64], [65, 53, 3873.51, 9840.64],
+                   [76, 69, 5991.43, 11683.73], [76, 70, 2885.19, 11683.73], [76, 71, 2807.11, 11683.73]] },
+          hl: ["user_total"],
+          note: "У каждого пользователя своя сумма: окно разрезано по <code>user_id</code>."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_id</code>, <code>revenue</code> и <code>user_total</code> — сумму заказов этого пользователя.</p>",
+        starter: "SELECT user_id, order_id, revenue\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_id", "revenue", "user_total"],
+          rows: [[65, 51, 2523.12, 9840.64], [65, 52, 3444.01, 9840.64], [65, 53, 3873.51, 9840.64],
+                 [76, 69, 5991.43, 11683.73], [76, 70, 2885.19, 11683.73], [76, 71, 2807.11, 11683.73]] },
+        hint: "Четвёртый столбец — сумма с окном по пользователю: <code>SUM(revenue) OVER (PARTITION BY user_id) AS user_total</code>.",
+        solution: "SELECT user_id, order_id, revenue,\n       SUM(revenue) OVER (PARTITION BY user_id) AS user_total\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Номер по порядку: ROW_NUMBER",
+        body: `
+<p><code>ROW_NUMBER()</code> ставит строкам номера: 1, 2, 3… В каждой группе <code>PARTITION BY</code> счёт начинается заново с единицы. Скобки после функции пустые: ей не нужен столбец, она только считает строки.</p>
+<p>Номер зависит от порядка, поэтому в <code>OVER</code> добавляют <code>ORDER BY</code>: <code>OVER (PARTITION BY user_id ORDER BY order_date)</code> — «пронумеруй заказы каждого пользователя от раннего к позднему». Этот <code>ORDER BY</code> задаёт порядок счёта и не сортирует вывод: вывод сортирует <code>ORDER BY</code> в конце запроса.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date"],
+            rows: [[65, "2024-03-27"], [65, "2024-04-05"], [65, "2024-04-27"], [76, "2024-05-02"], [76, "2024-06-12"], [76, "2024-07-03"]] },
+          after: { columns: ["user_id", "order_date", "order_num"],
+            rows: [[65, "2024-03-27", 1], [65, "2024-04-05", 2], [65, "2024-04-27", 3],
+                   [76, "2024-05-02", 1], [76, "2024-06-12", 2], [76, "2024-07-03", 3]] },
+          hl: ["order_num"],
+          note: "Самый ранний заказ каждого пользователя получил 1 — так находят первую покупку."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_date</code> и <code>order_num</code> — номер заказа по счёту у этого пользователя.</p>",
+        starter: "SELECT user_id, order_date\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_date", "order_num"],
+          rows: [[65, "2024-03-27", 1], [65, "2024-04-05", 2], [65, "2024-04-27", 3],
+                 [76, "2024-05-02", 1], [76, "2024-06-12", 2], [76, "2024-07-03", 3]] },
+        hint: "Третий столбец: <code>ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num</code>. Без <code>ORDER BY</code> внутри скобок база пронумерует заказы в случайном порядке.",
+        solution: "SELECT user_id, order_date,\n       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Только первые заказы: WITH",
+        body: `
+<p>Хочется дописать <code>WHERE order_num = 1</code> — и не выйдет: база ответит <code>misuse of aliased window function</code>. <code>WHERE</code> выполняется раньше окон, и номеров в этот момент ещё нет.</p>
+<p>Выход — считать в два приёма. <code>WITH</code> даёт промежуточному результату имя, и дальше из него выбирают, как из обычной таблицы:</p>
+<pre><code>WITH numbered AS (
+    SELECT user_id, order_date, revenue,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num
+    FROM orders
+)
+SELECT user_id, order_date, revenue
+FROM numbered
+WHERE order_num = 1;</code></pre>
+<p>В скобках — запрос из шага 3. Снаружи номера уже готовы, и фильтр по ним работает.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date", "revenue", "order_num"],
+            rows: [[65, "2024-03-27", 2523.12, 1], [65, "2024-04-05", 3444.01, 2], [65, "2024-04-27", 3873.51, 3],
+                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3]] },
+          after: { columns: ["user_id", "order_date", "revenue"],
+            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74]] },
+          hl: [], keep: [0, 3],
+          note: "«Было» — то, что вернул <code>numbered</code>. «Стало» — внешний запрос оставил строки с номером 1."
+        },
+        task: "<p><strong>Задание.</strong> Первое впечатление о магазине — первый заказ. Найдите пользователей, у которых первый заказ дороже 7 000 ₽: выведите <code>user_id</code>, <code>order_date</code> и <code>revenue</code> этого заказа. Оба условия — номер и сумму — ставьте снаружи, после скобок <code>WITH</code>.</p>",
+        starter: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered;",
+        expected: { ordered: false, columns: ["user_id", "order_date", "revenue"],
+          rows: [[74, "2024-02-09", 7437.5], [80, "2024-03-03", 8173.74], [156, "2024-07-05", 9550.87],
+                 [205, "2024-07-18", 14473.88], [212, "2024-05-12", 7482.54], [217, "2024-01-21", 7196.22]] },
+        hint: "Перед точкой с запятой добавьте строку <code>WHERE order_num = 1 AND revenue &gt; 7000</code>. Если поставить <code>revenue &gt; 7000</code> внутри скобок, база пронумерует только крупные заказы, и «первым» окажется не первый.",
+        solution: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered\nWHERE order_num = 1 AND revenue > 7000;"
+      },
+      {
+        title: "Предыдущий заказ: LAG",
+        body: `
+<p><code>LAG(order_date)</code> берёт значение из предыдущей строки окна — дату прошлого заказа того же пользователя. Окно то же, что в шаге 3: <code>OVER (PARTITION BY user_id ORDER BY order_date)</code>. Именно оно решает, какая строка считается предыдущей.</p>
+<p>У первого заказа предыдущего нет, и там будет <code>NULL</code> — пустое значение. Это не ошибка: так база говорит «здесь ничего нет». Парная функция <code>LEAD</code> берёт значение из следующей строки.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date"],
+            rows: [[65, "2024-03-27"], [65, "2024-04-05"], [65, "2024-04-27"], [76, "2024-05-02"], [76, "2024-06-12"], [76, "2024-07-03"]] },
+          after: { columns: ["user_id", "order_date", "prev_date"],
+            rows: [[65, "2024-03-27", null], [65, "2024-04-05", "2024-03-27"], [65, "2024-04-27", "2024-04-05"],
+                   [76, "2024-05-02", null], [76, "2024-06-12", "2024-05-02"], [76, "2024-07-03", "2024-06-12"]] },
+          hl: ["prev_date"],
+          note: "Две даты в одной строке — из них в основной задаче получится число дней между заказами."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_date</code> и <code>prev_date</code> — дату предыдущего заказа этого пользователя.</p>",
+        starter: "SELECT user_id, order_date\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_date", "prev_date"],
+          rows: [[65, "2024-03-27", null], [65, "2024-04-05", "2024-03-27"], [65, "2024-04-27", "2024-04-05"],
+                 [76, "2024-05-02", null], [76, "2024-06-12", "2024-05-02"], [76, "2024-07-03", "2024-06-12"]] },
+        hint: "Третий столбец: <code>LAG(order_date) OVER (PARTITION BY user_id ORDER BY order_date) AS prev_date</code>.",
+        solution: "SELECT user_id, order_date,\n       LAG(order_date) OVER (PARTITION BY user_id ORDER BY order_date) AS prev_date\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Сами: самый дорогой заказ в каждом городе",
+        body: `
+<p>Новых слов здесь нет — соберите запрос из того, что уже написали. Вопрос от продакта: какой самый дорогой <strong>оплаченный</strong> заказ в каждом городе?</p>
+<p>Город хранится в <code>users</code>, сумма — в <code>orders</code>, поэтому понадобится <code>JOIN</code> из урока 1.1. Дальше — как в шаге 4: пронумеровать заказы внутри города от дорогого к дешёвому, <code>ORDER BY revenue DESC</code>, и оставить номер 1.</p>`,
+        task: "<p><strong>Задание.</strong> Выведите <code>city</code>, <code>user_id</code>, <code>order_id</code> и <code>revenue</code> самого дорогого оплаченного заказа в каждом городе — по одной строке на город.</p>",
+        starter: "-- 1. Соединить orders и users, оставить оплаченные заказы\n-- 2. Пронумеровать заказы внутри города от дорогого к дешёвому\n-- 3. Оставить номер 1\n",
+        expected: { ordered: false, columns: ["city", "user_id", "order_id", "revenue"],
+          rows: [["Екатеринбург", 76, 69, 5991.43], ["Казань", 205, 198, 10177.29], ["Москва", 3, 5, 9071.54],
+                 ["Новосибирск", 156, 156, 9550.87], ["Санкт-Петербург", 91, 89, 8835.71]] },
+        hint: "Внутри <code>WITH</code>: <code>FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.status = 'paid'</code> и столбец <code>ROW_NUMBER() OVER (PARTITION BY u.city ORDER BY o.revenue DESC) AS rn</code>. Снаружи — <code>WHERE rn = 1</code>. Без фильтра по статусу в Казани победит возврат, а в Екатеринбурге — неоплаченный заказ.",
+        solution: "WITH ranked AS (\n    SELECT u.city, o.user_id, o.order_id, o.revenue,\n           ROW_NUMBER() OVER (PARTITION BY u.city ORDER BY o.revenue DESC) AS rn\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n)\nSELECT city, user_id, order_id, revenue\nFROM ranked\nWHERE rn = 1;"
+      }
+    ]
+  },
 
   ticket: {
     from: "Костя, продакт",

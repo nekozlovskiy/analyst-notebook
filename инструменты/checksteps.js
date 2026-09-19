@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-/* Проверка шагов пошагового урока: решение каждого шага прогоняется
-   на учебной базе и сверяется с expected по тем же правилам, что
-   Check.sql в app.js — имена столбцов, число строк, порядок строк
-   при ordered, числа с допуском 0.011.
+/* Проверка шагов пошагового урока (0.1) и практикума внутри урока
+   (1.2): решение каждого шага прогоняется на учебной базе и сверяется
+   с expected по тем же правилам, что Check.sql в app.js — имена
+   столбцов, число строк, порядок строк при ordered, числа с допуском
+   0.011. Таблицы «было → стало» (ba) сверяются по форме: число
+   значений в строке равно числу столбцов, hl — среди столбцов «стало»,
+   keep — номера существующих строк «было».
 
      node инструменты/checksteps.js m0l1                     — все шаги
      node инструменты/checksteps.js m0l1 --try 3 "SELECT 1"  — что увидит
@@ -22,7 +25,8 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(base, f), "utf8
 
 const args = process.argv.slice(2);
 const id = args[0];
-const C = ctx.window.CONTENT[id];
+const L = ctx.window.CONTENT[id];
+const C = L && (L.steps ? L : L.practicum);
 if (!C || !Array.isArray(C.steps)) { console.error(id + ": нет урока с шагами"); process.exit(1); }
 
 const db = new DatabaseSync(":memory:");
@@ -68,6 +72,22 @@ function check(res, exp) {
 }
 
 let bad = 0;
+function checkBa(n, ba) {
+  const label = "шаг " + (n + 1) + "  ba: ";
+  ["before", "after"].forEach(function (k) {
+    const t = ba[k];
+    if (!t || !Array.isArray(t.columns) || !Array.isArray(t.rows)) { console.log(label + "нет " + k); bad++; return; }
+    t.rows.forEach(function (r, i) {
+      if (r.length !== t.columns.length) { console.log(label + k + ", строка " + (i + 1) + ": значений " + r.length + ", столбцов " + t.columns.length); bad++; }
+    });
+  });
+  (ba.keep || []).forEach(function (i) {
+    if (!ba.before || !ba.before.rows[i]) { console.log(label + "keep " + i + " — нет такой строки «было»"); bad++; }
+  });
+  (ba.hl || []).forEach(function (c) {
+    if (!ba.after || ba.after.columns.indexOf(c) < 0) { console.log(label + "hl «" + c + "» нет среди столбцов «стало»"); bad++; }
+  });
+}
 function report(n, sql) {
   const label = "шаг " + (n + 1);
   let res;
@@ -85,6 +105,7 @@ if (args[1] === "--try") {
     ["title", "body", "starter", "expected", "hint", "solution"].forEach(function (k) {
       if (s[k] === undefined || s[k] === "") { console.log("шаг " + (n + 1) + "  нет поля " + k); bad++; }
     });
+    if (s.ba) checkBa(n, s.ba);
     report(n, s.solution);
   });
 }

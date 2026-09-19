@@ -1256,11 +1256,43 @@ button.st-h:hover .st-t { color: var(--ink); }
 .st-code { margin: 0; }
 .st-final { margin-top: 22px; }
 
+/* «Было → стало» у шага практикума (1.2): две маленькие таблицы на
+   одних и тех же строках. Без рамок — только линейки строк; новый
+   столбец выделен ручкой. На телефоне таблицы встают друг под другом. */
+.theory > .ba { max-width: 100%; }
+.ba { display: flex; align-items: flex-start; gap: 10px 16px; margin: 4px 0 8px; }
+.ba-side { margin: 0; min-width: 0; max-width: 100%; overflow-x: auto; }
+.ba-side figcaption {
+  margin: 0 0 4px; font-family: var(--sans); font-size: 13px; color: var(--ink-3);
+}
+.ba-arrow { align-self: center; flex: none; font-family: var(--sans); font-size: 20px; color: var(--ink-4); }
+.theory .ba-t {
+  width: auto; margin: 0; border-collapse: collapse;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
+  font-variant-ligatures: none; font-variant-numeric: lining-nums tabular-nums;
+}
+.theory .ba-t th, .theory .ba-t td {
+  border: 0; border-bottom: 1px solid var(--rule-soft);
+  padding: 5px 10px; white-space: nowrap; vertical-align: baseline;
+}
+/* без «зебры» из .theory table: строк мало, линеек достаточно */
+.theory .ba-t tbody tr td { background: none; }
+.theory .ba-t th { border-bottom-color: var(--rule); font-weight: 500; font-size: 12px; color: var(--ink-2); }
+.theory .ba-t td.num { text-align: right; }
+.theory .ba-t td.nul { color: var(--ink-4); }
+.theory .ba-t .hl { background: var(--pen-soft); }
+.theory .ba-t th.hl { color: var(--pen); }
+.ba-note {
+  font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-3);
+}
+
 @media (max-width: 720px) {
   .st-b { padding-left: 0; }
   .st-of { display: none; }
   .st-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
   .st-help { width: 100%; margin: 4px 0 0; text-align: center; min-height: 44px; }
+  .ba { flex-direction: column; }
+  .ba-arrow { align-self: flex-start; margin-left: 10px; transform: rotate(90deg); }
 }
 
 /* ============================================================
@@ -3440,9 +3472,10 @@ ORDER BY revenue DESC;`,
 
 window.CONTENT.m1l2 = {
   intro: "Считаем «внутри группы», не схлопывая строки: номер заказа по счёту, предыдущее значение, накопительный итог. Половина продуктовых метрик держится на этом.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: устройство окна и четыре рабочие функции" },
+    { m: "30 мин", w: "Практикум: шесть шагов от SUM() OVER () до «самый дорогой в городе»" },
     { m: "40 мин", w: "Основная задача: скорость возврата за вторым заказом" },
     { m: "35 мин", w: "Тренажёр: топы, накопительные итоги, доли" },
     { m: "10 мин", w: "Самопроверка вопросами" }
@@ -3533,6 +3566,148 @@ SELECT * FROM numbered WHERE n = 1;   -- вот тут фильтр уже ра�
   </ul>
 </div>
 `,
+
+  /* Практикум — пошаговые мини-задачи между карточками и основной
+     задачей, на движке шагов урока 0.1. У шага есть ba — таблицы
+     «было → стало» на реальных строках базы; ручка выделяет новые
+     столбцы (hl) или строки «было», которые останутся (keep, номера
+     с нуля). Решения проверены: node инструменты/checksteps.js m1l2 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. В каждом — одна новая конструкция, таблица «было → стало» на настоящих строках базы и маленький запрос, который курс проверит сам. Всё, что здесь напишете, пригодится в задаче ниже.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача собирает их вместе: номер заказа и дата предыдущего — внутри <code>WITH</code>, фильтр по номеру — снаружи.",
+    steps: [
+      {
+        title: "Сумма рядом с каждой строкой: SUM() OVER ()",
+        body: `
+<p>Вы уже знаете <code>SUM(revenue)</code> с <code>GROUP BY</code>: строки группы схлопываются в одну, и остаётся только итог. Иногда нужно другое — оставить все строки и рядом с каждой написать сумму. Например, чтобы потом посчитать, какую долю в тратах клиента занимает каждый заказ.</p>
+<p>Для этого после функции пишут <code>OVER ()</code>. Слово <code>OVER</code> превращает обычную функцию в оконную: она считает по всем строкам, но ни одной не убирает. Пустые скобки значат «окно — все строки, которые остались после <code>WHERE</code>».</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue"], rows: [[51, 2523.12], [52, 3444.01], [53, 3873.51]] },
+          after: { columns: ["order_id", "revenue", "total"],
+            rows: [[51, 2523.12, 9840.64], [52, 3444.01, 9840.64], [53, 3873.51, 9840.64]] },
+          hl: ["total"],
+          note: "Строк осталось три. С <code>GROUP BY</code> была бы одна — и без номеров заказов."
+        },
+        task: "<p><strong>Задание.</strong> Для заказов пользователя 65 выведите <code>order_id</code>, <code>revenue</code> и столбец <code>total</code> — сумму всех его заказов в каждой строке.</p>",
+        starter: "SELECT order_id, revenue\nFROM orders\nWHERE user_id = 65;",
+        expected: { ordered: false, columns: ["order_id", "revenue", "total"],
+          rows: [[51, 2523.12, 9840.64], [52, 3444.01, 9840.64], [53, 3873.51, 9840.64]] },
+        hint: "Добавьте после <code>revenue</code> запятую и третий столбец: <code>SUM(revenue) OVER () AS total</code>. <code>AS total</code> даёт столбцу имя, которое ждёт проверка.",
+        solution: "SELECT order_id, revenue,\n       SUM(revenue) OVER () AS total\nFROM orders\nWHERE user_id = 65;"
+      },
+      {
+        title: "Отдельно для каждого: PARTITION BY",
+        body: `
+<p>Возьмём двух пользователей, 65 и 76. <code>SUM(revenue) OVER ()</code> сложит заказы обоих — 21 524,37 ₽ в каждой строке. А нужна сумма каждого клиента отдельно.</p>
+<p>Для этого в скобках <code>OVER</code> пишут <code>PARTITION BY user_id</code> — «раздели строки на группы по пользователю и считай в каждой группе отдельно». Похоже на <code>GROUP BY</code>, только строки остаются на месте.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id", "revenue"],
+            rows: [[65, 51, 2523.12], [65, 52, 3444.01], [65, 53, 3873.51], [76, 69, 5991.43], [76, 70, 2885.19], [76, 71, 2807.11]] },
+          after: { columns: ["user_id", "order_id", "revenue", "user_total"],
+            rows: [[65, 51, 2523.12, 9840.64], [65, 52, 3444.01, 9840.64], [65, 53, 3873.51, 9840.64],
+                   [76, 69, 5991.43, 11683.73], [76, 70, 2885.19, 11683.73], [76, 71, 2807.11, 11683.73]] },
+          hl: ["user_total"],
+          note: "У каждого пользователя своя сумма: окно разрезано по <code>user_id</code>."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_id</code>, <code>revenue</code> и <code>user_total</code> — сумму заказов этого пользователя.</p>",
+        starter: "SELECT user_id, order_id, revenue\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_id", "revenue", "user_total"],
+          rows: [[65, 51, 2523.12, 9840.64], [65, 52, 3444.01, 9840.64], [65, 53, 3873.51, 9840.64],
+                 [76, 69, 5991.43, 11683.73], [76, 70, 2885.19, 11683.73], [76, 71, 2807.11, 11683.73]] },
+        hint: "Четвёртый столбец — сумма с окном по пользователю: <code>SUM(revenue) OVER (PARTITION BY user_id) AS user_total</code>.",
+        solution: "SELECT user_id, order_id, revenue,\n       SUM(revenue) OVER (PARTITION BY user_id) AS user_total\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Номер по порядку: ROW_NUMBER",
+        body: `
+<p><code>ROW_NUMBER()</code> ставит строкам номера: 1, 2, 3… В каждой группе <code>PARTITION BY</code> счёт начинается заново с единицы. Скобки после функции пустые: ей не нужен столбец, она только считает строки.</p>
+<p>Номер зависит от порядка, поэтому в <code>OVER</code> добавляют <code>ORDER BY</code>: <code>OVER (PARTITION BY user_id ORDER BY order_date)</code> — «пронумеруй заказы каждого пользователя от раннего к позднему». Этот <code>ORDER BY</code> задаёт порядок счёта и не сортирует вывод: вывод сортирует <code>ORDER BY</code> в конце запроса.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date"],
+            rows: [[65, "2024-03-27"], [65, "2024-04-05"], [65, "2024-04-27"], [76, "2024-05-02"], [76, "2024-06-12"], [76, "2024-07-03"]] },
+          after: { columns: ["user_id", "order_date", "order_num"],
+            rows: [[65, "2024-03-27", 1], [65, "2024-04-05", 2], [65, "2024-04-27", 3],
+                   [76, "2024-05-02", 1], [76, "2024-06-12", 2], [76, "2024-07-03", 3]] },
+          hl: ["order_num"],
+          note: "Самый ранний заказ каждого пользователя получил 1 — так находят первую покупку."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_date</code> и <code>order_num</code> — номер заказа по счёту у этого пользователя.</p>",
+        starter: "SELECT user_id, order_date\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_date", "order_num"],
+          rows: [[65, "2024-03-27", 1], [65, "2024-04-05", 2], [65, "2024-04-27", 3],
+                 [76, "2024-05-02", 1], [76, "2024-06-12", 2], [76, "2024-07-03", 3]] },
+        hint: "Третий столбец: <code>ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num</code>. Без <code>ORDER BY</code> внутри скобок база пронумерует заказы в случайном порядке.",
+        solution: "SELECT user_id, order_date,\n       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Только первые заказы: WITH",
+        body: `
+<p>Хочется дописать <code>WHERE order_num = 1</code> — и не выйдет: база ответит <code>misuse of aliased window function</code>. <code>WHERE</code> выполняется раньше окон, и номеров в этот момент ещё нет.</p>
+<p>Выход — считать в два приёма. <code>WITH</code> даёт промежуточному результату имя, и дальше из него выбирают, как из обычной таблицы:</p>
+<pre><code>WITH numbered AS (
+    SELECT user_id, order_date, revenue,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num
+    FROM orders
+)
+SELECT user_id, order_date, revenue
+FROM numbered
+WHERE order_num = 1;</code></pre>
+<p>В скобках — запрос из шага 3. Снаружи номера уже готовы, и фильтр по ним работает.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date", "revenue", "order_num"],
+            rows: [[65, "2024-03-27", 2523.12, 1], [65, "2024-04-05", 3444.01, 2], [65, "2024-04-27", 3873.51, 3],
+                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3]] },
+          after: { columns: ["user_id", "order_date", "revenue"],
+            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74]] },
+          hl: [], keep: [0, 3],
+          note: "«Было» — то, что вернул <code>numbered</code>. «Стало» — внешний запрос оставил строки с номером 1."
+        },
+        task: "<p><strong>Задание.</strong> Первое впечатление о магазине — первый заказ. Найдите пользователей, у которых первый заказ дороже 7 000 ₽: выведите <code>user_id</code>, <code>order_date</code> и <code>revenue</code> этого заказа. Оба условия — номер и сумму — ставьте снаружи, после скобок <code>WITH</code>.</p>",
+        starter: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered;",
+        expected: { ordered: false, columns: ["user_id", "order_date", "revenue"],
+          rows: [[74, "2024-02-09", 7437.5], [80, "2024-03-03", 8173.74], [156, "2024-07-05", 9550.87],
+                 [205, "2024-07-18", 14473.88], [212, "2024-05-12", 7482.54], [217, "2024-01-21", 7196.22]] },
+        hint: "Перед точкой с запятой добавьте строку <code>WHERE order_num = 1 AND revenue &gt; 7000</code>. Если поставить <code>revenue &gt; 7000</code> внутри скобок, база пронумерует только крупные заказы, и «первым» окажется не первый.",
+        solution: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered\nWHERE order_num = 1 AND revenue > 7000;"
+      },
+      {
+        title: "Предыдущий заказ: LAG",
+        body: `
+<p><code>LAG(order_date)</code> берёт значение из предыдущей строки окна — дату прошлого заказа того же пользователя. Окно то же, что в шаге 3: <code>OVER (PARTITION BY user_id ORDER BY order_date)</code>. Именно оно решает, какая строка считается предыдущей.</p>
+<p>У первого заказа предыдущего нет, и там будет <code>NULL</code> — пустое значение. Это не ошибка: так база говорит «здесь ничего нет». Парная функция <code>LEAD</code> берёт значение из следующей строки.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date"],
+            rows: [[65, "2024-03-27"], [65, "2024-04-05"], [65, "2024-04-27"], [76, "2024-05-02"], [76, "2024-06-12"], [76, "2024-07-03"]] },
+          after: { columns: ["user_id", "order_date", "prev_date"],
+            rows: [[65, "2024-03-27", null], [65, "2024-04-05", "2024-03-27"], [65, "2024-04-27", "2024-04-05"],
+                   [76, "2024-05-02", null], [76, "2024-06-12", "2024-05-02"], [76, "2024-07-03", "2024-06-12"]] },
+          hl: ["prev_date"],
+          note: "Две даты в одной строке — из них в основной задаче получится число дней между заказами."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_date</code> и <code>prev_date</code> — дату предыдущего заказа этого пользователя.</p>",
+        starter: "SELECT user_id, order_date\nFROM orders\nWHERE user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_date", "prev_date"],
+          rows: [[65, "2024-03-27", null], [65, "2024-04-05", "2024-03-27"], [65, "2024-04-27", "2024-04-05"],
+                 [76, "2024-05-02", null], [76, "2024-06-12", "2024-05-02"], [76, "2024-07-03", "2024-06-12"]] },
+        hint: "Третий столбец: <code>LAG(order_date) OVER (PARTITION BY user_id ORDER BY order_date) AS prev_date</code>.",
+        solution: "SELECT user_id, order_date,\n       LAG(order_date) OVER (PARTITION BY user_id ORDER BY order_date) AS prev_date\nFROM orders\nWHERE user_id IN (65, 76);"
+      },
+      {
+        title: "Сами: самый дорогой заказ в каждом городе",
+        body: `
+<p>Новых слов здесь нет — соберите запрос из того, что уже написали. Вопрос от продакта: какой самый дорогой <strong>оплаченный</strong> заказ в каждом городе?</p>
+<p>Город хранится в <code>users</code>, сумма — в <code>orders</code>, поэтому понадобится <code>JOIN</code> из урока 1.1. Дальше — как в шаге 4: пронумеровать заказы внутри города от дорогого к дешёвому, <code>ORDER BY revenue DESC</code>, и оставить номер 1.</p>`,
+        task: "<p><strong>Задание.</strong> Выведите <code>city</code>, <code>user_id</code>, <code>order_id</code> и <code>revenue</code> самого дорогого оплаченного заказа в каждом городе — по одной строке на город.</p>",
+        starter: "-- 1. Соединить orders и users, оставить оплаченные заказы\n-- 2. Пронумеровать заказы внутри города от дорогого к дешёвому\n-- 3. Оставить номер 1\n",
+        expected: { ordered: false, columns: ["city", "user_id", "order_id", "revenue"],
+          rows: [["Екатеринбург", 76, 69, 5991.43], ["Казань", 205, 198, 10177.29], ["Москва", 3, 5, 9071.54],
+                 ["Новосибирск", 156, 156, 9550.87], ["Санкт-Петербург", 91, 89, 8835.71]] },
+        hint: "Внутри <code>WITH</code>: <code>FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.status = 'paid'</code> и столбец <code>ROW_NUMBER() OVER (PARTITION BY u.city ORDER BY o.revenue DESC) AS rn</code>. Снаружи — <code>WHERE rn = 1</code>. Без фильтра по статусу в Казани победит возврат, а в Екатеринбурге — неоплаченный заказ.",
+        solution: "WITH ranked AS (\n    SELECT u.city, o.user_id, o.order_id, o.revenue,\n           ROW_NUMBER() OVER (PARTITION BY u.city ORDER BY o.revenue DESC) AS rn\n    FROM orders o\n    JOIN users u ON u.user_id = o.user_id\n    WHERE o.status = 'paid'\n)\nSELECT city, user_id, order_id, revenue\nFROM ranked\nWHERE rn = 1;"
+      }
+    ]
+  },
 
   ticket: {
     from: "Костя, продакт",
@@ -62971,6 +63146,32 @@ function renderTable(cols, rows, badRow) {
   return h;
 }
 
+/* Таблицы «было → стало» у шага практикума: те же строки базы до новой
+   конструкции и после неё. Ручкой выделено то, на что смотреть: новые
+   столбцы в «стало» (hl) или строки «было», которые останутся (keep). */
+function baHtml(ba) {
+  function table(t, hl, keep) {
+    const on = t.columns.map(function (c) { return hl.indexOf(c) >= 0; });
+    return '<table class="ba-t"><thead><tr>' + t.columns.map(function (c, i) {
+        return "<th" + (on[i] ? ' class="hl"' : "") + ">" + esc(c) + "</th>";
+      }).join("") + "</tr></thead><tbody>" +
+      t.rows.map(function (r, ri) {
+        const kept = keep.indexOf(ri) >= 0;
+        return "<tr>" + r.map(function (v, i) {
+          const cls = [typeof v === "number" ? "num" : "", v === null ? "nul" : "", on[i] || kept ? "hl" : ""]
+            .filter(Boolean).join(" ");
+          return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + (v === null ? "NULL" : esc(v)) + "</td>";
+        }).join("") + "</tr>";
+      }).join("") + "</tbody></table>";
+  }
+  return '<div class="ba">' +
+      '<figure class="ba-side"><figcaption>Было</figcaption>' + table(ba.before, [], ba.keep || []) + "</figure>" +
+      '<span class="ba-arrow" aria-hidden="true">→</span>' +
+      '<figure class="ba-side"><figcaption>Стало</figcaption>' + table(ba.after, ba.hl || [], []) + "</figure>" +
+    "</div>" +
+    (ba.note ? '<p class="ba-note">' + ba.note + "</p>" : "");
+}
+
 /* ---------- модальное окно ---------- */
 function modal(title, html) {
   let bg = $("#modalBg");
@@ -63063,7 +63264,7 @@ const Terms = {
      варианты ответа (объяснение подсказало бы ответ) и сами
      объяснения. */
   SKIP_TAG: /^(PRE|A|BUTTON|H1|H2|H3|H4|H5|H6|SUMMARY|TEXTAREA|SCRIPT|STYLE|SVG|MJX-CONTAINER|LABEL|SELECT|INPUT)$/,
-  SKIP_CLASS: ["aside", "term-x", "q-opt", "CodeMirror", "kicker", "hs-n"],
+  SKIP_CLASS: ["aside", "term-x", "q-opt", "CodeMirror", "kicker", "hs-n", "ba"],
 
   mark: function (root) {
     const G = window.GLOSSARY;
@@ -63436,40 +63637,49 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
    шага: на телефоне восемь редакторов сразу были бы лишними.
    Пройденные шаги — корзина steps («урок:номер»), код шага —
    корзина code («урок:sномер»).
+   Тот же движок ведёт практикум внутри обычного урока (1.2): у его
+   ключей метка tag = "p" — «m1l2:p0» и «m1l2:ps0», — чтобы шаги
+   практикума не смешались с шагами урока.
    ============================================================ */
 
 const Steps = {
-  key: function (id, n) { return id + ":" + n; },
-  passed: function (id, n) { return !!Store.get("steps", Steps.key(id, n), false); },
-  firstOpen: function (id, C) {
-    for (let n = 0; n < C.steps.length; n++) if (!Steps.passed(id, n)) return n;
+  key: function (id, n, tag) { return id + ":" + (tag || "") + n; },
+  passed: function (id, n, tag) { return !!Store.get("steps", Steps.key(id, n, tag), false); },
+  firstOpen: function (id, S, tag) {
+    for (let n = 0; n < S.steps.length; n++) if (!Steps.passed(id, n, tag)) return n;
     return -1;
   },
-  clear: function (id, C) {
-    C.steps.forEach(function (s, n) {
-      if (Steps.passed(id, n)) Store.set("steps", Steps.key(id, n), false);
+  clear: function (id, S, tag) {
+    S.steps.forEach(function (s, n) {
+      if (Steps.passed(id, n, tag)) Store.set("steps", Steps.key(id, n, tag), false);
     });
   },
 
-  /* Рисует ленту шагов урока L в box. onFinish(fresh) вызывается, когда
-     пройдены все шаги: fresh — только что, а не уже при открытии. */
-  render: function (L, C, box, onFinish) {
-    const id = L.id, total = C.steps.length;
+  /* Рисует в box ленту шагов S (урок 0.1 или практикум урока L).
+     onFinish(fresh) вызывается, когда пройдены все шаги: fresh —
+     только что, а не уже при открытии. */
+  render: function (L, S, box, onFinish, tag) {
+    const id = L.id, total = S.steps.length;
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
-    let open = Steps.firstOpen(id, C);
+    let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
     let editor = null, last = null, helped = false;
 
     box.innerHTML =
       '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
-        '<div class="schema-body">' + C.schema + "</div></details>" +
+        '<div class="schema-body">' + S.schema + "</div></details>" +
       '<ol class="steps"></ol>';
     const list = $(".steps", box);
 
-    function codeKey(n) { return id + ":s" + n; }
+    function codeKey(n) { return id + ":" + (tag || "") + "s" + n; }
     function codeOf(n) {
       const saved = Store.get("code", codeKey(n), null);
-      return saved !== null ? saved : (C.steps[n].starter || "");
+      return saved !== null ? saved : (S.steps[n].starter || "");
+    }
+    /* объяснение шага, таблицы «было → стало» и задание — один текст:
+       термины в нём подчёркиваются по первому упоминанию */
+    function textOf(s) {
+      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + "</div>";
     }
     /* первая значимая строка запроса — подпись свёрнутого шага */
     function firstLine(src) {
@@ -63478,19 +63688,19 @@ const Steps = {
       })[0] || "").trim();
     }
     function mark(n) {
-      return '<span class="st-n">' + (Steps.passed(id, n)
-        ? penTick(Steps.key(id, n), n === justPassed ? "draw" : "")
+      return '<span class="st-n">' + (Steps.passed(id, n, tag)
+        ? penTick(Steps.key(id, n, tag), n === justPassed ? "draw" : "")
         : String(n + 1)) + "</span>";
     }
 
     function itemHtml(n) {
-      const s = C.steps[n];
+      const s = S.steps[n];
       if (n === open) {
         return '<li class="st open" data-n="' + n + '">' +
           '<div class="st-h">' + mark(n) + '<h3 class="st-t">' + esc(s.title) + "</h3>" +
             '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
           '<div class="st-b">' +
-            '<div class="theory">' + s.body + "</div>" +
+            textOf(s) +
             '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
               '<textarea class="st-ta"></textarea></div>' +
             '<div class="st-actions">' +
@@ -63504,13 +63714,13 @@ const Steps = {
               '<div class="io-body st-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
           "</div></li>";
       }
-      if (Steps.passed(id, n)) {
+      if (Steps.passed(id, n, tag)) {
         const shown = !!peek[n];
         return '<li class="st done' + (shown ? " peek" : "") + '" data-n="' + n + '">' +
           '<button class="st-h" type="button" aria-expanded="' + shown + '">' + mark(n) +
             '<span class="st-t">' + esc(s.title) + "</span>" +
             '<code class="st-q">' + esc(firstLine(codeOf(n))) + "</code></button>" +
-          (shown ? '<div class="st-b"><div class="theory">' + s.body + "</div>" +
+          (shown ? '<div class="st-b">' + textOf(s) +
             '<pre class="st-code"><code>' + esc(codeOf(n)) + "</code></pre></div>" : "") +
           "</li>";
       }
@@ -63600,7 +63810,7 @@ const Steps = {
       async function check() {
         const ran = await run();
         if (!ran || open !== n) return;
-        const r = Check.sql(last, C.steps[n].expected);
+        const r = Check.sql(last, S.steps[n].expected);
         if (r.ok) { pass(n); return; }
         if (last) showRows(r.row === undefined ? -1 : r.row);
         status("bad", "Пока не совпадает", esc(r.why));
@@ -63608,7 +63818,7 @@ const Steps = {
 
       /* первое нажатие — подсказка, второе — решение в редакторе */
       function help() {
-        const s = C.steps[n], hint = q(".st-hint"), btn = q(".st-help");
+        const s = S.steps[n], hint = q(".st-hint"), btn = q(".st-help");
         if (!helped) {
           hint.hidden = false;
           hint.innerHTML = s.hint;
@@ -63638,9 +63848,9 @@ const Steps = {
     }
 
     function pass(n) {
-      Store.set("steps", Steps.key(id, n), Date.now());
+      Store.set("steps", Steps.key(id, n, tag), Date.now());
       justPassed = n;
-      open = Steps.firstOpen(id, C);
+      open = Steps.firstOpen(id, S, tag);
       draw();
       if (open >= 0) {
         const li = $(".st.open", list);
@@ -63794,10 +64004,12 @@ function renderLesson(app, id) {
   const hasQuiz = !!(C.quiz && C.quiz.length);
   const hasCards = !!(C.cards && C.cards.length);
   const hasLinks = !!(C.links && C.links.length);
+  const P = C.practicum;
 
   /* ---------- якорная навигация ---------- */
   const secs = [{ id: "s-theory", t: "Теория" }];
   if (hasCards) secs.push({ id: "s-cards", t: "Карточки" });
+  if (P) secs.push({ id: "s-practice", t: "Практикум" });
   secs.push({ id: "s-task", t: "Задача" });
   if (hasDrills) secs.push({ id: "s-drills", t: "Тренажёр" });
   if (hasQuiz) secs.push({ id: "s-quiz", t: "Самопроверка" });
@@ -63872,6 +64084,14 @@ function renderLesson(app, id) {
     "</section>" +
 
     (hasCards ? cardsBlockHtml() : "") +
+
+    /* практикум — шаги от одной конструкции к другой перед основной задачей */
+    (P ? '<section class="block" id="s-practice">' +
+      '<div class="block-h"><h2>Практикум</h2></div>' +
+      (P.intro ? '<p class="block-intro">' + P.intro + "</p>" : "") +
+      '<div id="practiceBox"></div>' +
+      '<div class="status st-final" id="practiceFinal"></div>' +
+    "</section>" : "") +
 
     '<section class="block has-margin" id="s-task">' +
       (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
@@ -63975,6 +64195,21 @@ function renderLesson(app, id) {
 
   /* ---------- колода карточек ---------- */
   if (hasCards) mountDeck(id, C);
+
+  /* ---------- практикум ----------
+     Урок он не отмечает: пройденным урок делает основная задача. По
+     окончании — ссылка к ней, приёмы практикума там собираются вместе. */
+  if (P) {
+    idle(function () { Engine.sql().catch(function () {}); });
+    const pfin = $("#practiceFinal");
+    Steps.render(L, P, $("#practiceBox"), function (fresh) {
+      pfin.className = "status st-final show ok";
+      pfin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
+          (fresh ? penTick(id + ":p", "draw") : ICON.ok) + "</span>" +
+        '<span class="s-body"><b>Практикум пройден</b>' + (P.done || "Все шаги решены.") +
+          '<br><a href="#s-task">Перейти к основной задаче</a></span>';
+    }, "p");
+  }
 
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");
