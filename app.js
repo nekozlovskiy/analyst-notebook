@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {} };
+                  days: {}, review: {}, prep: {}, steps: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -114,7 +114,7 @@ const Store = (function () {
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
-      ["done", "attempts", "time", "days"].forEach(function (b) {
+      ["done", "attempts", "time", "days", "steps"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -1859,6 +1859,292 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
   });
 }
 
+/* ============================================================
+   Пошаговый урок
+
+   Урок 0.1 учит SQL с нуля, поэтому теория в нём нарезана на шаги
+   и у каждого шага своя маленькая задача. Открыт один шаг — первый
+   нерешённый; решённые сворачиваются в строку с запросом ученика,
+   будущие видны серыми заголовками. Редактор есть только у открытого
+   шага: на телефоне восемь редакторов сразу были бы лишними.
+   Пройденные шаги — корзина steps («урок:номер»), код шага —
+   корзина code («урок:sномер»).
+   ============================================================ */
+
+const Steps = {
+  key: function (id, n) { return id + ":" + n; },
+  passed: function (id, n) { return !!Store.get("steps", Steps.key(id, n), false); },
+  firstOpen: function (id, C) {
+    for (let n = 0; n < C.steps.length; n++) if (!Steps.passed(id, n)) return n;
+    return -1;
+  },
+  clear: function (id, C) {
+    C.steps.forEach(function (s, n) {
+      if (Steps.passed(id, n)) Store.set("steps", Steps.key(id, n), false);
+    });
+  },
+
+  /* Рисует ленту шагов урока L в box. onFinish(fresh) вызывается, когда
+     пройдены все шаги: fresh — только что, а не уже при открытии. */
+  render: function (L, C, box, onFinish) {
+    const id = L.id, total = C.steps.length;
+    const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
+    let open = Steps.firstOpen(id, C);
+    let justPassed = -1;
+    let editor = null, last = null, helped = false;
+
+    box.innerHTML =
+      '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
+        '<div class="schema-body">' + C.schema + "</div></details>" +
+      '<ol class="steps"></ol>';
+    const list = $(".steps", box);
+
+    function codeKey(n) { return id + ":s" + n; }
+    function codeOf(n) {
+      const saved = Store.get("code", codeKey(n), null);
+      return saved !== null ? saved : (C.steps[n].starter || "");
+    }
+    /* первая значимая строка запроса — подпись свёрнутого шага */
+    function firstLine(src) {
+      return (String(src).split("\n").filter(function (x) {
+        return x.trim() && !/^\s*--/.test(x);
+      })[0] || "").trim();
+    }
+    function mark(n) {
+      return '<span class="st-n">' + (Steps.passed(id, n)
+        ? penTick(Steps.key(id, n), n === justPassed ? "draw" : "")
+        : String(n + 1)) + "</span>";
+    }
+
+    function itemHtml(n) {
+      const s = C.steps[n];
+      if (n === open) {
+        return '<li class="st open" data-n="' + n + '">' +
+          '<div class="st-h">' + mark(n) + '<h3 class="st-t">' + esc(s.title) + "</h3>" +
+            '<span class="st-of">шаг ' + (n + 1) + " из " + total + "</span></div>" +
+          '<div class="st-b">' +
+            '<div class="theory">' + s.body + "</div>" +
+            '<div class="editor-shell st-ed"><div class="editor-h"><span>шаг ' + (n + 1) + ".sql</span></div>" +
+              '<textarea class="st-ta"></textarea></div>' +
+            '<div class="st-actions">' +
+              '<button class="btn primary st-run" type="button">' + ICON.play + "Запустить</button>" +
+              '<button class="btn check st-check" type="button">' + ICON.check + "Проверить</button>" +
+              '<button class="linkbtn st-help" type="button">Не получается</button>' +
+            "</div>" +
+            '<div class="st-hint" hidden></div>' +
+            '<div class="status st-status"></div>' +
+            '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
+              '<div class="io-body st-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
+          "</div></li>";
+      }
+      if (Steps.passed(id, n)) {
+        const shown = !!peek[n];
+        return '<li class="st done' + (shown ? " peek" : "") + '" data-n="' + n + '">' +
+          '<button class="st-h" type="button" aria-expanded="' + shown + '">' + mark(n) +
+            '<span class="st-t">' + esc(s.title) + "</span>" +
+            '<code class="st-q">' + esc(firstLine(codeOf(n))) + "</code></button>" +
+          (shown ? '<div class="st-b"><div class="theory">' + s.body + "</div>" +
+            '<pre class="st-code"><code>' + esc(codeOf(n)) + "</code></pre></div>" : "") +
+          "</li>";
+      }
+      return '<li class="st todo" data-n="' + n + '"><div class="st-h">' + mark(n) +
+        '<span class="st-t">' + esc(s.title) + "</span></div></li>";
+    }
+
+    /* пройденный шаг раскрывается и сворачивается на месте, остальные не трогаем */
+    function bindDone(li) {
+      $(".st-h", li).addEventListener("click", function () {
+        const n = +li.dataset.n;
+        peek[n] = !peek[n];
+        const tmp = document.createElement("div");
+        tmp.innerHTML = itemHtml(n);
+        const fresh = tmp.firstChild;
+        li.parentNode.replaceChild(fresh, li);
+        bindDone(fresh);
+      });
+    }
+
+    function draw() {
+      editor = null; last = null; helped = false;
+      let html = "";
+      for (let n = 0; n < total; n++) html += itemHtml(n);
+      justPassed = -1;
+      list.innerHTML = html;
+      Array.prototype.forEach.call(list.querySelectorAll(".st.done"), bindDone);
+      if (open >= 0) mountOpen();
+    }
+
+    function mountOpen() {
+      const n = open;
+      const li = $(".st.open", list);
+      const q = function (sel) { return $(sel, li); };
+
+      function status(kind, title, body) {
+        const s = q(".st-status");
+        if (!kind) { s.className = "status st-status"; s.innerHTML = ""; return; }
+        const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+        s.className = "status st-status show " + kind;
+        s.innerHTML = '<span class="s-ico">' + ico + "</span>" +
+          '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
+      }
+      function showRows(badRow) {
+        q(".st-res").innerHTML = renderTable(last.columns, last.values, badRow) +
+          '<div class="st-rows">' + last.values.length + " " +
+          plural(last.values.length, "строка", "строки", "строк") + "</div>";
+      }
+
+      /* true — запрос выполнен (строк может и не быть), false — пусто или ошибка */
+      async function run() {
+        if (open !== n || !document.body.contains(li)) return false;
+        status(null);
+        const code = editor ? editor.get() : q(".st-ta").value;
+        if (!code.trim()) { status("warn", "Пусто", "Сначала напишите запрос."); return false; }
+        const rb = q(".st-run");
+        rb.disabled = true;
+        if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
+        try {
+          const db = await Engine.sql();
+          if (open !== n || !document.body.contains(li)) return false;
+          let res;
+          try { res = db.exec(code); }
+          catch (e) {
+            last = null;
+            q(".st-res").innerHTML = '<pre><span class="err">' + esc("SQLite: " + e.message) + "</span></pre>";
+            status("bad", "Запрос упал с ошибкой",
+              "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась.");
+            return false;
+          }
+          last = res.length ? res[res.length - 1] : null;
+          if (last) showRows(-1);
+          else q(".st-res").innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          return true;
+        } catch (e) {
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        } finally {
+          if (document.body.contains(rb)) rb.disabled = false;
+        }
+      }
+
+      /* «Проверить» всегда выполняет то, что сейчас в редакторе */
+      async function check() {
+        const ran = await run();
+        if (!ran || open !== n) return;
+        const r = Check.sql(last, C.steps[n].expected);
+        if (r.ok) { pass(n); return; }
+        if (last) showRows(r.row === undefined ? -1 : r.row);
+        status("bad", "Пока не совпадает", esc(r.why));
+      }
+
+      /* первое нажатие — подсказка, второе — решение в редакторе */
+      function help() {
+        const s = C.steps[n], hint = q(".st-hint"), btn = q(".st-help");
+        if (!helped) {
+          hint.hidden = false;
+          hint.innerHTML = s.hint;
+          btn.textContent = "Показать решение";
+          helped = true;
+          return;
+        }
+        if (editor) editor.set(s.solution); else q(".st-ta").value = s.solution;
+        Store.set("code", codeKey(n), s.solution);
+        status("warn", "Решение в редакторе",
+          "Прочитайте его, запустите и проверьте: шаг засчитается после «Проверить».");
+        btn.hidden = true;
+      }
+
+      q(".st-run").addEventListener("click", run);
+      q(".st-check").addEventListener("click", check);
+      q(".st-help").addEventListener("click", help);
+
+      mountEditor(q(".st-ta"), "sql", codeOf(n),
+        function (v) { Store.set("code", codeKey(n), v); }, run,
+        function () {
+          status("warn", "Редактор без подсветки",
+            "CodeMirror не загрузился — похоже, нет интернета. Запрос всё равно можно писать и запускать.");
+        }
+      ).then(function (ed) { if (open === n && document.body.contains(li)) editor = ed; });
+    }
+
+    function pass(n) {
+      Store.set("steps", Steps.key(id, n), Date.now());
+      justPassed = n;
+      open = Steps.firstOpen(id, C);
+      draw();
+      if (open >= 0) {
+        const li = $(".st.open", list);
+        if (li) li.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (onFinish) {
+        onFinish(true);
+      }
+    }
+
+    draw();
+    if (open < 0 && onFinish) onFinish(false);
+  }
+};
+
+/* Страница пошагового урока: шапка, шаги, карточки, «как дальше», ссылки. */
+function renderStepsLesson(app, L, C) {
+  const id = L.id;
+  const hasCards = !!(C.cards && C.cards.length);
+  const hasLinks = !!(C.links && C.links.length);
+
+  const secs = [{ id: "s-steps", t: "Шаги" }];
+  if (hasCards) secs.push({ id: "s-cards", t: "Карточки" });
+  if (C.after) secs.push({ id: "s-after", t: "Как дальше" });
+  if (hasLinks) secs.push({ id: "s-links", t: "Что почитать" });
+
+  const main = el("main", { class: "wrap lesson-wrap" });
+  main.innerHTML =
+    lessonHeadHtml(L, C, "SQL с нуля") +
+    secNavHtml(secs) +
+    '<section class="block has-margin" id="s-steps">' +
+      (L.sayTask ? '<div class="aside"><p>' + esc(L.sayTask) + "</p></div>" : "") +
+      '<div class="block-h"><h2>Шаги</h2></div>' +
+      '<div id="stepsBox"></div>' +
+      '<div class="status st-final" id="stFinal"></div>' +
+    "</section>" +
+    (hasCards ? cardsBlockHtml() : "") +
+    (C.after ? '<section class="block" id="s-after">' +
+      '<div class="block-h"><h2>Как устроены следующие уроки</h2></div>' +
+      '<div class="theory">' + C.after + "</div></section>" : "") +
+    (hasLinks ? linksBlockHtml(C) : "") +
+    '<nav class="lesson-nav" id="lnav"></nav>';
+  app.appendChild(main);
+
+  mountReadbar(secs);
+  if (hasCards) mountDeck(id, C);
+
+  const box = $("#stepsBox"), fin = $("#stFinal");
+
+  function finished(fresh) {
+    if (!Course.isDone(id)) { Store.set("done", id, Date.now()); refreshBar(); }
+    fin.className = "status st-final show ok";
+    fin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
+        (fresh ? penTick(id, "draw") : ICON.ok) + "</span>" +
+      '<span class="s-body"><b>Урок пройден</b>Все шаги решены. Следующий урок — соединение таблиц, ' +
+        "и его задача опирается ровно на то, что вы здесь написали." +
+        '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button></span>';
+    $("#nextBtn").addEventListener("click", function () {
+      const nx = Course.neighbour(id, 1);
+      Router.go(nx ? "#" + nx.id : "#");
+    });
+    updateNav();
+  }
+
+  /* «снять отметку» у пошагового урока начинает его заново с шага 1; код остаётся */
+  const updateNav = mountLessonNav(id, function () {
+    Steps.clear(id, C);
+    fin.className = "status st-final";
+    fin.innerHTML = "";
+    Steps.render(L, C, box, finished);
+  });
+  Steps.render(L, C, box, finished);
+  mountTimer(id);
+}
+
 function renderLesson(app, id) {
   const L = Course.byId(id);
 
@@ -1909,6 +2195,15 @@ function renderLesson(app, id) {
   const M = L.module;
   document.title = L.num + " " + L.title + " — Тетрадь аналитика";
   mountHeader("<b>Модуль " + M.num + ":</b> " + esc(M.title) + ", урок " + L.num);
+
+  /* Пошаговый урок (0.1) устроен иначе: вместо теории и одной задачи —
+     лента шагов со своими редакторами. Движок SQL поднимаем заранее,
+     чтобы первое «Запустить» не ждало загрузки. */
+  if (C.steps) {
+    idle(function () { Engine.sql().catch(function () {}); });
+    renderStepsLesson(app, L, C);
+    return;
+  }
 
   if (C.math) {
     if (!window.MathJax) {

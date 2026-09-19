@@ -1173,6 +1173,67 @@ table.res td.num { text-align: right; }
 .d-reveal[open] > summary::before { content: "⌄ "; }
 
 /* ============================================================
+   11а. Урок — пошаговый (0.1)
+   Шаги — строки одной ленты, отчёркнутые линейками. Рамку получают
+   только редактор и вывод открытого шага.
+   ============================================================ */
+
+.steps { list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.st { border-bottom: 1px solid var(--rule); scroll-margin-top: 96px; }
+.st-h {
+  display: flex; align-items: baseline; gap: 14px; width: 100%; min-width: 0;
+  padding: 13px 0; background: none; border: 0; font: inherit; color: inherit; text-align: left;
+}
+button.st-h { cursor: pointer; }
+button.st-h:hover .st-t { color: var(--ink); }
+.st-n {
+  flex: none; width: 26px; font-family: var(--mono); font-size: 13px;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.st-n .pen-tick { width: 20px; height: 20px; vertical-align: -4px; }
+.st-t { margin: 0; font-size: 16px; font-weight: 500; color: var(--ink-2); }
+.st.todo .st-t { color: var(--ink-4); }
+.st.done .st-t { flex: none; }
+.st-q {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink-3);
+}
+.st.open .st-n { color: var(--pen); font-weight: 600; }
+.st.open .st-t {
+  font-family: var(--serif); font-size: 21px; font-weight: 700;
+  color: var(--ink); letter-spacing: -0.012em;
+}
+.st-of { margin-left: auto; font-size: 13px; color: var(--ink-3); white-space: nowrap; }
+.st-b { padding: 0 0 24px 40px; }
+.st-b .theory { margin-bottom: 14px; }
+/* codemirror.min.css грузится позже и задаёт высоту 300px — запрос шага
+   в три строки не должен сидеть в таком колодце: редактор растёт по коду */
+.st-ed .CodeMirror { height: auto; }
+.st-ed .CodeMirror-scroll { min-height: 132px; }
+.st-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.st-help { font-size: 14px; margin-left: 6px; }
+.st-hint {
+  margin: 0 0 14px; padding: 2px 0 2px 14px; max-width: var(--measure);
+  border-left: 2px solid var(--pen-line); border-radius: 0;
+  font-family: var(--serif); font-size: 16px; line-height: 1.6; color: var(--ink-2);
+}
+.st-hint code {
+  font-family: var(--mono); font-size: .86em; background: var(--paper-2);
+  padding: 1px 5px; border-radius: var(--r); border: 1px solid var(--rule-soft);
+}
+.st-out .io-body { max-height: 320px; }
+.st-rows { margin-top: 7px; font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
+.st-code { margin: 0; }
+.st-final { margin-top: 22px; }
+
+@media (max-width: 720px) {
+  .st-b { padding-left: 0; }
+  .st-of { display: none; }
+  .st-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+  .st-help { width: 100%; margin: 4px 0 0; text-align: center; min-height: 44px; }
+}
+
+/* ============================================================
    12. Урок — самопроверка
    ============================================================ */
 
