@@ -155,7 +155,16 @@ const Course = (function () {
       flat.push(l);
     });
   });
-  const readyList = flat.filter(function (l) { return l.ready; });
+  /* Порядок прохождения: урок с полем before встаёт прямо перед
+     указанным уроком (0.2 «Python с нуля» — перед 2.1). Карта курса и
+     номера уроков остаются по местам в модулях. */
+  const order = flat.filter(function (l) { return !l.before; });
+  flat.forEach(function (l) {
+    if (!l.before) return;
+    const at = order.findIndex(function (x) { return x.id === l.before; });
+    order.splice(at < 0 ? order.length : at, 0, l);
+  });
+  const readyList = order.filter(function (l) { return l.ready; });
 
   const api = {
     data: C,
@@ -1196,14 +1205,21 @@ function renderSummary(app, id) {
   const work = mins ? ", " + (mins < 60 ? mins + " " + plural(mins, "минута", "минуты", "минут")
                                         : hrs + " " + plural(hrs, "час", "часа", "часов")) + " работы" : "";
 
-  const next = closed ? mods[mods.indexOf(m) + 1] : m;
-  const target = next ? (next.lessons.filter(function (l) { return !Course.isDone(l.id); })[0] || next.lessons[0]) : null;
+  /* Что дальше — по порядку прохождения, а не по карте: первый
+     непройденный урок после последнего урока модуля. Если он не из
+     следующего модуля (0.2 после модуля 1, 2.1 после модуля 0), зовём
+     прямо в урок. */
+  const at = Math.max.apply(null, m.lessons.map(function (l) { return Course.ready.indexOf(l); }));
+  const after = closed ? Course.ready.slice(at + 1).filter(function (l) { return !Course.isDone(l.id); })[0] || null : null;
+  const detour = !!after && after.module !== mods[mods.indexOf(m) + 1];
+  const next = closed ? (after ? after.module : null) : m;
+  const target = detour ? after : next ? (next.lessons.filter(function (l) { return !Course.isDone(l.id); })[0] || next.lessons[0]) : null;
   const nextHtml = !target
     ? '<p class="page-empty">Это был последний модуль. Дальше — <a href="#interview">подготовка к собеседованию</a>.</p>'
     : '<a class="resume" href="#' + target.id + '"><span class="resume-txt">' +
-        '<span class="resume-k">' + (closed ? "Дальше — модуль " + next.num : "Осталось в модуле") + "</span>" +
-        '<span class="resume-t">' + (closed ? esc(next.title) : target.num + " " + esc(target.title)) + "</span>" +
-        '<span class="resume-d">' + esc(closed ? next.sub : target.desc) + "</span>" +
+        '<span class="resume-k">' + (detour ? "Дальше по порядку" : closed ? "Дальше — модуль " + next.num : "Осталось в модуле") + "</span>" +
+        '<span class="resume-t">' + (closed && !detour ? esc(next.title) : target.num + " " + esc(target.title)) + "</span>" +
+        '<span class="resume-d">' + esc(closed && !detour ? next.sub : target.desc) + "</span>" +
       '</span><span class="resume-go">' + (closed ? "Начать" : "Продолжить") + "</span></a>";
 
   const main = el("main", { class: "wrap lesson-wrap page" });

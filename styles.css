@@ -787,6 +787,8 @@ body.reading .hdr-bar { display: none; }
   font-size: 20px; line-height: 1.6; color: var(--ink-2);
   margin-bottom: 26px;
 }
+/* строка перед вводным абзацем: куда идти, если тема совсем новая */
+.theory .lead-note { font-family: var(--sans); font-size: 15px; line-height: 1.5; color: var(--ink-2); }
 
 /* врезки */
 /* Врезка — отчёркнутый кусок той же страницы, а не карточка поверх
