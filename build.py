@@ -61,8 +61,8 @@ html = drop(html, '<link rel="manifest" href="manifest.webmanifest">\n')
 # подключены в index.html и встраиваются на своё место
 EAGER = ("lessons.js", "content-core.js", "app.js")
 # на сайте грузятся по требованию — в файл кладём заранее, перед app.js
-LAZY = ("content-m1.js", "content-m2.js", "content-m3.js", "content-m4.js",
-        "content-m5.js", "content-m6.js", "data.js")
+LAZY = ("content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
+        "content-m4.js", "content-m5.js", "content-m6.js", "data.js")
 
 # закрывающий тег внутри скрипта разорвал бы страницу — проверяем заранее
 for name in ("styles.css",) + EAGER + LAZY:
