@@ -1625,6 +1625,10 @@ textarea.notes::placeholder { color: var(--ink-3); }
   box-shadow: var(--shadow-3);
 }
 .hdr-menu[hidden] { display: none; }
+
+/* закрытые числа в эталоне задачи */
+.masked { color: var(--ink-3); letter-spacing: .08em; user-select: none; }
+.ref-note { margin-top: 8px; font-size: 12.5px; color: var(--ink-3); }
 .hdr-menu a, .hm-theme {
   display: flex; align-items: center; gap: 10px;
   min-height: 48px; padding: 0 14px; border-radius: var(--r);
@@ -63667,7 +63671,21 @@ function solutionHtml(src) {
 }
 
 /* ---------- таблица результатов ---------- */
-function renderTable(cols, rows, badRow) {
+/* Число в эталоне, пока ученик его не открыл: сами числа или строка
+   вида «42,4%» прячутся, текст (города, каналы) остаётся — видно, какой
+   формы нужен ответ. */
+const MASK = '<span class="masked" aria-label="скрыто">•••</span>';
+function isNumLike(v) {
+  return typeof v === "number" || (typeof v === "string" && /^[+−-]?\s*\d[\d\s]*(?:[.,]\d+)?\s*%?$/.test(v));
+}
+/* в выводе Python закрываются числа, но не даты вида 2024-01-15 */
+function maskStdout(t) {
+  return esc(t).replace(/\d{4}-\d{2}(?:-\d{2})?|\d+(?:[.,]\d+)*/g, function (m) {
+    return m.indexOf("-") > 0 ? m : MASK;
+  });
+}
+
+function renderTable(cols, rows, badRow, mask) {
   let h = '<table class="res"><thead><tr>';
   cols.forEach(function (c) { h += "<th>" + esc(c) + "</th>"; });
   h += "</tr></thead><tbody>";
@@ -63675,7 +63693,7 @@ function renderTable(cols, rows, badRow) {
     h += "<tr" + (i === badRow ? ' class="rowdiff"' : "") + ">";
     r.forEach(function (v) {
       h += '<td class="' + (typeof v === "number" ? "num" : "") + '">' +
-           (v === null ? "NULL" : esc(v)) + "</td>";
+           (v === null ? "NULL" : mask && isNumLike(v) ? MASK : esc(v)) + "</td>";
     });
     h += "</tr>";
   });
@@ -64763,7 +64781,8 @@ function renderLesson(app, id) {
           "</div></div></div>" +
         '<div class="io-box"><div class="io-h"><span>' +
           (isText ? "эталонный разбор" : "ожидаемый результат") + "</span>" +
-          (isText ? '<span class="spacer"></span><button class="linkbtn" id="refBtn" type="button">показать</button>' : "") +
+          '<span class="spacer"></span><button class="linkbtn" id="refBtn" type="button">' +
+            (isText ? "показать" : "показать числа") + "</button>" +
           "</div>" +
           '<div class="io-body" id="refBox"></div></div>' +
       "</div>" +
@@ -64839,6 +64858,7 @@ function renderLesson(app, id) {
 
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");
+  let showRef = function () {};
   if (isText) {
     refBox.innerHTML = '<div class="empty">Скрыт, чтобы не подсматривать. Сначала напишите свой ответ.</div>';
     $("#refBtn").addEventListener("click", function () {
@@ -64846,10 +64866,26 @@ function renderLesson(app, id) {
       Terms.mark(refBox);
       this.remove();
     });
-  } else if (C.expected.stdout !== undefined) {
-    refBox.innerHTML = "<pre>" + esc(C.expected.stdout) + "</pre>";
   } else {
-    refBox.innerHTML = renderTable(C.expected.columns, C.expected.rows, -1);
+    /* Числа эталона закрыты, пока ученик не попросит или не решит сам:
+       иначе задача превращается в подгонку под готовый ответ. */
+    const py = C.expected.stdout !== undefined;
+    const lines = py ? C.expected.stdout.split("\n").filter(function (l) { return l.trim(); }).length
+                     : C.expected.rows.length;
+    const drawRef = function (open) {
+      refBox.innerHTML = (py
+          ? "<pre>" + (open ? esc(C.expected.stdout) : maskStdout(C.expected.stdout)) + "</pre>"
+          : renderTable(C.expected.columns, C.expected.rows, -1, !open)) +
+        (open ? "" : '<div class="ref-note">' + lines + " " + plural(lines, "строка", "строки", "строк") +
+          " · числа скрыты, чтобы не подгонять ответ</div>");
+      const b = $("#refBtn");
+      if (b) b.textContent = open ? "скрыть числа" : "показать числа";
+      refOpen = open;
+    };
+    let refOpen = false;
+    showRef = function () { drawRef(true); };
+    drawRef(Course.isDone(id));
+    $("#refBtn").addEventListener("click", function () { drawRef(!refOpen); });
   }
 
   /* ---------- статус и индикатор загрузки ---------- */
@@ -65005,6 +65041,7 @@ function renderLesson(app, id) {
   /* ---------- проверка ---------- */
   function pass(extra) {
     Store.set("done", id, Date.now());
+    showRef();
     /* решён последний урок модуля — повод посмотреть итог */
     const Mod = L.module;
     const closedHtml = Course.doneCount(Mod.lessons) === Mod.lessons.length
