@@ -1183,6 +1183,9 @@ table.res th {
   position: sticky; top: 0;
 }
 table.res tr.rowdiff td { background: var(--red-soft); }
+/* ячейка, где значение разошлось с эталоном: фон и рамка — не только цветом */
+table.res td.celldiff { background: var(--red-soft); box-shadow: inset 0 0 0 1.5px var(--red); font-weight: 600; }
+.s-hint { display: inline-block; margin-top: 4px; font-size: 13.5px; color: var(--ink-2); }
 table.res td.num { text-align: right; }
 
 /* ============================================================
