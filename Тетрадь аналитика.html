@@ -1276,6 +1276,18 @@ table.res td.num { text-align: right; }
 .drill-body pre code { background: none; border: 0; padding: 0; font-size: inherit; }
 
 .d-reveal { margin-top: 8px; border-top: 1px dashed var(--rule); padding-top: 14px; }
+.d-reveal[hidden] { display: none; }
+/* рабочее место задачи тренажёра: редактор, кнопки, вывод */
+.dr-work { margin: 18px 0 6px; font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.drill-body > .dr-work { max-width: none; }
+.dr-work .status { margin-bottom: 14px; }
+textarea.answer.dr-ans { min-height: 130px; margin-bottom: 12px; }
+.dr-self { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
+.dr-self[hidden] { display: none; }
+.dr-self span { color: var(--ink-2); margin-right: 4px; }
+.drill .d-ok { flex: none; width: 22px; height: 22px; margin-left: 4px; position: relative; top: 3px; }
+.drill .d-ok .pen-tick { width: 22px; height: 22px; }
+#drCount { color: var(--ink-2); font-weight: 500; }
 .d-reveal > summary {
   cursor: pointer; list-style: none; font-family: var(--sans);
   font-size: 13.5px; color: var(--ink-3); padding: 4px 0;
@@ -14085,6 +14097,7 @@ ORDER BY step_no;
     {
       title: "Две конверсии из одних чисел",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Воронка мобильного банка за неделю:</p>
 <table class="tbl">
   <tr><th>Шаг</th><th>Пользователей</th></tr>
@@ -14150,6 +14163,7 @@ ORDER BY users DESC;
     {
       title: "Куда вкладываться: считаем эффект",
       level: "mid",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Базовая воронка из основной задачи: 220 → 206 → 175 → 121 → 64, то есть конверсии шагов 93,6% / 85,0% / 69,1% / 52,9%.</p>
 <p>Команда может улучшить <em>один</em> шаг на 5 процентных пунктов. Посчитайте, сколько дополнительных покупок даст улучшение каждого из четырёх шагов, и объясните закономерность.</p>`,
       solution: `Сквозная конверсия - произведение шагов, поэтому прирост
@@ -14585,6 +14599,7 @@ ORDER BY c.cohort;
     {
       title: "Три определения на одних данных",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Пять пользователей, у каждого записаны дни активности от даты установки (день 0 — установка):</p>
 <pre><code>U1:  0, 1, 4, 8, 29
 U2:  0
@@ -14668,6 +14683,7 @@ ORDER BY w1 DESC;
     {
       title: "Расследование: почему удержание падает",
       level: "hard",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Из основной задачи: удержание первой недели упало с 43,0% в январе до 33,0% в мае. Продакт готов писать в отчёте «продукт деградировал с апреля».</p>
 <p>Проверьте эту версию. Постройте удержание первой недели <strong>по когортам внутри каждого канала</strong> и отдельно — долю каналов в каждой когорте. Сделайте вывод.</p>`,
       solution: `Запрос 1: удержание первой недели, канал x когорта.
@@ -14739,6 +14755,7 @@ FROM app_users GROUP BY 1 ORDER BY 1;
     {
       title: "Цензурирование: чего нет в данных",
       level: "mid",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Наблюдение в базе заканчивается 30 сентября 2024 года. Аналитик расширил когортную таблицу до четырнадцатой недели и получил такую строку удержания:</p>
 <pre><code>2024-01  512  ...  w14 = 4,1%
 2024-06  779  ...  w14 = 0,4%</code></pre>
@@ -15825,6 +15842,19 @@ print("откуда чемпионы: " + " ".join(f"{k}={v:.1f}%" for k, v in c
     {
       title: "Почему падает qcut и три способа это починить",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `print(rfm["frequency"].value_counts().sort_index().head())
+
+f1 = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+             labels=[1,2,3,4,5])
+print(f1.value_counts().sort_index().tolist())
+
+f2 = pd.qcut(rfm["frequency"], 5, duplicates="drop")
+print(f2.value_counts().sort_index().tolist())
+
+f3 = pd.cut(rfm["frequency"], bins=[0, 1, 2, 3, 5, 999],
+            labels=[1, 2, 3, 4, 5])
+print(f3.value_counts().sort_index().tolist())`,
       body: `<p>Попытка разбить частоту на квинтили падает:</p>
 <pre><code>pd.qcut(rfm["frequency"], 5, labels=[1,2,3,4,5])
 ValueError: Bin edges must be unique</code></pre>
@@ -15882,6 +15912,14 @@ print(f3.value_counts().sort_index().tolist())
     {
       title: "Ловушка: из какого канала лучшие клиенты",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `j = rfm.join(app_users.set_index("user_id")["channel"])
+t = pd.crosstab(j["channel"], j["segment"], normalize="index") * 100
+print(t["чемпионы"].sort_values(ascending=False).round(1))
+
+size = app_users.groupby("channel")["user_id"].count()
+champ = j[j["segment"] == "чемпионы"].groupby("channel").size()
+print((champ / size * 100).sort_values(ascending=False).round(1))`,
       body: `<p>Постройте два разреза и сравните их выводы.</p>
 <ol>
   <li>Доля чемпионов <strong>среди покупателей</strong> каждого канала.</li>
@@ -15933,6 +15971,18 @@ print((champ / size * 100).sort_values(ascending=False).round(1))
     {
       title: "Насколько дробной может быть матрица",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `m = rfm.pivot_table(index="R", columns="F",
+                    values="monetary", aggfunc="size").fillna(0)
+print(m.sort_index(ascending=False).astype(int))
+
+print("непустых R x F:", (m.values > 0).sum(), "из 25")
+print("с 10+ покупателями:", (m.values >= 10).sum())
+
+full = rfm.groupby(["R", "F", "M"]).size()
+print("непустых R x F x M:", len(full), "из 125")
+print("с 10+ покупателями:", (full >= 10).sum())
+print("медиана размера клетки:", int(full.median()))`,
       body: `<p>Проверьте на данных, действительно ли матрицу 5×5×5 приходится укрупнять. Посчитайте:</p>
 <ul>
   <li>сколько клеток R×F непусты и в скольких хотя бы 10 покупателей;</li>
@@ -15980,6 +16030,18 @@ print("медиана размера клетки:", int(full.median()))
     {
       title: "Работает ли правило Парето",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `s = rfm["monetary"].sort_values(ascending=False)
+cum = s.cumsum() / s.sum()
+n = len(s)
+
+for share in (0.10, 0.20, 0.30, 0.50):
+    k = int(n * share)
+    print(f"топ-{share*100:.0f}% покупателей: {cum.iloc[k-1]*100:.1f}% выручки")
+
+k80 = int((cum < 0.8).sum()) + 1
+print(f"80% выручки дают {k80} покупателей ({k80/n*100:.1f}%)")
+print(f"это {k80/len(app_users)*100:.1f}% от всех установивших")`,
       body: `<p>«20 процентов клиентов дают 80 процентов выручки» — фраза, которую произносят на каждом втором совещании. Проверьте её на данных.</p>
 <p>Постройте накопленную долю выручки по покупателям, отсортированным по убыванию трат. Ответьте: какую долю выручки дают верхние 10, 20, 30 и 50 процентов покупателей, и сколько покупателей нужно, чтобы набрать 80 процентов выручки. Отдельно посчитайте, какую долю эти люди составляют от <em>всех</em> 4000 установивших приложение.</p>`,
       solution: `s = rfm["monetary"].sort_values(ascending=False)
@@ -17465,6 +17527,14 @@ print("R2 = %.4f" % (1 - (resid**2).sum() / ((y - y.mean())**2).sum()))
     {
       title: "Единицы измерения",
       level: "easy",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `days7 = feat["days7"].to_numpy(float)
+
+for name, X, target in (("дни, рубли",  days7,      y),
+                        ("часы, рубли", days7 * 24, y),
+                        ("дни, тысячи", days7,      y / 1000)):
+    b, r2 = ols(X.reshape(-1, 1), target)
+    print("%-12s b0=%10.4f  b1=%10.4f  R2=%.4f" % (name, b[0], b[1], r2))`,
       body: `<p>Возьмите первую модель из основной задачи (<code>rev90</code> от <code>days7</code>) и постройте её ещё дважды: измерив активность в часах вместо дней (умножив на 24) и измерив выручку в тысячах рублей вместо рублей.</p>
 <p>Выпишите все три набора коэффициентов и <span class="m">\\(R^2\\)</span>. Сформулируйте правило.</p>`,
       solution: `days7 = feat["days7"].to_numpy(float)
@@ -17497,6 +17567,13 @@ for name, X, target in (("дни, рубли",  days7,      y),
     {
       title: "Добавить платформу",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `b, r2 = ols(np.column_stack([days7, D, P]), y)
+print("свободный %.1f  days7 %.1f  R2 %.4f" % (b[0], b[1], r2))
+for n, v in zip(CHANNELS, b[2:7]):
+    print("  %-12s %+.1f" % (n, v))
+for n, v in zip(PLATFORMS, b[7:]):
+    print("  %-12s %+.1f" % (n, v))`,
       body: `<p>Добавьте к третьей модели фиктивные переменные платформы (матрица <code>P</code>, база android). Выведите все коэффициенты и <span class="m">\\(R^2\\)</span>.</p>
 <p>Ответьте: стоило ли добавлять этот признак и как вы обосновываете ответ.</p>`,
       solution: `b, r2 = ols(np.column_stack([days7, D, P]), y)
@@ -17543,6 +17620,19 @@ for n, v in zip(PLATFORMS, b[7:]):
     {
       title: "Формула смещения на реальных данных",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `soc = (feat["channel"] == "social").to_numpy(float)
+
+b_short, _ = ols(soc.reshape(-1, 1), y)
+b_long, _  = ols(np.column_stack([soc, days7]), y)
+b_aux, _   = ols(soc.reshape(-1, 1), days7)
+
+print("короткая: social = %.1f" % b_short[1])
+print("длинная:  social = %.1f, days7 = %.1f" % (b_long[1], b_long[2]))
+print("вспомогательная: days7 ~ social, наклон %.4f" % b_aux[1])
+print("проверка: %.1f + %.1f * %.4f = %.1f"
+      % (b_long[1], b_long[2], b_aux[1],
+         b_long[1] + b_long[2] * b_aux[1]))`,
       body: `<p>Проверьте формулу смещения пропущенной переменной численно. Постройте:</p>
 <ol>
   <li><strong>короткую</strong> модель <code>rev90</code> от одной фиктивной переменной social;</li>
@@ -17980,6 +18070,17 @@ print(f"только на платящих: n={m.sum()} R2={r2p:.4f} "
     {
       title: "Есть ли структура во времени",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `b, r2, adj, pred = ols(base, y)
+resid = y - pred
+
+mon = (app_users.set_index("user_id")
+       .loc[feat["user_id"], "signup_date"]
+       .dt.to_period("M").astype(str).to_numpy())
+
+t = pd.DataFrame({"m": mon, "res": resid}).groupby("m").agg(
+    n=("res", "size"), mean=("res", "mean"), sd=("res", "std"))
+print(t.round(1).to_string())`,
       body: `<p>Возьмите остатки базовой модели и посмотрите на них в разрезе месяца установки пользователя. Выведите по каждому месяцу число наблюдений, средний остаток и его разброс.</p>
 <p>Ответьте: есть ли систематическое смещение по времени и что означает то, что вы увидите в столбце разброса.</p>`,
       solution: `b, r2, adj, pred = ols(base, y)
@@ -18019,6 +18120,25 @@ print(t.round(1).to_string())
     {
       title: "Отложенная выборка ловит подделку",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `te = (feat["user_id"].to_numpy() % 4 == 0)
+tr = ~te
+
+def fit_score(X):
+    X1tr = np.column_stack([np.ones(tr.sum()), X[tr]])
+    b = np.linalg.solve(X1tr.T @ X1tr, X1tr.T @ y[tr])
+    ptr = X1tr @ b
+    pte = np.column_stack([np.ones(te.sum()), X[te]]) @ b
+    r2tr = 1 - ((y[tr]-ptr)**2).sum() / ((y[tr]-y[tr].mean())**2).sum()
+    r2te = 1 - ((y[te]-pte)**2).sum() / ((y[te]-y[tr].mean())**2).sum()
+    return r2tr, r2te
+
+for name, X in (("базовая", base),
+                ("+ десять мусорных", np.column_stack([base, J10])),
+                ("+ rev7", np.column_stack([base, feat["rev7"].to_numpy(float)]))):
+    a, b_ = fit_score(X)
+    print("%-20s обучение %.4f  тест %.4f" % (name, a, b_))
+print("обучение %d, тест %d" % (tr.sum(), te.sum()))`,
       body: `<p>Разделите данные на обучающую и отложенную части детерминированно: в отложенную идут пользователи с <code>user_id % 4 == 0</code>. Обучите три модели только на обучающей части и посчитайте <span class="m">\\(R^2\\)</span> на обеих:</p>
 <ol>
   <li>базовая;</li>
@@ -18073,6 +18193,19 @@ print("обучение %d, тест %d" % (tr.sum(), te.sum()))
     {
       title: "Логарифм лечит разброс",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `m = (feat["converted"] == 1).to_numpy()
+Xm = np.column_stack([days7[m], D[m]])
+
+_, r2_rub, _, p_rub = ols(Xm, y[m])
+_, r2_log, _, p_log = ols(Xm, np.log(y[m]))
+
+for name, pred_, target in (("рубли", p_rub, y[m]),
+                            ("логарифм", p_log, np.log(y[m]))):
+    e = target - pred_
+    sd = pd.Series(e).groupby(pd.qcut(pred_, 4, labels=False)).std()
+    print(name, "R2=%.4f" % (r2_rub if name == "рубли" else r2_log),
+          "sd по квартилям:", [round(v, 3) for v in sd])`,
       body: `<p>Возьмите только платящих пользователей и постройте базовую модель дважды: для выручки в рублях и для её натурального логарифма.</p>
 <p>Для каждой посчитайте <span class="m">\\(R^2\\)</span> и разброс остатков по квартилям прогноза. Сравните и объясните, почему нельзя просто сказать «у логарифма R-квадрат ниже, значит, хуже». Заодно переведите коэффициент при <code>days7</code> из логарифмической модели в проценты.</p>`,
       solution: `m = (feat["converted"] == 1).to_numpy()
@@ -18689,6 +18822,11 @@ print(f"дециль 10: n={low['n']:.0f} конверсия={low['conv'] * 100:
     {
       title: "Почему доля правильных ответов обманывает",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for t in (0.50, 0.35, 0.22):
+    print("порог %.2f: доля правильных %.4f" % (t, ((p >= t) == yb).mean()))
+print("модель «никто не купит»: %.4f" % (yb == 0).mean())
+print("AUC модели %.4f, AUC константы 0.5" % auc_rank(p, yb))`,
       body: `<p>Посчитайте долю правильных ответов (accuracy) модели при порогах 0,50, 0,35 и 0,22. Сравните с тривиальной моделью, которая всем подряд отвечает «не купит».</p>
 <p>Сделайте вывод: годится ли доля правильных как метрика в этой задаче и почему AUC ведёт себя иначе.</p>`,
       solution: `for t in (0.50, 0.35, 0.22):
@@ -18727,6 +18865,16 @@ AUC ведёт себя иначе, потому что смотрит на по
     {
       title: "Хорошая AUC при вранье в вероятностях",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for name, score in (("исходные вероятности", p),
+                    ("возведённые в квадрат", p ** 2)):
+    print(name, "AUC = %.4f" % auc_rank(score, yb))
+    b = pd.qcut(score, 5, labels=False)
+    t = pd.DataFrame({"s": score, "y": yb, "b": b}).groupby("b").agg(
+        n=("y", "size"), pred=("s", "mean"), fact=("y", "mean"))
+    for i, r in t.iterrows():
+        print("  группа %d: n=%4d прогноз=%.3f факт=%.3f"
+              % (i + 1, r["n"], r["pred"], r["fact"]))`,
       body: `<p>Проверьте калибровку модели: разбейте прогнозы на пять групп и сравните средний прогноз с фактической долей покупателей внутри группы.</p>
 <p>Затем возведите все вероятности в квадрат и повторите обе проверки — AUC и калибровку. Объясните результат и скажите, в каких задачах такая испорченная модель ещё годится, а в каких уже нет.</p>`,
       solution: `for name, score in (("исходные вероятности", p),
@@ -19728,6 +19876,15 @@ MSE = 0,5000. Спуск идёт в ту сторону, но за два ша�
     {
       title: "Найти границу устойчивости",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for lr in (0.05, 0.20, 0.40, 0.60, 0.80, 0.90, 0.95, 1.00):
+    b, _ = gd(Xs, ys, lr, 200)
+    print("  lr=%.2f: %s" % (lr,
+          "разошёлся" if b is None else "MSE=%.6f" % mse(b, Xs, ys)))
+
+H = 2 * Xs.T @ Xs / len(ys)
+print("  lambda_max = %.4f, граница = %.4f"
+      % (np.linalg.eigvalsh(H).max(), 2 / np.linalg.eigvalsh(H).max()))`,
       body: `<p>На стандартизованных данных проведите 200 итераций спуска при длине шага 0,05, 0,20, 0,40, 0,60, 0,80, 0,90, 0,95 и 1,00. Для каждого напечатайте итоговую MSE или пометку о расходимости.</p>
 <p>Сравните результат с теоретической границей <span class="m">\\(\\eta &lt; 2/\\lambda_{\\max}\\)</span>, где <span class="m">\\(\\lambda_{\\max}\\)</span> — наибольшее собственное число матрицы вторых производных <span class="m">\\(2X^{\\mathsf T}X/n\\)</span>.</p>`,
       solution: `for lr in (0.05, 0.20, 0.40, 0.60, 0.80, 0.90, 0.95, 1.00):
@@ -19766,6 +19923,16 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Мини-батчи",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for bs in (32, 256, 4000):
+    b = np.zeros(2)
+    for epoch in range(20):
+        for start in range(0, len(ys), bs):
+            Xb, yb_ = Xs[start:start+bs], ys[start:start+bs]
+            b = b - 0.1 * 2 * Xb.T @ (Xb @ b - yb_) / len(yb_)
+    n_upd = 20 * int(np.ceil(len(ys) / bs))
+    print("  батч %4d: MSE=%.6f  b1=%.6f  обновлений=%d"
+          % (bs, mse(b, Xs, ys), b[1], n_upd))`,
       body: `<p>Проведите 20 проходов по данным (эпох) при длине шага 0,10, обновляя коэффициенты не по всей выборке сразу, а по последовательным порциям размера 32, 256 и 4000. Для каждого размера порции напечатайте итоговую MSE, коэффициент <code>b1</code> и общее число обновлений.</p>
 <p>Порядок строк не перемешивайте — так результат будет воспроизводимым.</p>`,
       solution: `for bs in (32, 256, 4000):
@@ -19808,6 +19975,13 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Один минимум или много",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for start in ([0,0], [5,5], [-5,5], [10,-10], [-100,100]):
+    b = np.array(start, float)
+    for _ in range(1000):
+        b = b - 0.3 * 2 * Xs.T @ (Xs @ b - ys) / len(ys)
+    print("  из %-14s -> b1=%.6f MSE=%.6f"
+          % (str(start), b[1], mse(b, Xs, ys)))`,
       body: `<p>Запустите спуск на стандартизованных данных из пяти разных начальных точек: <code>(0, 0)</code>, <code>(5, 5)</code>, <code>(-5, 5)</code>, <code>(10, -10)</code>, <code>(-100, 100)</code>. Шаг 0,3, тысяча итераций.</p>
 <p>Сравните итоговые коэффициенты. Объясните результат и скажите, для каких моделей он был бы иным.</p>`,
       solution: `for start in ([0,0], [5,5], [-5,5], [10,-10], [-100,100]):
@@ -19850,6 +20024,34 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Когда ранняя остановка помогает",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `mults = (37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
+         89, 97, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151)
+J = np.column_stack([(feat["user_id"].to_numpy() * m % 101).astype(float)
+                     for m in mults])
+Js = (J - J.mean(0)) / J.std(0)
+
+tr = (feat["user_id"].to_numpy() % 50 == 0)
+te = ~tr
+
+def trace(X):
+    b = np.zeros(X.shape[1])
+    best = (1e9, 0)
+    for i in range(20001):
+        m = mse(b, X[te], ys[te])
+        if m < best[0]:
+            best = (m, i)
+        b = b - 0.05 * 2 * X[tr].T @ (X[tr] @ b - ys[tr]) / tr.sum()
+    return best, mse(b, X[te], ys[te])
+
+X_big = np.column_stack([np.ones(len(x)), xs, D, Js])
+X_clean = np.column_stack([np.ones(len(x)), xs, D])
+
+for name, X in (("раздутая (31 признак)", X_big),
+                ("чистая (7 признаков)", X_clean)):
+    (m, i), final = trace(X)
+    print("  %-24s минимум %.6f на итерации %5d, в конце %.6f (+%.1f%%)"
+          % (name, m, i, final, (final / m - 1) * 100))`,
       body: `<p>Проверьте, работает ли ранняя остановка, на двух моделях. Обучающая выборка — пользователи с <code>user_id % 50 == 0</code> (их 80), остальные 3920 в отложенной. Шаг 0,05, до 20 000 итераций, все признаки стандартизованы.</p>
 <ol>
   <li><strong>Раздутая модель:</strong> <code>days7</code>, каналы и 24 мусорных признака вида <code>user_id * m % 101</code> для простых множителей от 37 до 151 (число 101 пропустить — оно даёт столбец из нулей).</li>
@@ -20237,6 +20439,7 @@ LIMIT 10;`,
     {
       title: "Вторая по величине",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Классика собеседований: найдите вторую по величине сумму заказа в <code>app_orders</code>.</p>
 <p>Напишите два решения — через <code>LIMIT ... OFFSET</code> и через вложенный <code>MAX</code>. Сравните результаты и объясните расхождение. Затем скажите, какой вопрос надо было задать интервьюеру до того, как писать код.</p>`,
       solution: `Решение 1, через OFFSET:
@@ -20290,6 +20493,7 @@ LIMIT 10;`,
     {
       title: "Найти повторы",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Две задачи на дубли, обе встречаются на собеседованиях.</p>
 <ol>
   <li>Есть ли в <code>app_orders</code> полные дубли — совпадающие тройки «пользователь, дата, сумма»?</li>
@@ -20344,6 +20548,19 @@ LIMIT 10;`,
     {
       title: "Топ-N внутри группы",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `WITH ranked AS (
+    SELECT
+        user_id, order_date, revenue,
+        ROW_NUMBER() OVER (PARTITION BY user_id
+                           ORDER BY revenue DESC, order_date) AS rn
+    FROM app_orders
+)
+SELECT user_id, order_date, revenue, rn
+FROM ranked
+WHERE rn <= 2
+ORDER BY user_id
+LIMIT 8;`,
       body: `<p>Верните по два самых крупных заказа каждого пользователя: <code>user_id</code>, <code>order_date</code>, <code>revenue</code> и номер <code>rn</code>. При равных суммах более ранний заказ считается первым. Отсортируйте по <code>user_id</code>, покажите первые 8 строк.</p>
 <p>Отдельно объясните, почему нельзя написать <code>WHERE ROW_NUMBER() OVER (...) &lt;= 2</code>.</p>`,
       solution: `WITH ranked AS (
@@ -20387,6 +20604,21 @@ HAVING, потом SELECT с оконными функциями, и тольк�
     {
       title: "Накопительный итог и доля",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `WITH m AS (
+    SELECT strftime('%Y-%m', order_date) AS mon,
+           SUM(revenue) AS rev
+    FROM app_orders
+    GROUP BY 1
+)
+SELECT
+    mon,
+    rev,
+    SUM(rev) OVER (ORDER BY mon) AS cum,
+    ROUND(100.0 * SUM(rev) OVER (ORDER BY mon)
+          / (SELECT SUM(rev) FROM m), 1) AS share
+FROM m
+ORDER BY mon;`,
       body: `<p>Постройте помесячную сводку по <code>app_orders</code>: <code>mon</code> в формате <code>'2024-01'</code>, <code>rev</code> — выручка месяца, <code>cum</code> — нарастающий итог с начала наблюдения, <code>share</code> — какая доля всей выручки набрана к концу этого месяца, в процентах с одним знаком.</p>
 <p>Ответьте: к какому месяцу набрана половина всей выручки и почему последние месяцы дают так мало.</p>`,
       solution: `WITH m AS (
@@ -20429,6 +20661,17 @@ ORDER BY mon;
     {
       title: "Кто ни разу не купил",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `SELECT
+    u.channel,
+    COUNT(*) AS users,
+    SUM(o.user_id IS NULL) AS no_orders,
+    ROUND(100.0 * SUM(o.user_id IS NULL) / COUNT(*), 1) AS share
+FROM app_users u
+LEFT JOIN (SELECT DISTINCT user_id FROM app_orders) o
+       ON o.user_id = u.user_id
+GROUP BY u.channel
+ORDER BY share;`,
       body: `<p>Посчитайте по каналам: сколько всего пользователей, сколько из них не сделали ни одного заказа и какова их доля в процентах с одним знаком. Сортировка по доле по возрастанию.</p>
 <p>Напишите решение двумя способами — через <code>LEFT JOIN</code> и через <code>NOT EXISTS</code> — и скажите, чем они отличаются.</p>`,
       solution: `Способ 1, через LEFT JOIN с проверкой на NULL:
@@ -20885,6 +21128,7 @@ print(f"интервалов посчитано={int(gaps.notna().sum())} "
     {
       title: "Как merge размножает строки",
       level: "mid",
+      answer: "text",   /* разбор из нескольких частей с пояснениями: самопроверка */
       body: `<p>Проверьте на данных три ситуации и объясните каждое число.</p>
 <ol>
   <li>Сколько строк даст <code>app_users.merge(app_orders, on="user_id")</code> при <code>how="inner"</code> и при <code>how="left"</code>?</li>
@@ -20951,6 +21195,26 @@ print(f"интервалов посчитано={int(gaps.notna().sum())} "
     {
       title: "agg, transform и apply",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `orders = app_orders.merge(app_users[["user_id", "channel"]],
+                          on="user_id")
+
+per = orders.groupby("user_id").agg(
+    rev=("revenue", "sum"),
+    channel=("channel", "first"),
+).reset_index()
+
+# transform возвращает столбец ТОЙ ЖЕ длины, что per,
+# подставляя каждой строке итог её группы
+per["ch_total"] = per.groupby("channel")["rev"].transform("sum")
+per["share"] = per["rev"] / per["ch_total"] * 100
+
+rep = per.groupby("channel").agg(
+    n=("rev", "size"),
+    total=("rev", "sum"),
+    max_share=("share", "max"),
+).round(2)
+print(rep.to_string())`,
       body: `<p>Посчитайте для каждого покупателя долю его трат в общей выручке его канала. Затем сведите: по каждому каналу число покупателей, суммарная выручка и максимальная доля одного покупателя.</p>
 <p>Объясните, почему здесь нужен <code>transform</code>, а не <code>agg</code>, и чем от них обоих отличается <code>apply</code>.</p>`,
       solution: `orders = app_orders.merge(app_users[["user_id", "channel"]],
@@ -21062,6 +21326,26 @@ print(rep.to_string())
     {
       title: "Воронка на pandas за пятнадцать минут",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `days = app_activity.groupby("user_id").size()
+n_orders = app_orders.groupby("user_id").size()
+
+steps = pd.Series({
+    "установили":      len(app_users),
+    "вернулись":       int((days > 1).sum()),
+    "купили":          int(app_orders["user_id"].nunique()),
+    "купили повторно": int((n_orders > 1).sum()),
+    "купили 5+ раз":   int((n_orders >= 5).sum()),
+})
+
+prev = steps.shift(1)
+funnel = pd.DataFrame({
+    "users":     steps,
+    "lost":      prev - steps,
+    "from_prev": (steps / prev * 100).round(1),
+    "from_top":  (steps / steps.iloc[0] * 100).round(1),
+})
+print(funnel.to_string())`,
       body: `<p>Задача формата живого кодирования. Постройте воронку жизненного цикла пользователя приложения из пяти шагов и посчитайте по каждому число людей, потери, конверсию из предыдущего шага и сквозную.</p>
 <pre><code>установили       — все пользователи
 вернулись        — были активны более чем в один день
@@ -62162,7 +62446,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -62242,7 +62526,7 @@ const Store = (function () {
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
-      ["done", "attempts", "time", "days", "steps"].forEach(function (b) {
+      ["done", "attempts", "time", "days", "steps", "drills"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -63893,6 +64177,70 @@ const Check = {
     return { ok: true };
   },
 
+  /* Тренажёр на Python: формат вывода в условии не задан, поэтому
+     сверяются числа. Каждое число из вывода разбора должно найтись в
+     выводе ученика — с точностью до знаков, которые напечатал
+     разбор (или ученик, если он округлил грубее, но не до целого).
+     Даты — строками. Лишнее у ученика не мешает. */
+  numbers: function (got, exp) {
+    function toks(s) {
+      const dates = [], nums = [];
+      s = String(s).replace(/\d{1,3}(?:,\d{3})+(?!\d)/g, function (m) { return m.replace(/,/g, ""); });
+      s = s.replace(/\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?/g, function (m) { dates.push(m); return " "; });
+      const re = /(?<![\p{L}\p{N}_.])-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/giu;
+      let m;
+      while ((m = re.exec(s))) {
+        const t = m[0], dot = t.split(/e/i)[0].split(".")[1];
+        nums.push({ v: parseFloat(t), d: dot ? dot.length : 0, e: /e/i.test(t) });
+      }
+      return { dates: dates, nums: nums };
+    }
+    const a = toks(got), b = toks(exp);
+    if (!b.nums.length && !b.dates.length) {
+      const norm = function (s) { return String(s).toLowerCase().replace(/\s+/g, " ").trim(); };
+      const ok = Check.normLines(exp).every(function (l) { return norm(got).indexOf(norm(l)) >= 0; });
+      return ok ? { ok: true, total: 0 } : { ok: false, why: "Вывод не совпал с разбором." };
+    }
+    const used = [];
+    let miss = 0;
+    b.nums.forEach(function (e) {
+      const j = a.nums.findIndex(function (x, k) {
+        if (used[k]) return false;
+        if (e.e || x.e) return Math.abs(x.v - e.v) <= Math.abs(e.v) * 1e-3 + 1e-12;
+        const d = Math.min(e.d, Math.max(x.d, Math.min(e.d, 1)));
+        return Math.abs(x.v - e.v) <= 0.5 * Math.pow(10, -d) * 1.0001 + 1e-9 * Math.abs(e.v);
+      });
+      if (j < 0) miss++; else used[j] = true;
+    });
+    const usedD = [];
+    b.dates.forEach(function (e) {
+      const j = a.dates.findIndex(function (x, k) { return !usedD[k] && x.slice(0, 10) === e.slice(0, 10); });
+      if (j < 0) miss++; else usedD[j] = true;
+    });
+    const total = b.nums.length + b.dates.length;
+    return miss ? { ok: false, total: total,
+                    why: "Из " + total + " " + plural(total, "числа", "чисел", "чисел") + " разбора в вашем выводе не нашлось " + miss + "." }
+                : { ok: true, total: total };
+  },
+
+  /* Тренажёр на SQL: как основная задача, но имена столбцов не обязаны
+     совпадать — в условии их часто не называют. */
+  drillSql: function (res, exp) {
+    let r = Check.sql(res, exp), note = "";
+    if (!r.ok && res && res.columns.length === exp.columns.length && /называется/.test(r.why)) {
+      res = { columns: exp.columns, values: res.values };
+      r = Check.sql(res, exp);
+      note = "Значения сошлись. Столбцы в разборе названы так: " + exp.columns.join(", ") + ".";
+    }
+    if (r.ok) return note ? { ok: true, note: note } : r;
+    /* те же строки, но в другом порядке — так и сказать, а не «строка 1 не та» */
+    if (exp.ordered && r.row !== undefined &&
+        Check.sql(res, { columns: exp.columns, rows: exp.rows, ordered: false }).ok) {
+      return { ok: false, why: "строки те же, но порядок другой — задача просит сортировку, проверьте ORDER BY" };
+    }
+    return r;
+  },
+
   cellEq: function (a, b) {
     if (a === null || a === undefined) a = "";
     if (b === null || b === undefined) b = "";
@@ -64922,6 +65270,298 @@ function renderStepsLesson(app, L, C) {
   mountTimer(id);
 }
 
+/* ============================================================
+   Тренажёр: задачи после основной, каждая со своим редактором
+
+   Эталон не хранится готовым: его считает решение из разбора на той
+   же базе, в момент первой проверки. Код разбора — часть solution до
+   строки «Результат…», либо поле check, если разбор — рассказ с
+   таблицами. Задача с answer: "text" (и все задачи текстовых уроков,
+   и python-задачи без print в разборе) — ответ словами и самооценка.
+
+   SQL сверяется как основная задача, но имена столбцов не обязаны
+   совпадать с разбором: в условии тренажёра их часто не называют.
+   Python — по числам: каждое число из вывода разбора должно найтись
+   в выводе ученика (с точностью до округления), подписи не важны.
+
+   Хранилище: код — «code» под ключом урок:dN, решено — «drills»
+   урок:N, число проверок — «attempts» урок:dN. Решение открывается
+   после первой проверки.
+   ============================================================ */
+
+/* Запуск кода без интерфейса — для тренажёра и его эталона. Python
+   один на страницу и печатает в общий stdout, поэтому запуски идут
+   строго по очереди. */
+const Run = {
+  queue: Promise.resolve(),
+  sql: async function (code) {
+    const db = await Engine.sql();
+    try {
+      const r = db.exec(code);
+      return { res: r.length ? r[r.length - 1] : null };
+    } catch (e) { return { err: "SQLite: " + e.message }; }
+  },
+  /* pre — код, который выполняется до кода ученика молча (его вывод не
+     попадает в сверку): решение основной задачи, на функции которого
+     опирается задача тренажёра. */
+  python: function (code, env, pre) {
+    const job = Run.queue.then(async function () {
+      const pyi = (await Promise.all([Engine.python(env.packages || []), Lazy.data()]))[0];
+      const ns = pyi.toPy({});
+      (env.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
+      const out = [];
+      pyi.setStdout({ batched: function (s) { out.push(s); } });
+      pyi.setStderr({ batched: function () {} });
+      try {
+        if (env.prelude) await pyi.runPythonAsync(env.prelude, { globals: ns });
+        if (pre) {
+          await pyi.runPythonAsync(pre, { globals: ns });
+          out.length = 0;
+        }
+        await pyi.runPythonAsync(code, { globals: ns });
+        return { out: out.join("\n") };
+      } catch (e) {
+        /* трассировка — с кадра кода ученика: внутренние кадры Pyodide новичку ничего не скажут */
+        const all = String(e.message || e).split("\n");
+        let from = -1;
+        all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
+        const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
+          return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
+        }).slice(-8);
+        return { err: lines.join("\n").trim() };
+      } finally { ns.destroy(); }
+    });
+    Run.queue = job.catch(function () {});
+    return job;
+  }
+};
+
+const Drills = {
+  kind: function (L, d) {
+    if (d.answer === "text" || L.kind === "text") return "text";
+    if (L.kind === "sql") return "sql";
+    return /print\(/.test(d.solution) ? "python" : "text";
+  },
+  code: function (d) {
+    return d.check || d.solution.split(/\n\s*(?:Результат|Что получается)/)[0];
+  },
+  /* Разбор пользуется функцией или переменной из основной задачи
+     (welch, group_size…) — тогда её решение выполняется перед кодом
+     тренажёра, и у ученика, и у эталона. */
+  pre: function (C, d) {
+    const names = function (src) {
+      const out = {};
+      String(src || "").replace(/^(?:def\s+([A-Za-z_]\w*)|([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=))/gm,
+        function (m, fn, vars) { (fn ? [fn] : vars.split(",")).forEach(function (v) { out[v.trim()] = 1; }); return m; });
+      return out;
+    };
+    if (!C.solution) return null;
+    const main = names(C.solution), own = names(Drills.code(d)), code = Drills.code(d);
+    const need = Object.keys(main).some(function (n) {
+      return !own[n] && new RegExp("\\b" + n + "\\b").test(code);
+    });
+    return need ? C.solution : null;
+  },
+  solved: function (id, i) { return !!Store.get("drills", id + ":" + i, false); },
+  count: function (id, C) {
+    return C.drills.filter(function (d, i) { return Drills.solved(id, i); }).length;
+  },
+
+  /* эталон считается один раз на задачу, пока открыт урок */
+  cache: {},
+  expected: function (L, C, i) {
+    const key = L.id + ":" + i;
+    if (!Drills.cache[key]) {
+      const d = C.drills[i], code = Drills.code(d);
+      Drills.cache[key] = Drills.kind(L, d) === "sql"
+        ? Run.sql(code).then(function (r) {
+            if (r.err || !r.res) return { err: r.err || "пусто" };
+            /* порядок строк важен, только если его задаёт сам запрос, а не окно */
+            const ordered = /\bORDER\s+BY\b/i.test(code.replace(/OVER\s*\([^()]*(\([^()]*\)[^()]*)*\)/gi, ""));
+            return { exp: { columns: r.res.columns, rows: r.res.values, ordered: ordered } };
+          })
+        : Run.python(code, C, Drills.pre(C, d)).then(function (r) { return r.err ? { err: r.err } : { out: r.out }; });
+      Drills.cache[key].catch(function () { delete Drills.cache[key]; });
+    }
+    return Drills.cache[key];
+  },
+
+  itemHtml: function (L, d, i) {
+    const k = Drills.kind(L, d);
+    if (k === "text") {
+      return '<div class="dr-work">' +
+        '<textarea class="answer dr-ans" aria-label="Ваш ответ на задачу ' + (i + 1) + '" ' +
+          'placeholder="Ваш ответ: расчёт, вывод или план — своими словами"></textarea>' +
+        '<div class="st-actions"><button class="btn dr-cmp" type="button" disabled>Сравнить с разбором</button></div>' +
+        '<div class="dr-self" hidden><span>По сути сошлось с разбором?</span>' +
+          '<button class="btn dr-yes" type="button">Да, сошлось</button>' +
+          '<button class="btn dr-no" type="button">Нет</button></div>' +
+        '<div class="status dr-status"></div></div>';
+    }
+    return '<div class="dr-work">' +
+      '<div class="editor-shell st-ed"><div class="editor-h"><span>задача ' + (i + 1) +
+        (k === "sql" ? ".sql" : ".py") + "</span></div><textarea class=\"dr-ta\"></textarea></div>" +
+      '<div class="st-actions">' +
+        '<button class="btn primary dr-run" type="button">' + ICON.play + "Запустить</button>" +
+        '<button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button>" +
+      "</div>" +
+      '<div class="status dr-status"></div>' +
+      '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
+        '<div class="io-body dr-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
+      "</div>";
+  },
+
+  /* счётчик и галочки; редактор создаётся, только когда задачу раскрыли */
+  mount: function (L, C, root) {
+    const id = L.id;
+    function counter() {
+      const n = Drills.count(id, C), c = $("#drCount", root);
+      if (c) c.textContent = "Решено " + n + " из " + C.drills.length + ".";
+    }
+    counter();
+    Array.prototype.forEach.call(root.querySelectorAll(".drill"), function (det) {
+      const i = +det.dataset.i;
+      det.addEventListener("toggle", function () {
+        if (det.open && !det.dataset.ready) {
+          det.dataset.ready = "1";
+          Drills.mountOne(L, C, det, i, counter);
+        }
+      });
+    });
+  },
+
+  mountOne: function (L, C, det, i, counter) {
+    const id = L.id, d = C.drills[i], k = Drills.kind(L, d);
+    const q = function (sel) { return $(sel, det); };
+    const codeKey = id + ":d" + i, triesKey = id + ":d" + i;
+    const reveal = q(".d-reveal");
+
+    function status(kind, title, body) {
+      const s = q(".dr-status");
+      if (!kind) { s.className = "status dr-status"; s.innerHTML = ""; return; }
+      const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+      s.className = "status dr-status show " + kind;
+      s.innerHTML = '<span class="s-ico">' + ico + "</span>" +
+        '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
+    }
+    function solve() {
+      const fresh = !Drills.solved(id, i);
+      if (fresh) Store.set("drills", id + ":" + i, Date.now());
+      const mk = q(".d-ok");
+      if (mk && fresh) mk.innerHTML = penTick(id + ":d" + i, "draw") + '<span class="sr">решено</span>';
+      if (reveal) reveal.hidden = false;
+      counter();
+    }
+    function tried() {
+      Store.set("attempts", triesKey, Store.get("attempts", triesKey, 0) + 1);
+      if (reveal) reveal.hidden = false;
+    }
+
+    if (k === "text") {
+      const ta = q(".dr-ans"), cmp = q(".dr-cmp"), self = q(".dr-self");
+      ta.value = Store.get("code", codeKey, "") || "";
+      cmp.disabled = !ta.value.trim();
+      ta.addEventListener("input", function () {
+        Store.set("code", codeKey, ta.value);
+        cmp.disabled = !ta.value.trim();
+      });
+      cmp.addEventListener("click", function () {
+        tried();
+        reveal.open = true;
+        self.hidden = false;
+        reveal.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      q(".dr-yes").addEventListener("click", function () {
+        self.hidden = true;
+        solve();
+        status("ok", "Отмечено как решённое", "Сверяли по сути, а не по словам — так и надо.");
+      });
+      q(".dr-no").addEventListener("click", function () {
+        self.hidden = true;
+        status("warn", "Не беда", "Перечитайте разбор и попробуйте пересказать его своими словами через день-два — тогда отметьте.");
+      });
+      return;
+    }
+
+    let editor = null, last = null;
+    const py = k === "python";
+    const res = q(".dr-res");
+    /* эталон и движок — заранее, пока ученик читает условие */
+    idle(function () { Drills.expected(L, C, i).catch(function () {}); });
+
+    mountEditor(q(".dr-ta"), k, Store.get("code", codeKey, "") || "",
+      function (v) { Store.set("code", codeKey, v); }, function () { run(); },
+      function () {}).then(function (ed) { editor = ed; });
+
+    async function run() {
+      status(null);
+      const code = editor ? editor.get() : q(".dr-ta").value;
+      if (!code.trim()) { status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос."); return null; }
+      const rb = q(".dr-run");
+      rb.disabled = true;
+      res.innerHTML = '<div class="empty">' + (py && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
+        : !py && !Engine.db ? "Поднимаю базу в браузере…" : "Выполняю…") + "</div>";
+      try {
+        const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
+        if (r.err) {
+          last = null;
+          res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
+          status("bad", py ? "Код упал с ошибкой" : "Запрос упал с ошибкой",
+            "Прочитайте последнюю строку вывода: там сказано, что не понравилось " + (py ? "Python." : "базе."));
+          return null;
+        }
+        last = r;
+        if (py) {
+          res.innerHTML = r.out.trim() ? "<pre>" + esc(r.out) + "</pre>"
+            : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+        } else if (r.res) {
+          res.innerHTML = renderTable(r.res.columns, r.res.values, -1) +
+            '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
+        } else {
+          res.innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+        }
+        return r;
+      } catch (e) {
+        res.innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+        status("bad", py ? "Python не загрузился" : "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+        return null;
+      } finally { rb.disabled = false; }
+    }
+
+    async function check() {
+      const cb = q(".dr-check");
+      cb.disabled = true;
+      try {
+        const r = await run();
+        if (!r) return;
+        let want;
+        try { want = await Drills.expected(L, C, i); }
+        catch (e) { status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        tried();
+        if (want.err) {
+          status("warn", "Эту задачу проверить не получилось", "Сравните свой ответ с разбором ниже.");
+          return;
+        }
+        if (py) {
+          const c = Check.numbers(r.out, want.out);
+          if (c.ok) { solve(); status("ok", "Решено", c.total ? "Все " + c.total + " " + plural(c.total, "число", "числа", "чисел") + " из разбора нашлись в вашем выводе." : "Вывод сошёлся с разбором."); }
+          else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+          return;
+        }
+        const c = Check.drillSql(r.res, want.exp);
+        if (c.ok) { solve(); status("ok", "Решено", c.note || "Столбцы и строки сошлись с разбором."); }
+        else {
+          if (r.res && c.row !== undefined) res.innerHTML = renderTable(r.res.columns, r.res.values, c.row);
+          status("bad", "Пока не сходится", esc(c.why) + ". Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+        }
+      } finally { cb.disabled = false; }
+    }
+
+    q(".dr-run").addEventListener("click", run);
+    q(".dr-check").addEventListener("click", check);
+  }
+};
+
 function renderLesson(app, id) {
   const L = Course.byId(id);
 
@@ -65019,21 +65659,23 @@ function renderLesson(app, id) {
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
       "Ещё " + C.drills.length + " " + plural(C.drills.length, "задача", "задачи", "задач") +
-      " на ту же базу. Пишите ответ в редакторе выше, запускайте, и только потом открывайте разбор. " +
-      "Готовый ответ, который вы не пробовали написать сами, не запоминается.</p>" +
+      " на ту же базу. У каждой свой редактор и проверка, разбор открывается после первой попытки: " +
+      'готовый ответ, который вы не пробовали написать сами, не запоминается. <span id="drCount"></span></p>' +
       '<div class="drills">';
     C.drills.forEach(function (d, i) {
       const lvl = d.level || "mid";
       const lvlText = lvl === "easy" ? "разминка" : lvl === "hard" ? "сложная" : "рабочая";
       drillsHtml +=
-        '<details class="drill"><summary>' +
+        '<details class="drill" data-i="' + i + '"><summary>' +
           '<span class="d-n">' + (i + 1) + "</span>" +
           "<span>" + esc(d.title) + "</span>" +
           '<span class="d-lvl ' + lvl + '">' + lvlText + "</span>" +
+          '<span class="d-ok">' + (Drills.solved(id, i) ? penTick(id + ":d" + i) + '<span class="sr">решено</span>' : "") + "</span>" +
         "</summary>" +
-        '<div class="drill-body">' + d.body +
+        '<div class="drill-body">' + d.body + Drills.itemHtml(L, d, i) +
           (d.solution
-            ? '<details class="d-reveal"><summary>показать решение</summary>' +
+            ? '<details class="d-reveal"' + (Drills.solved(id, i) || Store.get("attempts", id + ":d" + i, 0) ? "" : " hidden") +
+              "><summary>" + (Drills.kind(L, d) === "text" ? "разбор" : "показать решение") + "</summary>" +
               solutionHtml(d.solution) +
               (d.note ? '<div style="font-size:15px;color:var(--ink-2)">' + d.note + "</div>" : "") +
               "</details>"
@@ -65158,6 +65800,7 @@ function renderLesson(app, id) {
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
+  if (hasDrills) Drills.mount(L, C, main);
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   mountReadbar(secs);

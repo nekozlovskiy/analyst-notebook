@@ -206,6 +206,7 @@ LIMIT 10;`,
     {
       title: "Вторая по величине",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Классика собеседований: найдите вторую по величине сумму заказа в <code>app_orders</code>.</p>
 <p>Напишите два решения — через <code>LIMIT ... OFFSET</code> и через вложенный <code>MAX</code>. Сравните результаты и объясните расхождение. Затем скажите, какой вопрос надо было задать интервьюеру до того, как писать код.</p>`,
       solution: `Решение 1, через OFFSET:
@@ -259,6 +260,7 @@ LIMIT 10;`,
     {
       title: "Найти повторы",
       level: "easy",
+      answer: "text",   /* ответ — расчёт или несколько запросов: самопроверка по разбору */
       body: `<p>Две задачи на дубли, обе встречаются на собеседованиях.</p>
 <ol>
   <li>Есть ли в <code>app_orders</code> полные дубли — совпадающие тройки «пользователь, дата, сумма»?</li>
@@ -313,6 +315,19 @@ LIMIT 10;`,
     {
       title: "Топ-N внутри группы",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `WITH ranked AS (
+    SELECT
+        user_id, order_date, revenue,
+        ROW_NUMBER() OVER (PARTITION BY user_id
+                           ORDER BY revenue DESC, order_date) AS rn
+    FROM app_orders
+)
+SELECT user_id, order_date, revenue, rn
+FROM ranked
+WHERE rn <= 2
+ORDER BY user_id
+LIMIT 8;`,
       body: `<p>Верните по два самых крупных заказа каждого пользователя: <code>user_id</code>, <code>order_date</code>, <code>revenue</code> и номер <code>rn</code>. При равных суммах более ранний заказ считается первым. Отсортируйте по <code>user_id</code>, покажите первые 8 строк.</p>
 <p>Отдельно объясните, почему нельзя написать <code>WHERE ROW_NUMBER() OVER (...) &lt;= 2</code>.</p>`,
       solution: `WITH ranked AS (
@@ -356,6 +371,21 @@ HAVING, потом SELECT с оконными функциями, и тольк�
     {
       title: "Накопительный итог и доля",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `WITH m AS (
+    SELECT strftime('%Y-%m', order_date) AS mon,
+           SUM(revenue) AS rev
+    FROM app_orders
+    GROUP BY 1
+)
+SELECT
+    mon,
+    rev,
+    SUM(rev) OVER (ORDER BY mon) AS cum,
+    ROUND(100.0 * SUM(rev) OVER (ORDER BY mon)
+          / (SELECT SUM(rev) FROM m), 1) AS share
+FROM m
+ORDER BY mon;`,
       body: `<p>Постройте помесячную сводку по <code>app_orders</code>: <code>mon</code> в формате <code>'2024-01'</code>, <code>rev</code> — выручка месяца, <code>cum</code> — нарастающий итог с начала наблюдения, <code>share</code> — какая доля всей выручки набрана к концу этого месяца, в процентах с одним знаком.</p>
 <p>Ответьте: к какому месяцу набрана половина всей выручки и почему последние месяцы дают так мало.</p>`,
       solution: `WITH m AS (
@@ -398,6 +428,17 @@ ORDER BY mon;
     {
       title: "Кто ни разу не купил",
       level: "mid",
+      /* разбор — рассказ с таблицами; сверяем с этим запросом */
+      check: `SELECT
+    u.channel,
+    COUNT(*) AS users,
+    SUM(o.user_id IS NULL) AS no_orders,
+    ROUND(100.0 * SUM(o.user_id IS NULL) / COUNT(*), 1) AS share
+FROM app_users u
+LEFT JOIN (SELECT DISTINCT user_id FROM app_orders) o
+       ON o.user_id = u.user_id
+GROUP BY u.channel
+ORDER BY share;`,
       body: `<p>Посчитайте по каналам: сколько всего пользователей, сколько из них не сделали ни одного заказа и какова их доля в процентах с одним знаком. Сортировка по доле по возрастанию.</p>
 <p>Напишите решение двумя способами — через <code>LEFT JOIN</code> и через <code>NOT EXISTS</code> — и скажите, чем они отличаются.</p>`,
       solution: `Способ 1, через LEFT JOIN с проверкой на NULL:
@@ -854,6 +895,7 @@ print(f"интервалов посчитано={int(gaps.notna().sum())} "
     {
       title: "Как merge размножает строки",
       level: "mid",
+      answer: "text",   /* разбор из нескольких частей с пояснениями: самопроверка */
       body: `<p>Проверьте на данных три ситуации и объясните каждое число.</p>
 <ol>
   <li>Сколько строк даст <code>app_users.merge(app_orders, on="user_id")</code> при <code>how="inner"</code> и при <code>how="left"</code>?</li>
@@ -920,6 +962,26 @@ print(f"интервалов посчитано={int(gaps.notna().sum())} "
     {
       title: "agg, transform и apply",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `orders = app_orders.merge(app_users[["user_id", "channel"]],
+                          on="user_id")
+
+per = orders.groupby("user_id").agg(
+    rev=("revenue", "sum"),
+    channel=("channel", "first"),
+).reset_index()
+
+# transform возвращает столбец ТОЙ ЖЕ длины, что per,
+# подставляя каждой строке итог её группы
+per["ch_total"] = per.groupby("channel")["rev"].transform("sum")
+per["share"] = per["rev"] / per["ch_total"] * 100
+
+rep = per.groupby("channel").agg(
+    n=("rev", "size"),
+    total=("rev", "sum"),
+    max_share=("share", "max"),
+).round(2)
+print(rep.to_string())`,
       body: `<p>Посчитайте для каждого покупателя долю его трат в общей выручке его канала. Затем сведите: по каждому каналу число покупателей, суммарная выручка и максимальная доля одного покупателя.</p>
 <p>Объясните, почему здесь нужен <code>transform</code>, а не <code>agg</code>, и чем от них обоих отличается <code>apply</code>.</p>`,
       solution: `orders = app_orders.merge(app_users[["user_id", "channel"]],
@@ -1031,6 +1093,26 @@ print(rep.to_string())
     {
       title: "Воронка на pandas за пятнадцать минут",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `days = app_activity.groupby("user_id").size()
+n_orders = app_orders.groupby("user_id").size()
+
+steps = pd.Series({
+    "установили":      len(app_users),
+    "вернулись":       int((days > 1).sum()),
+    "купили":          int(app_orders["user_id"].nunique()),
+    "купили повторно": int((n_orders > 1).sum()),
+    "купили 5+ раз":   int((n_orders >= 5).sum()),
+})
+
+prev = steps.shift(1)
+funnel = pd.DataFrame({
+    "users":     steps,
+    "lost":      prev - steps,
+    "from_prev": (steps / prev * 100).round(1),
+    "from_top":  (steps / steps.iloc[0] * 100).round(1),
+})
+print(funnel.to_string())`,
       body: `<p>Задача формата живого кодирования. Постройте воронку жизненного цикла пользователя приложения из пяти шагов и посчитайте по каждому число людей, потери, конверсию из предыдущего шага и сквозную.</p>
 <pre><code>установили       — все пользователи
 вернулись        — были активны более чем в один день

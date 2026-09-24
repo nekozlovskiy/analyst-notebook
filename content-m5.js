@@ -318,6 +318,14 @@ print("R2 = %.4f" % (1 - (resid**2).sum() / ((y - y.mean())**2).sum()))
     {
       title: "Единицы измерения",
       level: "easy",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `days7 = feat["days7"].to_numpy(float)
+
+for name, X, target in (("дни, рубли",  days7,      y),
+                        ("часы, рубли", days7 * 24, y),
+                        ("дни, тысячи", days7,      y / 1000)):
+    b, r2 = ols(X.reshape(-1, 1), target)
+    print("%-12s b0=%10.4f  b1=%10.4f  R2=%.4f" % (name, b[0], b[1], r2))`,
       body: `<p>Возьмите первую модель из основной задачи (<code>rev90</code> от <code>days7</code>) и постройте её ещё дважды: измерив активность в часах вместо дней (умножив на 24) и измерив выручку в тысячах рублей вместо рублей.</p>
 <p>Выпишите все три набора коэффициентов и <span class="m">\\(R^2\\)</span>. Сформулируйте правило.</p>`,
       solution: `days7 = feat["days7"].to_numpy(float)
@@ -350,6 +358,13 @@ for name, X, target in (("дни, рубли",  days7,      y),
     {
       title: "Добавить платформу",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `b, r2 = ols(np.column_stack([days7, D, P]), y)
+print("свободный %.1f  days7 %.1f  R2 %.4f" % (b[0], b[1], r2))
+for n, v in zip(CHANNELS, b[2:7]):
+    print("  %-12s %+.1f" % (n, v))
+for n, v in zip(PLATFORMS, b[7:]):
+    print("  %-12s %+.1f" % (n, v))`,
       body: `<p>Добавьте к третьей модели фиктивные переменные платформы (матрица <code>P</code>, база android). Выведите все коэффициенты и <span class="m">\\(R^2\\)</span>.</p>
 <p>Ответьте: стоило ли добавлять этот признак и как вы обосновываете ответ.</p>`,
       solution: `b, r2 = ols(np.column_stack([days7, D, P]), y)
@@ -396,6 +411,19 @@ for n, v in zip(PLATFORMS, b[7:]):
     {
       title: "Формула смещения на реальных данных",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `soc = (feat["channel"] == "social").to_numpy(float)
+
+b_short, _ = ols(soc.reshape(-1, 1), y)
+b_long, _  = ols(np.column_stack([soc, days7]), y)
+b_aux, _   = ols(soc.reshape(-1, 1), days7)
+
+print("короткая: social = %.1f" % b_short[1])
+print("длинная:  social = %.1f, days7 = %.1f" % (b_long[1], b_long[2]))
+print("вспомогательная: days7 ~ social, наклон %.4f" % b_aux[1])
+print("проверка: %.1f + %.1f * %.4f = %.1f"
+      % (b_long[1], b_long[2], b_aux[1],
+         b_long[1] + b_long[2] * b_aux[1]))`,
       body: `<p>Проверьте формулу смещения пропущенной переменной численно. Постройте:</p>
 <ol>
   <li><strong>короткую</strong> модель <code>rev90</code> от одной фиктивной переменной social;</li>
@@ -833,6 +861,17 @@ print(f"только на платящих: n={m.sum()} R2={r2p:.4f} "
     {
       title: "Есть ли структура во времени",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `b, r2, adj, pred = ols(base, y)
+resid = y - pred
+
+mon = (app_users.set_index("user_id")
+       .loc[feat["user_id"], "signup_date"]
+       .dt.to_period("M").astype(str).to_numpy())
+
+t = pd.DataFrame({"m": mon, "res": resid}).groupby("m").agg(
+    n=("res", "size"), mean=("res", "mean"), sd=("res", "std"))
+print(t.round(1).to_string())`,
       body: `<p>Возьмите остатки базовой модели и посмотрите на них в разрезе месяца установки пользователя. Выведите по каждому месяцу число наблюдений, средний остаток и его разброс.</p>
 <p>Ответьте: есть ли систематическое смещение по времени и что означает то, что вы увидите в столбце разброса.</p>`,
       solution: `b, r2, adj, pred = ols(base, y)
@@ -872,6 +911,25 @@ print(t.round(1).to_string())
     {
       title: "Отложенная выборка ловит подделку",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `te = (feat["user_id"].to_numpy() % 4 == 0)
+tr = ~te
+
+def fit_score(X):
+    X1tr = np.column_stack([np.ones(tr.sum()), X[tr]])
+    b = np.linalg.solve(X1tr.T @ X1tr, X1tr.T @ y[tr])
+    ptr = X1tr @ b
+    pte = np.column_stack([np.ones(te.sum()), X[te]]) @ b
+    r2tr = 1 - ((y[tr]-ptr)**2).sum() / ((y[tr]-y[tr].mean())**2).sum()
+    r2te = 1 - ((y[te]-pte)**2).sum() / ((y[te]-y[tr].mean())**2).sum()
+    return r2tr, r2te
+
+for name, X in (("базовая", base),
+                ("+ десять мусорных", np.column_stack([base, J10])),
+                ("+ rev7", np.column_stack([base, feat["rev7"].to_numpy(float)]))):
+    a, b_ = fit_score(X)
+    print("%-20s обучение %.4f  тест %.4f" % (name, a, b_))
+print("обучение %d, тест %d" % (tr.sum(), te.sum()))`,
       body: `<p>Разделите данные на обучающую и отложенную части детерминированно: в отложенную идут пользователи с <code>user_id % 4 == 0</code>. Обучите три модели только на обучающей части и посчитайте <span class="m">\\(R^2\\)</span> на обеих:</p>
 <ol>
   <li>базовая;</li>
@@ -926,6 +984,19 @@ print("обучение %d, тест %d" % (tr.sum(), te.sum()))
     {
       title: "Логарифм лечит разброс",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `m = (feat["converted"] == 1).to_numpy()
+Xm = np.column_stack([days7[m], D[m]])
+
+_, r2_rub, _, p_rub = ols(Xm, y[m])
+_, r2_log, _, p_log = ols(Xm, np.log(y[m]))
+
+for name, pred_, target in (("рубли", p_rub, y[m]),
+                            ("логарифм", p_log, np.log(y[m]))):
+    e = target - pred_
+    sd = pd.Series(e).groupby(pd.qcut(pred_, 4, labels=False)).std()
+    print(name, "R2=%.4f" % (r2_rub if name == "рубли" else r2_log),
+          "sd по квартилям:", [round(v, 3) for v in sd])`,
       body: `<p>Возьмите только платящих пользователей и постройте базовую модель дважды: для выручки в рублях и для её натурального логарифма.</p>
 <p>Для каждой посчитайте <span class="m">\\(R^2\\)</span> и разброс остатков по квартилям прогноза. Сравните и объясните, почему нельзя просто сказать «у логарифма R-квадрат ниже, значит, хуже». Заодно переведите коэффициент при <code>days7</code> из логарифмической модели в проценты.</p>`,
       solution: `m = (feat["converted"] == 1).to_numpy()
@@ -1542,6 +1613,11 @@ print(f"дециль 10: n={low['n']:.0f} конверсия={low['conv'] * 100:
     {
       title: "Почему доля правильных ответов обманывает",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for t in (0.50, 0.35, 0.22):
+    print("порог %.2f: доля правильных %.4f" % (t, ((p >= t) == yb).mean()))
+print("модель «никто не купит»: %.4f" % (yb == 0).mean())
+print("AUC модели %.4f, AUC константы 0.5" % auc_rank(p, yb))`,
       body: `<p>Посчитайте долю правильных ответов (accuracy) модели при порогах 0,50, 0,35 и 0,22. Сравните с тривиальной моделью, которая всем подряд отвечает «не купит».</p>
 <p>Сделайте вывод: годится ли доля правильных как метрика в этой задаче и почему AUC ведёт себя иначе.</p>`,
       solution: `for t in (0.50, 0.35, 0.22):
@@ -1580,6 +1656,16 @@ AUC ведёт себя иначе, потому что смотрит на по
     {
       title: "Хорошая AUC при вранье в вероятностях",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for name, score in (("исходные вероятности", p),
+                    ("возведённые в квадрат", p ** 2)):
+    print(name, "AUC = %.4f" % auc_rank(score, yb))
+    b = pd.qcut(score, 5, labels=False)
+    t = pd.DataFrame({"s": score, "y": yb, "b": b}).groupby("b").agg(
+        n=("y", "size"), pred=("s", "mean"), fact=("y", "mean"))
+    for i, r in t.iterrows():
+        print("  группа %d: n=%4d прогноз=%.3f факт=%.3f"
+              % (i + 1, r["n"], r["pred"], r["fact"]))`,
       body: `<p>Проверьте калибровку модели: разбейте прогнозы на пять групп и сравните средний прогноз с фактической долей покупателей внутри группы.</p>
 <p>Затем возведите все вероятности в квадрат и повторите обе проверки — AUC и калибровку. Объясните результат и скажите, в каких задачах такая испорченная модель ещё годится, а в каких уже нет.</p>`,
       solution: `for name, score in (("исходные вероятности", p),
@@ -2581,6 +2667,15 @@ MSE = 0,5000. Спуск идёт в ту сторону, но за два ша�
     {
       title: "Найти границу устойчивости",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for lr in (0.05, 0.20, 0.40, 0.60, 0.80, 0.90, 0.95, 1.00):
+    b, _ = gd(Xs, ys, lr, 200)
+    print("  lr=%.2f: %s" % (lr,
+          "разошёлся" if b is None else "MSE=%.6f" % mse(b, Xs, ys)))
+
+H = 2 * Xs.T @ Xs / len(ys)
+print("  lambda_max = %.4f, граница = %.4f"
+      % (np.linalg.eigvalsh(H).max(), 2 / np.linalg.eigvalsh(H).max()))`,
       body: `<p>На стандартизованных данных проведите 200 итераций спуска при длине шага 0,05, 0,20, 0,40, 0,60, 0,80, 0,90, 0,95 и 1,00. Для каждого напечатайте итоговую MSE или пометку о расходимости.</p>
 <p>Сравните результат с теоретической границей <span class="m">\\(\\eta &lt; 2/\\lambda_{\\max}\\)</span>, где <span class="m">\\(\\lambda_{\\max}\\)</span> — наибольшее собственное число матрицы вторых производных <span class="m">\\(2X^{\\mathsf T}X/n\\)</span>.</p>`,
       solution: `for lr in (0.05, 0.20, 0.40, 0.60, 0.80, 0.90, 0.95, 1.00):
@@ -2619,6 +2714,16 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Мини-батчи",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for bs in (32, 256, 4000):
+    b = np.zeros(2)
+    for epoch in range(20):
+        for start in range(0, len(ys), bs):
+            Xb, yb_ = Xs[start:start+bs], ys[start:start+bs]
+            b = b - 0.1 * 2 * Xb.T @ (Xb @ b - yb_) / len(yb_)
+    n_upd = 20 * int(np.ceil(len(ys) / bs))
+    print("  батч %4d: MSE=%.6f  b1=%.6f  обновлений=%d"
+          % (bs, mse(b, Xs, ys), b[1], n_upd))`,
       body: `<p>Проведите 20 проходов по данным (эпох) при длине шага 0,10, обновляя коэффициенты не по всей выборке сразу, а по последовательным порциям размера 32, 256 и 4000. Для каждого размера порции напечатайте итоговую MSE, коэффициент <code>b1</code> и общее число обновлений.</p>
 <p>Порядок строк не перемешивайте — так результат будет воспроизводимым.</p>`,
       solution: `for bs in (32, 256, 4000):
@@ -2661,6 +2766,13 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Один минимум или много",
       level: "mid",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `for start in ([0,0], [5,5], [-5,5], [10,-10], [-100,100]):
+    b = np.array(start, float)
+    for _ in range(1000):
+        b = b - 0.3 * 2 * Xs.T @ (Xs @ b - ys) / len(ys)
+    print("  из %-14s -> b1=%.6f MSE=%.6f"
+          % (str(start), b[1], mse(b, Xs, ys)))`,
       body: `<p>Запустите спуск на стандартизованных данных из пяти разных начальных точек: <code>(0, 0)</code>, <code>(5, 5)</code>, <code>(-5, 5)</code>, <code>(10, -10)</code>, <code>(-100, 100)</code>. Шаг 0,3, тысяча итераций.</p>
 <p>Сравните итоговые коэффициенты. Объясните результат и скажите, для каких моделей он был бы иным.</p>`,
       solution: `for start in ([0,0], [5,5], [-5,5], [10,-10], [-100,100]):
@@ -2703,6 +2815,34 @@ print("  lambda_max = %.4f, граница = %.4f"
     {
       title: "Когда ранняя остановка помогает",
       level: "hard",
+      /* в разборе код перемежается выводом; для проверки — только код */
+      check: `mults = (37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
+         89, 97, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151)
+J = np.column_stack([(feat["user_id"].to_numpy() * m % 101).astype(float)
+                     for m in mults])
+Js = (J - J.mean(0)) / J.std(0)
+
+tr = (feat["user_id"].to_numpy() % 50 == 0)
+te = ~tr
+
+def trace(X):
+    b = np.zeros(X.shape[1])
+    best = (1e9, 0)
+    for i in range(20001):
+        m = mse(b, X[te], ys[te])
+        if m < best[0]:
+            best = (m, i)
+        b = b - 0.05 * 2 * X[tr].T @ (X[tr] @ b - ys[tr]) / tr.sum()
+    return best, mse(b, X[te], ys[te])
+
+X_big = np.column_stack([np.ones(len(x)), xs, D, Js])
+X_clean = np.column_stack([np.ones(len(x)), xs, D])
+
+for name, X in (("раздутая (31 признак)", X_big),
+                ("чистая (7 признаков)", X_clean)):
+    (m, i), final = trace(X)
+    print("  %-24s минимум %.6f на итерации %5d, в конце %.6f (+%.1f%%)"
+          % (name, m, i, final, (final / m - 1) * 100))`,
       body: `<p>Проверьте, работает ли ранняя остановка, на двух моделях. Обучающая выборка — пользователи с <code>user_id % 50 == 0</code> (их 80), остальные 3920 в отложенной. Шаг 0,05, до 20 000 итераций, все признаки стандартизованы.</p>
 <ol>
   <li><strong>Раздутая модель:</strong> <code>days7</code>, каналы и 24 мусорных признака вида <code>user_id * m % 101</code> для простых множителей от 37 до 151 (число 101 пропустить — оно даёт столбец из нулей).</li>
