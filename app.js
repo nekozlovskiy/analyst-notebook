@@ -1743,6 +1743,83 @@ const Engine = {
 };
 
 /* ============================================================
+   Графики matplotlib
+
+   В Pyodide matplotlib по умолчанию рисует прямо в страницу — нам это
+   не годится: картинка должна встать в окно вывода, а проверять нужно
+   не пиксели, а сам график. Поэтому бэкенд Agg, plt.show() ничего не
+   делает, а после запуска все открытые фигуры снимаются: PNG для
+   показа и «паспорт» для проверки — тип, данные, подписи, пределы осей.
+   Включается, только если в packages урока есть matplotlib.
+   ============================================================ */
+
+const PLOT_PY = [
+  "import sys, types, io, base64, json",
+  "import matplotlib",
+  "matplotlib.use('Agg')",
+  "import matplotlib.pyplot as plt",
+  "from matplotlib.patches import Rectangle",
+  "plt.show = lambda *a, **k: None",
+  "plt.rcParams.update({'figure.figsize': (7.2, 4), 'figure.dpi': 100, 'axes.spines.top': False, 'axes.spines.right': False})",
+  "def _num(v):",
+  "    try:",
+  "        return float(matplotlib.dates.date2num(v)) if not isinstance(v, (int, float)) else float(v)",
+  "    except Exception:",
+  "        try: return float(v)",
+  "        except Exception: return None",
+  "def _axes(ax):",
+  "    lines = []",
+  "    for l in ax.get_lines():",
+  "        xs = [_num(x) for x in l.get_xdata()]; ys = [_num(y) for y in l.get_ydata()]",
+  "        if len(ys) > 1: lines.append({'x': xs, 'y': ys})",
+  "    bars = [{'x': p.get_x(), 'y': p.get_y(), 'w': p.get_width(), 'h': p.get_height()}",
+  "            for p in ax.patches if isinstance(p, Rectangle)]",
+  "    pts = 0",
+  "    for c in ax.collections:",
+  "        try: pts += len(c.get_offsets())",
+  "        except Exception: pass",
+  "    return {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel(),",
+  "            'xticks': [t.get_text() for t in ax.get_xticklabels()],",
+  "            'yticks': [t.get_text() for t in ax.get_yticklabels()],",
+  "            'xlim': list(ax.get_xlim()), 'ylim': list(ax.get_ylim()),",
+  "            'lines': lines, 'bars': bars, 'points': pts}",
+  "def _reset():",
+  "    plt.close('all')",
+  "def _collect():",
+  "    out = []",
+  "    for n in plt.get_fignums():",
+  "        fig = plt.figure(n)",
+  "        buf = io.BytesIO(); fig.savefig(buf, format='png', bbox_inches='tight')",
+  "        axes = [_axes(a) for a in fig.axes if a.has_data()]",
+  "        out.append({'png': base64.b64encode(buf.getvalue()).decode(), 'title': fig._suptitle.get_text() if fig._suptitle else '', 'axes': axes})",
+  "    plt.close('all')",
+  "    return json.dumps(out)",
+  "m = types.ModuleType('_nb_plots'); m.reset = _reset; m.collect = _collect; sys.modules['_nb_plots'] = m"
+].join("\n");
+
+const Plots = {
+  on: function (env) { return (env.packages || []).indexOf("matplotlib") >= 0; },
+  ready: null,
+  /* помощник ставится один раз на интерпретатор */
+  prepare: async function (pyi) {
+    if (!Plots.ready) Plots.ready = pyi.runPythonAsync(PLOT_PY);
+    await Plots.ready;
+    pyi.runPython("import _nb_plots; _nb_plots.reset()");
+  },
+  collect: function (pyi) {
+    try { return JSON.parse(pyi.runPython("import _nb_plots; _nb_plots.collect()")); }
+    catch (e) { return []; }
+  },
+  html: function (figs) {
+    return figs.map(function (f) {
+      const t = f.title || (f.axes[0] && f.axes[0].title) || "";
+      return '<figure class="plot"><img src="data:image/png;base64,' + f.png + '" alt="' +
+        esc(t ? "График: " + t : "График без заголовка") + '"></figure>';
+    }).join("");
+  }
+};
+
+/* ============================================================
    Проверка результата
    ============================================================ */
 
@@ -1801,6 +1878,88 @@ const Check = {
     return { ok: false, line: i, why: "строка " + (i + 1) + " не совпадает с эталоном",
              hint: "Ожидается строка вида " + show(y) + "." };
   },
+  /* График сверяется не по картинке, а по «паспорту» (см. PLOT_PY):
+     сколько графиков, какого типа, те же ли данные и в том же ли
+     порядке, подписаны ли оси и есть ли заголовок, не обрезана ли ось
+     у столбцов. Заголовок-вывод смыслом не проверить — если он похож
+     на тему, задача засчитывается с замечанием (note). */
+  plotKind: function (a) {
+    if (a.bars.length >= 2) {
+      const xs = a.bars.map(function (b) { return b.x; }), ws = a.bars.map(function (b) { return b.w; });
+      const hs = a.bars.map(function (b) { return b.h; });
+      const flat = function (v) { return Math.max.apply(null, v) - Math.min.apply(null, v) < 1e-9; };
+      if (flat(xs) && !flat(ws)) return "barh";
+      const byX = a.bars.slice().sort(function (p, q) { return p.x - q.x; });
+      const touch = byX.every(function (b, i) { return i === 0 || Math.abs(byX[i - 1].x + byX[i - 1].w - b.x) < 1e-6 * Math.max(1, Math.abs(b.x)); });
+      return touch && flat(ws) && !flat(hs) && a.bars.length > 3 && !a.xticks.some(function (t) { return /[A-Za-zА-Яа-я]/.test(t); }) ? "hist" : "bar";
+    }
+    if (a.lines.length) return "line";
+    if (a.points) return "scatter";
+    return "empty";
+  },
+  plotValues: function (a, kind) {
+    if (kind === "line") return a.lines[0].y;
+    if (kind === "barh") return a.bars.map(function (b) { return b.w; });
+    if (kind === "hist") return a.bars.slice().sort(function (p, q) { return p.x - q.x; }).map(function (b) { return b.h; });
+    return a.bars.map(function (b) { return b.h; });
+  },
+  plot: function (got, exp) {
+    const KIND = { line: "линейный график", bar: "столбчатая диаграмма", barh: "горизонтальные столбцы",
+                   hist: "гистограмма", scatter: "точечная диаграмма", empty: "пустой график" };
+    const ga = [], ea = [];
+    got.forEach(function (f) { f.axes.forEach(function (a) { ga.push({ a: a, sup: f.title }); }); });
+    exp.forEach(function (f) { f.axes.forEach(function (a) { ea.push({ a: a, sup: f.title }); }); });
+    if (!ga.length) return { ok: false, why: "график не построен",
+      hint: "Нарисуйте его через plt.plot / plt.bar / plt.barh / plt.hist (или ax.… у фигуры из plt.subplots) — картинка появится в выводе." };
+    if (ga.length !== ea.length) return { ok: false,
+      why: "графиков " + ga.length + ", а нужно " + ea.length,
+      hint: ea.length > 1 ? "Нужна сетка маленьких графиков: fig, axes = plt.subplots(…), по одному на каждую категорию." : "Нужен один график: всё на одной оси." };
+    const same = function (x, y) { return Math.abs(x - y) <= Math.max(Math.abs(y) * 0.005, 0.051); };
+    let note = "";
+    for (let i = 0; i < ea.length; i++) {
+      const g = ga[i].a, e = ea[i].a, where = ea.length > 1 ? "график " + (i + 1) + ": " : "";
+      const gk = Check.plotKind(g), ek = Check.plotKind(e);
+      const kindOk = gk === ek || (ek === "hist" && gk === "bar") || (ek === "bar" && gk === "hist");
+      if (!kindOk) return { ok: false, why: where + "нужна " + KIND[ek] + ", а получилась " + KIND[gk],
+        hint: ek === "line" ? "Для динамики — plt.plot(x, y)." : ek === "barh" ? "Горизонтальные столбцы — plt.barh(категории, значения)."
+            : ek === "hist" ? "Распределение — plt.hist(значения, bins=…)." : ek === "bar" ? "Столбцы — plt.bar(категории, значения)." : "" };
+      const gv = Check.plotValues(g, gk), ev = Check.plotValues(e, ek);
+      if (gv.length !== ev.length) return { ok: false,
+        why: where + (ek === "line" ? "точек " : "столбцов ") + gv.length + ", а нужно " + ev.length,
+        hint: ek === "hist" ? "Проверьте границы корзин: bins задаёт число или сами границы." : "Проверьте, по каким строкам и как сгруппированы данные." };
+      /* столбцы, отсортированные в обратную сторону, — тоже сортировка */
+      const rev = gk === "bar" || gk === "barh" ? gv.slice().reverse() : null;
+      const eq = gv.every(function (v, j) { return same(v, ev[j]); }) ||
+                 (rev && rev.every(function (v, j) { return same(v, ev[j]); }));
+      if (!eq) {
+        const gs = gv.slice().sort(function (x, y) { return x - y; }), es = ev.slice().sort(function (x, y) { return x - y; });
+        if (gs.every(function (v, j) { return same(v, es[j]); })) return { ok: false,
+          why: where + "данные верные, но в другом порядке",
+          hint: ek === "line" ? "Точки линии должны идти по времени: отсортируйте по дате." : "Отсортируйте категории по величине — у каналов нет естественного порядка. У barh первая строка рисуется внизу." };
+        const ratio = gv.map(function (v, j) { return ev[j] ? v / ev[j] : NaN; });
+        const flat = ratio.every(function (r) { return isFinite(r) && Math.abs(r / ratio[0] - 1) < 0.01; });
+        return { ok: false, why: where + "данные на графике не те",
+          hint: flat && Math.abs(ratio[0] - 100) < 1 ? "Значения в 100 раз больше: проценты вместо долей." :
+                flat && Math.abs(ratio[0] - 0.01) < 1e-4 ? "Значения в 100 раз меньше: доли вместо процентов." :
+                flat && Math.abs(ratio[0] - 1000) < 10 ? "Значения в 1000 раз больше: нужны тысячи рублей — разделите на 1000." :
+                flat && Math.abs(ratio[0] - 0.001) < 1e-5 ? "Значения в 1000 раз меньше: здесь нужны рубли, а не тысячи." :
+                "Сверьте, что именно рисуете: тот ли столбец, те ли строки (только оплаченные?), та ли группировка." };
+      }
+      if (e.xlabel && !g.xlabel) return { ok: false, why: where + "не подписана ось X", hint: "plt.xlabel(\"…\") — что по оси и в каких единицах." };
+      if (e.ylabel && !g.ylabel) return { ok: false, why: where + "не подписана ось Y", hint: "plt.ylabel(\"…\") — единицы прямо на оси: рубли, заказы, процент." };
+      const gt = g.title || ga[i].sup, et = e.title || ea[i].sup;
+      if (et && !gt) return { ok: false, why: where + "нет заголовка", hint: "plt.title(\"…\") — и пусть это будет вывод, а не тема." };
+      const low = gk === "barh" ? g.xlim[0] : g.ylim[0], elow = ek === "barh" ? e.xlim[0] : e.ylim[0];
+      if ((gk === "bar" || gk === "barh" || gk === "hist") && elow <= 0 && low > 0) return { ok: false,
+        why: where + "ось обрезана: столбцы начинаются не с нуля",
+        hint: "Столбец кодирует величину длиной — с обрезанной осью разница в проценты выглядит как разница в разы. Уберите ylim / xlim." };
+      if (gt && !note && gt.split(/\s+/).length <= 4 && !/\d/.test(gt) && !/(ет|ит|ут|ют|ат|ят|ла|ло|ли|ся|сь|ёт)\b/i.test(gt)) {
+        note = "Заголовок «" + gt + "» похож на тему. Перепишите его выводом: что должен понять читатель, даже не глядя на график.";
+      }
+    }
+    return { ok: true, note: note };
+  },
+
   /* Тренажёр на Python: формат вывода в условии не задан, поэтому
      сверяются числа. Каждое число из вывода разбора должно найтись в
      выводе ученика — с точностью до знаков, которые напечатал
@@ -3099,13 +3258,16 @@ const Run = {
       pyi.setStdout({ batched: function (s) { out.push(s); } });
       pyi.setStderr({ batched: function () {} });
       try {
+        const plots = Plots.on(env);
+        if (plots) await Plots.prepare(pyi);
         if (env.prelude) await pyi.runPythonAsync(env.prelude, { globals: ns });
         if (pre) {
           await pyi.runPythonAsync(pre, { globals: ns });
           out.length = 0;
+          if (plots) pyi.runPython("import _nb_plots; _nb_plots.reset()");
         }
         await pyi.runPythonAsync(code, { globals: ns });
-        return { out: out.join("\n") };
+        return { out: out.join("\n"), figs: plots ? Plots.collect(pyi) : [] };
       } catch (e) {
         /* трассировка — с кадра кода ученика: внутренние кадры Pyodide новичку ничего не скажут */
         const all = String(e.message || e).split("\n");
@@ -3126,6 +3288,7 @@ const Drills = {
   kind: function (L, d) {
     if (d.answer === "text" || L.kind === "text") return "text";
     if (L.kind === "sql") return "sql";
+    if (/\bplt\.|\bax\.(plot|bar|barh|hist)\(/.test(Drills.code(d))) return "plot";
     return /print\(/.test(d.solution) ? "python" : "text";
   },
   code: function (d) {
@@ -3166,7 +3329,7 @@ const Drills = {
             const ordered = /\bORDER\s+BY\b/i.test(code.replace(/OVER\s*\([^()]*(\([^()]*\)[^()]*)*\)/gi, ""));
             return { exp: { columns: r.res.columns, rows: r.res.values, ordered: ordered } };
           })
-        : Run.python(code, C, Drills.pre(C, d)).then(function (r) { return r.err ? { err: r.err } : { out: r.out }; });
+        : Run.python(code, C, Drills.pre(C, d)).then(function (r) { return r.err ? { err: r.err } : { out: r.out, figs: r.figs }; });
       Drills.cache[key].catch(function () { delete Drills.cache[key]; });
     }
     return Drills.cache[key];
@@ -3270,12 +3433,12 @@ const Drills = {
     }
 
     let editor = null, last = null;
-    const py = k === "python";
+    const py = k === "python" || k === "plot";
     const res = q(".dr-res");
     /* эталон и движок — заранее, пока ученик читает условие */
     idle(function () { Drills.expected(L, C, i).catch(function () {}); });
 
-    mountEditor(q(".dr-ta"), k, Store.get("code", codeKey, "") || "",
+    mountEditor(q(".dr-ta"), py ? "python" : "sql", Store.get("code", codeKey, "") || "",
       function (v) { Store.set("code", codeKey, v); }, function () { run(); },
       function () {}).then(function (ed) { editor = ed; });
 
@@ -3298,8 +3461,8 @@ const Drills = {
         }
         last = r;
         if (py) {
-          res.innerHTML = r.out.trim() ? "<pre>" + esc(r.out) + "</pre>"
-            : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+          res.innerHTML = (r.out.trim() ? "<pre>" + esc(r.out) + "</pre>" : "") + Plots.html(r.figs || []) ||
+            '<div class="empty">Код отработал без ошибок, но ничего не ' + (k === "plot" ? "нарисовал." : "напечатал. Нужен print().") + "</div>";
         } else if (r.res) {
           res.innerHTML = renderTable(r.res.columns, r.res.values, -1) +
             '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
@@ -3326,6 +3489,15 @@ const Drills = {
         tried();
         if (want.err) {
           status("warn", "Эту задачу проверить не получилось", "Сравните свой ответ с разбором ниже.");
+          return;
+        }
+        if (k === "plot") {
+          const c = Check.plot(r.figs || [], want.figs || []);
+          const n = c.ok && Check.normLines(want.out).length ? Check.numbers(r.out, want.out) : { ok: true };
+          if (c.ok && n.ok) { solve(); status("ok", "Решено", "График сошёлся с разбором: тип, данные, подписи." + (c.note ? "<br>" + esc(c.note) : "")); }
+          else status("bad", "Пока не сходится", esc((c.ok ? n.why : c.why).replace(/^./, function (x) { return x.toUpperCase(); })) +
+            (c.hint ? '<br><span class="s-hint">' + esc(c.hint) + "</span>" : "") +
+            '<br><span class="s-hint">Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.</span>');
           return;
         }
         if (py) {
@@ -3649,6 +3821,18 @@ function renderLesson(app, id) {
       Terms.mark(refBox);
       this.remove();
     });
+  } else if (C.expected.plot) {
+    /* эталон-график: описание словами, картинка — по кнопке (её рисует решение урока) */
+    const drawPlotRef = function () {
+      refBox.innerHTML = '<div class="empty">Рисую эталон…</div>';
+      solutionFigs().then(function (figs) { refBox.innerHTML = Plots.html(figs); },
+        function () { refBox.innerHTML = '<div class="empty">Эталон не нарисовался — похоже, пропал интернет.</div>'; });
+    };
+    refBox.innerHTML = '<p class="ref-say">' + C.expected.plot + "</p>";
+    const b = $("#refBtn");
+    b.textContent = "показать эталон";
+    b.addEventListener("click", function () { b.remove(); drawPlotRef(); });
+    showRef = function () {};
   } else {
     /* Числа эталона закрыты, пока ученик не попросит или не решит сам:
        иначе задача превращается в подгонку под готовый ответ. */
@@ -3741,7 +3925,7 @@ function renderLesson(app, id) {
 
   /* ---------- запуск ---------- */
   let lastSqlResult = null;
-  let lastStdout = "";
+  let lastStdout = "", lastFigs = [];
 
   async function run() {
     clearStatus();
@@ -3795,13 +3979,15 @@ function renderLesson(app, id) {
     py.setStderr({ batched: function (s) { errBuf.push(s); } });
     loader(true, "Выполняю...");
     try {
+      if (Plots.on(C)) await Plots.prepare(py);
       if (C.prelude) await py.runPythonAsync(C.prelude);
       await py.runPythonAsync(code);
       lastStdout = outBuf.join("\n");
+      lastFigs = Plots.on(C) ? Plots.collect(py) : [];
       const warn = errBuf.join("\n").trim();
-      let html = lastStdout.trim()
-        ? "<pre>" + esc(lastStdout) + "</pre>"
-        : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+      let html = (lastStdout.trim() ? "<pre>" + esc(lastStdout) + "</pre>" : "") + Plots.html(lastFigs);
+      if (!html) html = '<div class="empty">Код отработал без ошибок, но ничего не ' +
+        (Plots.on(C) ? "нарисовал и не напечатал." : "напечатал. Нужен print().") + "</div>";
       if (warn) {
         html += '<pre style="margin-top:9px;font-size:11.5px;color:var(--ink-3)">' + esc(warn) + "</pre>";
       }
@@ -3917,7 +4103,35 @@ function renderLesson(app, id) {
     clearStatus();
     if (isText) return checkText();
     if (L.kind === "sql") return checkSQL();
+    if (C.expected.plot) return checkPlot();
     return checkPy();
+  }
+
+  /* Задача-график: эталонный «паспорт» снимается с решения урока при
+     первой проверке — как в тренажёре. */
+  let refFigs = null;
+  function solutionFigs() {
+    if (!refFigs) {
+      refFigs = Run.python(C.solution, C).then(function (r) {
+        if (r.err) throw new Error(r.err);
+        return r.figs;
+      });
+      refFigs.catch(function () { refFigs = null; });
+    }
+    return refFigs;
+  }
+  async function checkPlot() {
+    if (!lastFigs.length && !lastStdout.trim()) {
+      setStatus("warn", "Сначала запустите код", "Нажмите «Запустить код», потом «Проверить».");
+      return;
+    }
+    let exp;
+    try { exp = await solutionFigs(); }
+    catch (e) { setStatus("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+    const r = Check.plot(lastFigs, exp);
+    if (r.ok) pass(r.note ? "Тип, данные и подписи сошлись с эталоном.<br><span class=\"s-hint\">" + esc(r.note) + "</span>"
+                          : "Тип графика, данные, подписи осей и заголовок сошлись с эталоном.");
+    else fail(r.why, r.hint ? '<br><span class="s-hint">' + esc(r.hint) + "</span>" : "");
   }
 
   /* ---------- подсказки и решение ---------- */
