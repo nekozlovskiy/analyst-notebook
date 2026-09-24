@@ -217,7 +217,7 @@ res = res.sort_values("revenue", ascending=False).reset_index(drop=True)
 print(res.to_string(index=False))`,
 
   solutionNote: `
-<p><strong>Сверьте с SQL-версией из урока 1.1.</strong> Числа <code>users_cnt</code>, <code>orders_cnt</code> и <code>revenue</code> совпадают до копейки. Это хорошая привычка: один и тот же вопрос, посчитанный двумя инструментами, обязан давать один ответ. Расхождение всегда означает ошибку в одном из них.</p>
+<p><strong>Сверьте с SQL-версией из урока 1.2.</strong> Числа <code>users_cnt</code>, <code>orders_cnt</code> и <code>revenue</code> совпадают до копейки. Это хорошая привычка: один и тот же вопрос, посчитанный двумя инструментами, обязан давать один ответ. Расхождение всегда означает ошибку в одном из них.</p>
 <p><strong>Частые ошибки в этой задаче:</strong></p>
 <ul>
   <li><code>how="inner"</code> по умолчанию: канал <code>partner</code> молча исчезает, и этого никто не замечает;</li>
@@ -265,7 +265,7 @@ print(pt.to_string())`,
       title: "transform вместо оконной функции",
       level: "mid",
       body: `<p>Для каждого оплаченного заказа посчитайте долю в общей сумме трат его покупателя: столбцы <code>user_id</code>, <code>order_id</code>, <code>revenue</code>, <code>share_pct</code>. Выведите строки пользователей 3, 13 и 103.</p>
-<p>Это ровно то же, что <code>SUM(...) OVER (PARTITION BY user_id)</code> из урока 1.2. В pandas такое делает <code>groupby(...).transform</code>.</p>`,
+<p>Это ровно то же, что <code>SUM(...) OVER (PARTITION BY user_id)</code> из урока 1.3. В pandas такое делает <code>groupby(...).transform</code>.</p>`,
       solution: `paid = orders[orders["status"] == "paid"].copy()
 
 # transform возвращает Series той же длины, что исходный DataFrame,
@@ -280,7 +280,7 @@ print(sel[["user_id", "order_id", "revenue", "share_pct"]].to_string(index=False
     {
       title: "Топ-3 заказа в каждом городе",
       level: "mid",
-      body: `<p>Повторите задачу из урока 1.2 на pandas: по каждому городу три самых крупных оплаченных заказа. Столбцы <code>city</code>, <code>order_id</code>, <code>revenue</code>. Сортировка по городу, внутри — по убыванию суммы.</p>
+      body: `<p>Повторите задачу из урока 1.3 на pandas: по каждому городу три самых крупных оплаченных заказа. Столбцы <code>city</code>, <code>order_id</code>, <code>revenue</code>. Сортировка по городу, внутри — по убыванию суммы.</p>
 <p>Подсказка: понадобится <code>sort_values</code> и <code>groupby(...).head(3)</code>.</p>`,
       solution: `paid = orders[orders["status"] == "paid"]
 m = users.merge(paid, on="user_id", how="inner")
