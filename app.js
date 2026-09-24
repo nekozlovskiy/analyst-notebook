@@ -1752,19 +1752,55 @@ const Check = {
       .map(function (l) { return l.trim().replace(/\s+/g, " "); })
       .filter(function (l) { return l.length > 0; });
   },
-  python: function (got, exp) {
+  /* Построчная сверка вывода и диагноз первой расходящейся строки.
+     opts.hide — не показывать ожидаемые числа (эталон ещё закрыт):
+     тогда строка эталона приводится с «•••» на месте чисел. */
+  python: function (got, exp, opts) {
+    const hide = !!(opts && opts.hide);
     const a = Check.normLines(got), b = Check.normLines(exp);
-    const n = Math.max(a.length, b.length);
-    for (let i = 0; i < n; i++) {
-      if (a[i] !== b[i]) {
-        if (a[i] === undefined) return { ok: false, line: i, why: "вывод короче эталона: не хватает строки «" + b[i] + "»" };
-        if (b[i] === undefined) return { ok: false, line: i, why: "в выводе лишняя строка: «" + a[i] + "»" };
-        return { ok: false, line: i, why: "строка " + (i + 1) + " не совпадает с эталоном" };
-      }
+    const NUM = /-?\d+(?:[.,]\d+)?(?:e[-+]?\d+)?/gi;
+    const shape = function (l) { return l.replace(NUM, "#"); };
+    const show = function (l) { return "«" + (hide ? l.replace(NUM, "•••") : l) + "»"; };
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    if (i === a.length && i === b.length) return { ok: true };
+    if (i === a.length) {
+      const left = b.length - a.length;
+      return { ok: false, line: i, why: "вывод короче эталона: не хватает " + left + " " + plural(left, "строки", "строк", "строк"),
+               hint: "Следующая строка должна быть такой: " + show(b[i]) + "." };
     }
-    return { ok: true };
+    if (i === b.length) {
+      return { ok: false, line: i, why: "в выводе " + (a.length - b.length) + " " + plural(a.length - b.length, "лишняя строка", "лишние строки", "лишних строк") + " в конце",
+               hint: "Первая лишняя: «" + a[i] + "». Уберите отладочный print или печать целой таблицы." };
+    }
+    /* те же строки, другой порядок */
+    if (a.length === b.length && a.slice().sort().join("\n") === b.slice().sort().join("\n")) {
+      return { ok: false, line: i, why: "строки те же, но в другом порядке",
+               hint: "Проверьте сортировку перед печатью: sort_values, ascending." };
+    }
+    const x = a[i], y = b[i];
+    if (shape(x) === shape(y)) {
+      const nx = x.match(NUM) || [], ny = y.match(NUM) || [];
+      let j = 0;
+      while (j < ny.length && nx[j] === ny[j]) j++;
+      const gx = parseFloat(String(nx[j]).replace(",", ".")), gy = parseFloat(String(ny[j]).replace(",", "."));
+      const dec = (String(ny[j]).split(/[.,]/)[1] || "").length;
+      if (Math.abs(gx - gy) <= 0.5 * Math.pow(10, -dec) + 1e-12) {
+        return { ok: false, line: i, why: "строка " + (i + 1) + ": числа верные, но формат другой",
+                 hint: dec ? "В эталоне " + dec + " " + plural(dec, "знак", "знака", "знаков") + " после точки: f\"{x:." + dec + "f}\" или round(x, " + dec + ")."
+                           : "В эталоне целые числа: int(x) или f\"{x:.0f}\"." };
+      }
+      return { ok: false, line: i, why: "строка " + (i + 1) + ": текст тот же, а " + (j + 1) + "-е число другое" +
+                 (hide ? "" : ": получилось " + nx[j] + ", ожидается " + ny[j]),
+               hint: "Форма строки верная — перепроверьте, что именно считаете: какие строки таблицы, какой агрегат." };
+    }
+    if (x.toLowerCase().replace(/[\s.,:;!]/g, "") === y.toLowerCase().replace(/[\s.,:;!]/g, "")) {
+      return { ok: false, line: i, why: "строка " + (i + 1) + " отличается только регистром, пробелами или знаками препинания",
+               hint: "Сравните буква в букву: ожидается " + show(y) + "." };
+    }
+    return { ok: false, line: i, why: "строка " + (i + 1) + " не совпадает с эталоном",
+             hint: "Ожидается строка вида " + show(y) + "." };
   },
-
   /* Тренажёр на Python: формат вывода в условии не задан, поэтому
      сверяются числа. Каждое число из вывода разбора должно найтись в
      выводе ученика — с точностью до знаков, которые напечатал
@@ -1813,20 +1849,13 @@ const Check = {
 
   /* Тренажёр на SQL: как основная задача, но имена столбцов не обязаны
      совпадать — в условии их часто не называют. */
-  drillSql: function (res, exp) {
-    let r = Check.sql(res, exp), note = "";
+  drillSql: function (res, exp, code) {
+    let r = Check.sql(res, exp, { code: code }), note = "";
     if (!r.ok && res && res.columns.length === exp.columns.length && /называется/.test(r.why)) {
-      res = { columns: exp.columns, values: res.values };
-      r = Check.sql(res, exp);
+      r = Check.sql({ columns: exp.columns, values: res.values }, exp, { code: code });
       note = "Значения сошлись. Столбцы в разборе названы так: " + exp.columns.join(", ") + ".";
     }
-    if (r.ok) return note ? { ok: true, note: note } : r;
-    /* те же строки, но в другом порядке — так и сказать, а не «строка 1 не та» */
-    if (exp.ordered && r.row !== undefined &&
-        Check.sql(res, { columns: exp.columns, rows: exp.rows, ordered: false }).ok) {
-      return { ok: false, why: "строки те же, но порядок другой — задача просит сортировку, проверьте ORDER BY" };
-    }
-    return r;
+    return r.ok && note ? { ok: true, note: note } : r;
   },
 
   cellEq: function (a, b) {
@@ -1836,13 +1865,34 @@ const Check = {
     if (a !== "" && b !== "" && !isNaN(na) && !isNaN(nb)) return Math.abs(na - nb) < 0.011;
     return String(a).trim() === String(b).trim();
   },
-  sql: function (res, exp) {
+  /* Сверка таблицы с эталоном и диагноз: не «не совпало», а что именно
+     и почему так бывает. opts: code — запрос ученика (по нему советы про
+     JOIN и WHERE), hide — не называть ожидаемые числа (пока эталон
+     основной задачи закрыт). Возвращает why — что не так, hint — куда
+     смотреть, marks — строки и ячейки таблицы ученика для подсветки
+     (индексы в res.values), row — первая из них. */
+  sql: function (res, exp, opts) {
+    opts = opts || {};
+    /* советы — по самому запросу, без комментариев: в них тоже бывают слова JOIN и WHERE */
+    const hide = !!opts.hide,
+          code = String(opts.code || "").replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
     if (!res) return { ok: false, why: "запрос ничего не вернул — проверьте, что он начинается с SELECT" };
     const gc = res.columns.map(function (c) { return String(c).toLowerCase().trim(); });
     const ec = exp.columns.map(function (c) { return c.toLowerCase(); });
+    const list = function (a) { return a.map(function (x) { return "«" + x + "»"; }).join(", "); };
+
+    /* ---- столбцы ---- */
+    const miss = exp.columns.filter(function (c, i) { return gc.indexOf(ec[i]) < 0; });
+    const extra = res.columns.filter(function (c, i) { return ec.indexOf(gc[i]) < 0; });
     if (gc.length !== ec.length) {
-      return { ok: false, why: "столбцов " + gc.length + ", а нужно " + ec.length +
-               " (" + exp.columns.join(", ") + ")" };
+      return { ok: false,
+        why: "столбцов " + gc.length + ", а нужно " + ec.length + " (" + exp.columns.join(", ") + ")",
+        hint: (miss.length ? "Не хватает: " + list(miss) + ". " : "") +
+              (extra.length ? "Лишние: " + list(extra) + "." : "") };
+    }
+    if (!miss.length && gc.join("|") !== ec.join("|")) {
+      return { ok: false, why: "столбцы те же, но в другом порядке: нужно " + exp.columns.join(", "),
+               hint: "Порядок столбцов задаёт список после SELECT." };
     }
     for (let i = 0; i < ec.length; i++) {
       if (gc[i] !== ec[i]) {
@@ -1850,27 +1900,168 @@ const Check = {
                  "», а в задаче просят «" + exp.columns[i] + "» — задайте имя через AS" };
       }
     }
-    let got = res.values.slice(), want = exp.rows.slice();
-    if (got.length !== want.length) {
-      return { ok: false, why: "строк " + got.length + ", а должно быть " + want.length };
-    }
-    if (!exp.ordered) {
-      const key = function (r) { return r.map(function (v) { return v === null ? "" : String(v); }).join("|"); };
-      got = got.slice().sort(function (x, y) { return key(x) < key(y) ? -1 : 1; });
-      want = want.slice().sort(function (x, y) { return key(x) < key(y) ? -1 : 1; });
-    }
-    for (let r = 0; r < want.length; r++) {
-      for (let c = 0; c < want[r].length; c++) {
-        if (!Check.cellEq(got[r][c], want[r][c])) {
-          return { ok: false, row: r,
-                   why: "строка " + (r + 1) + ", столбец «" + exp.columns[c] + "»: получилось " +
-                        JSON.stringify(got[r][c]) + ", ожидается " + JSON.stringify(want[r][c]) };
+
+    /* ---- строки: сначала как мультимножества ---- */
+    const got = res.values, want = exp.rows;
+    const same = function (x, y) {
+      for (let c = 0; c < y.length; c++) if (!Check.cellEq(x[c], y[c])) return false;
+      return true;
+    };
+    const takenG = [], takenW = [];
+    want.forEach(function (w, wi) {
+      for (let gi = 0; gi < got.length; gi++) {
+        if (!takenG[gi] && same(got[gi], w)) { takenG[gi] = true; takenW[wi] = gi + 1; return; }
+      }
+    });
+    const extraG = [], missW = [];
+    got.forEach(function (r, i) { if (!takenG[i]) extraG.push(i); });
+    want.forEach(function (r, i) { if (!takenW[i]) missW.push(i); });
+
+    if (!extraG.length && !missW.length) {
+      if (exp.ordered) {
+        for (let i = 0; i < want.length; i++) {
+          if (!same(got[i], want[i])) {
+            return { ok: false, row: i, marks: { rows: [i] },
+              why: "строки те же, но порядок другой",
+              hint: /\bORDER\s+BY\b/i.test(code)
+                ? "Проверьте ORDER BY: по какому столбцу и в какую сторону (DESC — по убыванию)."
+                : "Задача просит сортировку — добавьте ORDER BY." };
+          }
         }
       }
+      return { ok: true };
     }
-    return { ok: true };
+
+    const key0 = function (r) { return r[0] === null ? "NULL" : String(r[0]); };
+    const textKey = want.every(function (r) { return typeof r[0] === "string" || r[0] === null; });
+    const keysShow = function (idx, rows) {
+      const ks = idx.map(function (i) { return key0(rows[i]); });
+      const uniq = ks.filter(function (k, j) { return ks.indexOf(k) === j; });
+      return uniq.slice(0, 4).map(function (k) { return exp.columns[0] + " = " + k; }).join(", ") +
+        (uniq.length > 4 ? " и ещё " + (uniq.length - 4) : "");
+    };
+    const hasJoin = /\bJOIN\b/i.test(code), leftJoin = /\bLEFT\s+(OUTER\s+)?JOIN\b/i.test(code);
+    const joinHint = hasJoin && !leftJoin ? "INNER JOIN выбрасывает строки без пары справа. Если они должны остаться в ответе — нужен LEFT JOIN."
+      : leftJoin && /\bWHERE\b/i.test(code) ? "Условие на правую таблицу в WHERE превращает LEFT JOIN во внутренний: строки без пары отсекаются. Перенесите его в ON."
+      : /\bHAVING\b/i.test(code) ? "HAVING отсекает группы целиком — проверьте его условие: нужно ли оно вообще и тот ли там знак."
+      : "Какой-то фильтр отсекает лишнее — проверьте WHERE и HAVING.";
+
+    /* лишние строки, а нужные все на месте */
+    if (extraG.length && !missW.length) {
+      const dup = extraG.every(function (gi) { return want.some(function (w) { return same(got[gi], w); }); });
+      if (dup) {
+        return { ok: false, row: extraG[0], marks: { rows: extraG },
+          why: "строк " + got.length + " вместо " + want.length + ": " + extraG.length + " " +
+               plural(extraG.length, "строка повторяется", "строки повторяются", "строк повторяются"),
+          hint: hasJoin ? "Похоже на размножение строк при JOIN: у одной строки слева нашлось несколько пар справа. Сначала сгруппируйте правую таблицу или посчитайте COUNT(DISTINCT …)."
+                        : "Нужны уникальные строки — DISTINCT или GROUP BY." };
+      }
+      return { ok: false, row: extraG[0], marks: { rows: extraG },
+        why: "все нужные строки на месте, но есть " + extraG.length + " " + plural(extraG.length, "лишняя", "лишних", "лишних") +
+             (textKey ? " (" + keysShow(extraG, got) + ")" : ""),
+        hint: "Не хватает условия: проверьте WHERE (или HAVING, если условие на сумму или количество). Лишние строки подсвечены." };
+    }
+
+    /* не хватает строк, лишних нет */
+    if (missW.length && !extraG.length) {
+      return { ok: false,
+        why: "не хватает " + missW.length + " " + plural(missW.length, "строки", "строк", "строк") +
+             (textKey ? ": нет " + keysShow(missW, want) : ""),
+        hint: joinHint };
+    }
+
+    /* строки есть, но значения другие: сопоставляем по первому столбцу */
+    const uniqKeys = function (rows) {
+      const ks = rows.map(key0);
+      return ks.every(function (k, i) { return ks.indexOf(k) === i; });
+    };
+    if (textKey && uniqKeys(got) && uniqKeys(want)) {
+      const gByKey = {}, wByKey = {};
+      got.forEach(function (r, i) { gByKey[key0(r)] = i; });
+      want.forEach(function (r, i) { wByKey[key0(r)] = i; });
+      /* сначала — каких строк нет и какие лишние: остальные числа часто
+         поправятся сами, когда найдётся причина */
+      const missK = [], extraK = [];
+      want.forEach(function (r, i) { if (gByKey[key0(r)] === undefined) missK.push(i); });
+      got.forEach(function (r, i) { if (wByKey[key0(r)] === undefined) extraK.push(i); });
+      if (missK.length) {
+        return { ok: false, row: extraK[0], marks: { rows: extraK },
+          why: "в ответе нет " + plural(missK.length, "строки", "строк", "строк") + " " + keysShow(missK, want) +
+               (extraK.length ? ", зато есть лишние: " + keysShow(extraK, got) : ""),
+          hint: joinHint };
+      }
+      if (extraK.length) {
+        return { ok: false, row: extraK[0], marks: { rows: extraK },
+          why: "лишние строки: " + keysShow(extraK, got),
+          hint: "Не хватает условия: проверьте WHERE (или HAVING, если условие на сумму или количество). Лишние строки подсвечены." };
+      }
+      if (got.length === want.length) {
+        const cells = [], byCol = {};
+        want.forEach(function (w) {
+          const gi = gByKey[key0(w)];
+          for (let c = 1; c < w.length; c++) {
+            if (!Check.cellEq(got[gi][c], w[c])) {
+              cells.push(gi + ":" + c);
+              (byCol[c] = byCol[c] || []).push({ g: got[gi][c], w: w[c], gi: gi, k: key0(w) });
+            }
+          }
+        });
+        const cols = Object.keys(byCol).map(Number);
+        const c0 = cols[0], diffs = byCol[c0];
+        const name = exp.columns[c0];
+        let why = (cols.length > 1
+            ? "значения отличаются в столбцах " + cols.map(function (c) { return "«" + exp.columns[c] + "»"; }).join(", ")
+            : "значения отличаются в столбце «" + name + "»") +
+          " — " + diffs.length + " " + plural(diffs.length, "строка", "строки", "строк") + " из " + want.length;
+        if (!hide) why += "; например, для " + exp.columns[0] + " = " + diffs[0].k + " получилось " +
+          JSON.stringify(diffs[0].g) + ", ожидается " + JSON.stringify(diffs[0].w);
+        return { ok: false, row: diffs[0].gi, marks: { cells: cells }, why: why,
+                 hint: Check.why(diffs, hasJoin) + " Расходящиеся ячейки подсвечены." };
+      }
+    }
+
+    /* общий случай */
+    return { ok: false, row: extraG[0], marks: { rows: extraG },
+      why: got.length !== want.length ? "строк " + got.length + ", а должно быть " + want.length
+         : "в " + extraG.length + " " + plural(extraG.length, "строке", "строках", "строках") + " из " + got.length + " значения не те",
+      hint: textKey && missW.length
+        ? "В ответе должны быть " + keysShow(missW, want) + ". Строки, которых нет в эталоне, подсвечены."
+        : "Строки, которых нет в эталоне, подсвечены." };
   },
 
+  /* Почему могли разойтись числа в одном столбце — по самим расхождениям. */
+  why: function (diffs, hasJoin) {
+    const num = diffs.filter(function (d) {
+      return d.g !== null && d.w !== null && d.g !== "" && d.w !== "" && !isNaN(Number(d.g)) && !isNaN(Number(d.w));
+    });
+    if (diffs.some(function (d) { return d.g === null && Number(d.w) === 0; })) {
+      return "Где должен быть 0, получается NULL — оберните выражение в COALESCE(…, 0).";
+    }
+    if (diffs.some(function (d) { return Number(d.g) === 0 && d.w === null; })) {
+      return "Где должен быть NULL, получается 0: пустое значение не надо заменять нулём.";
+    }
+    if (num.length === diffs.length && num.length) {
+      const ratios = num.map(function (d) { return Number(d.w) !== 0 ? Number(d.g) / Number(d.w) : NaN; });
+      const r0 = ratios[0];
+      const flat = ratios.every(function (r) { return isFinite(r) && Math.abs(r / r0 - 1) < 0.01; });
+      if (flat && Math.abs(r0 - 100) < 1) return "Значения ровно в 100 раз больше: проценты вместо долей — уберите «* 100».";
+      if (flat && Math.abs(r0 - 0.01) < 0.0001) return "Значения ровно в 100 раз меньше: доли вместо процентов — умножьте на 100.0.";
+      if (num.every(function (d) { return Math.abs(Number(d.g) - Number(d.w)) < Math.max(0.1, Math.abs(Number(d.w)) * 0.005); })) {
+        return "Числа почти совпадают — дело в округлении: проверьте ROUND(…, n) и деление целых (100 * a / b считает целочисленно, нужно 100.0).";
+      }
+      if (num.every(function (d) { return Number(d.g) > Number(d.w); })) {
+        return "Везде больше, чем нужно: либо в подсчёт попали лишние строки (не хватает условия — например, на статус), " +
+          (hasJoin ? "либо JOIN размножил строки до подсчёта (тогда COUNT(DISTINCT …) или сначала сгруппировать)." : "либо считается не тот столбец.");
+      }
+      if (num.every(function (d) { return Number(d.g) < Number(d.w); })) {
+        return "Везде меньше, чем нужно: похоже, лишний фильтр отсекает часть строк до подсчёта.";
+      }
+      if (num.every(function (d) { return Number(d.g) === Math.trunc(Number(d.g)) && Number(d.w) !== Math.trunc(Number(d.w)); })) {
+        return "Получаются целые числа, а нужны дробные: деление целых отбрасывает дробь — умножьте на 1.0 или 100.0.";
+      }
+    }
+    return "Сверьте, что именно считает этот столбец: какой агрегат, по каким строкам и с каким условием.";
+  },
   text: function (answer, lesson) {
     const norm = function (s) { return s.toLowerCase().replace(/ё/g, "е"); };
     const low = " " + norm(answer) + " ";
@@ -1953,14 +2144,19 @@ function maskStdout(t) {
   });
 }
 
+/* badRow — номер строки для подсветки или { rows: [...], cells: ["r:c"] }
+   из диагноза проверки: строки и отдельные ячейки таблицы ученика */
 function renderTable(cols, rows, badRow, mask) {
+  const mk = typeof badRow === "object" && badRow ? badRow : { rows: badRow >= 0 ? [badRow] : [] };
+  const badRows = mk.rows || [], badCells = mk.cells || [];
   let h = '<table class="res"><thead><tr>';
   cols.forEach(function (c) { h += "<th>" + esc(c) + "</th>"; });
   h += "</tr></thead><tbody>";
   rows.slice(0, 200).forEach(function (r, i) {
-    h += "<tr" + (i === badRow ? ' class="rowdiff"' : "") + ">";
-    r.forEach(function (v) {
-      h += '<td class="' + (typeof v === "number" ? "num" : "") + '">' +
+    h += "<tr" + (badRows.indexOf(i) >= 0 ? ' class="rowdiff"' : "") + ">";
+    r.forEach(function (v, c) {
+      const cls = (typeof v === "number" ? "num" : "") + (badCells.indexOf(i + ":" + c) >= 0 ? " celldiff" : "");
+      h += '<td class="' + cls.trim() + '">' +
            (v === null ? "NULL" : mask && isNumLike(v) ? MASK : esc(v)) + "</td>";
     });
     h += "</tr>";
@@ -2719,14 +2915,16 @@ const Steps = {
           const rp = Check.python(lastOut, want);
           if (rp.ok) { pass(n); return; }
           const a = Check.normLines(lastOut)[rp.line], b = Check.normLines(want)[rp.line];
-          status("bad", "Пока не совпадает", esc(a !== undefined && b !== undefined
-            ? "строка " + (rp.line + 1) + ": получилось «" + a + "», ожидается «" + b + "»" : rp.why));
+          status("bad", "Пока не совпадает", esc(rp.why) +
+            (a !== undefined && b !== undefined && !/только|формат/.test(rp.why)
+              ? '<br><span class="s-hint">Получилось «' + esc(a) + "», ожидается «" + esc(b) + "».</span>"
+              : rp.hint ? '<br><span class="s-hint">' + esc(rp.hint) + "</span>" : ""));
           return;
         }
-        const r = Check.sql(last, S.steps[n].expected);
+        const r = Check.sql(last, S.steps[n].expected, { code: editor ? editor.get() : q(".st-ta").value });
         if (r.ok) { pass(n); return; }
-        if (last) showRows(r.row === undefined ? -1 : r.row);
-        status("bad", "Пока не совпадает", esc(r.why));
+        if (last) showRows(r.marks || -1);
+        status("bad", "Пока не совпадает", esc(r.why) + (r.hint ? '<br><span class="s-hint">' + esc(r.hint) + "</span>" : ""));
       }
 
       /* первое нажатие — подсказка, второе — решение в редакторе */
@@ -3136,11 +3334,13 @@ const Drills = {
           else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
           return;
         }
-        const c = Check.drillSql(r.res, want.exp);
+        const c = Check.drillSql(r.res, want.exp, editor ? editor.get() : q(".dr-ta").value);
         if (c.ok) { solve(); status("ok", "Решено", c.note || "Столбцы и строки сошлись с разбором."); }
         else {
-          if (r.res && c.row !== undefined) res.innerHTML = renderTable(r.res.columns, r.res.values, c.row);
-          status("bad", "Пока не сходится", esc(c.why) + ". Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+          if (r.res && c.marks) res.innerHTML = renderTable(r.res.columns, r.res.values, c.marks) +
+            '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
+          status("bad", "Пока не сходится", esc(c.why) + "." + (c.hint ? '<br><span class="s-hint">' + esc(c.hint) + "</span>" : "") +
+            '<br><span class="s-hint">Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.</span>');
         }
       } finally { cb.disabled = false; }
     }
@@ -3646,7 +3846,7 @@ function renderLesson(app, id) {
   function fail(why, extra) {
     attempts += 1; Store.set("attempts", id, attempts); syncSolBtn();
     setStatus("bad", "Результат не совпадает",
-      esc(why) + (extra || "") +
+      esc(why.charAt(0).toUpperCase() + why.slice(1)) + (extra || "") +
       '<br><span style="color:var(--ink-3);font-size:12.5px">Попытка ' + attempts +
       (attempts >= 3 ? ". Кнопка «Показать решение» уже доступна."
                      : ". Решение откроется после третьей.") + "</span>");
@@ -3657,15 +3857,17 @@ function renderLesson(app, id) {
       setStatus("warn", "Сначала запустите запрос", "Нажмите «Запустить код», потом «Проверить».");
       return;
     }
-    const r = Check.sql(lastSqlResult, C.expected);
+    /* пока числа эталона закрыты, диагноз их не называет */
+    const hide = !!$("#refBox .masked");
+    const r = Check.sql(lastSqlResult, C.expected, { code: getCode(), hide: hide });
     if (r.ok) {
       $("#outBox").innerHTML = renderTable(lastSqlResult.columns, lastSqlResult.values, -1);
       pass("Столбцы, порядок строк и значения сошлись с эталоном.");
     } else {
-      $("#outBox").innerHTML = renderTable(lastSqlResult.columns, lastSqlResult.values,
-        r.row === undefined ? -1 : r.row);
-      fail(r.why, r.row !== undefined
-        ? '<br><span style="font-size:12.5px">Первая расходящаяся строка подсвечена слева.</span>' : "");
+      $("#outBox").innerHTML = renderTable(lastSqlResult.columns, lastSqlResult.values, r.marks || -1) +
+        '<div class="st-rows">' + lastSqlResult.values.length + " " +
+        plural(lastSqlResult.values.length, "строка", "строки", "строк") + "</div>";
+      fail(r.why, r.hint ? '<br><span class="s-hint">' + esc(r.hint) + "</span>" : "");
     }
   }
 
@@ -3674,7 +3876,7 @@ function renderLesson(app, id) {
       setStatus("warn", "Сначала запустите код", "Нажмите «Запустить код», потом «Проверить».");
       return;
     }
-    const r = Check.python(lastStdout, C.expected.stdout);
+    const r = Check.python(lastStdout, C.expected.stdout, { hide: !!$("#refBox .masked") });
     if (r.ok) {
       pass("Вывод совпал с эталоном. Различия в пробелах и выравнивании не учитывались.");
     } else {
@@ -3683,7 +3885,8 @@ function renderLesson(app, id) {
         return i === r.line ? '<mark class="diff">' + esc(l) + "</mark>" : esc(l);
       }).join("\n");
       $("#outBox").innerHTML = "<pre>" + html + "</pre>";
-      fail(r.why, '<br><span style="font-size:12.5px">Первое расхождение подсвечено — сравните с эталоном справа.</span>');
+      fail(r.why, '<br><span class="s-hint">' + esc(r.hint || "") +
+        (r.line < raw.length ? " Первое расхождение подсвечено." : "") + "</span>");
     }
   }
 
