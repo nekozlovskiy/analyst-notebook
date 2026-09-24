@@ -1384,6 +1384,118 @@ function renderSummary(app, id) {
   });
 }
 
+/* ============================================================
+   Маршрут: схема модулей на главной
+
+   Стрелки берутся из needs в lessons.js, а места узлов и изгибы
+   стрелок заданы здесь — для широкого экрана по горизонтали, для
+   телефона по вертикали (текст схемы не должен мельчать). Модуль с
+   optional рисуется пунктиром: короткий путь до оффера — без него.
+   ============================================================ */
+
+const Route = {
+  W: 164, H: 48,
+  /* узел: [колонка x, строка y]; стрелка «откуда>куда»: стороны и изгиб
+     (mid — ступенька посередине, hv — сначала вбок, vh — сначала вверх/вниз) */
+  wide: {
+    w: 964, h: 250,
+    at: { m0l1: [0, 10], m0l2: [0, 100], m1: [200, 10], m2: [200, 100], m3: [400, 100],
+          m4: [600, 100], m5: [600, 192], m6: [800, 100] },
+    via: { "m1>m4": ["r", "t", "hv"], "m3>m5": ["b", "l", "vh"], "m5>m6": ["r", "b", "hv"] },
+    dflt: ["r", "l", "mid"]
+  },
+  tall: {
+    w: 368, h: 402,
+    at: { m0l1: [2, 10], m0l2: [202, 10], m1: [2, 94], m2: [202, 94], m3: [202, 178],
+          m4: [2, 262], m5: [202, 262], m6: [2, 346] },
+    via: { "m3>m4": ["l", "t", "hv"], "m5>m6": ["b", "r", "vh"] },
+    dflt: ["b", "t", "mid"]
+  },
+
+  nodes: function () {
+    const out = [];
+    Course.data.modules.forEach(function (m) {
+      if (m.num === 0) {
+        m.lessons.forEach(function (l) {
+          out.push({ id: l.id, href: "#" + l.id, label: l.num + " " + l.title, done: Course.isDone(l.id) });
+        });
+      } else {
+        out.push({ id: m.id, href: "#toc-" + m.id, label: m.num + " · " + (m.short || m.title),
+                   done: Course.doneCount(m.lessons) === m.lessons.length, opt: m.optional,
+                   needs: m.needs || [] });
+      }
+    });
+    return out;
+  },
+
+  svg: function (L, cls) {
+    const W = Route.W, H = Route.H, nodes = Route.nodes();
+    const byId = {};
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    function pt(id, side) {
+      const p = L.at[id];
+      return side === "r" ? [p[0] + W, p[1] + H / 2] : side === "l" ? [p[0], p[1] + H / 2]
+           : side === "t" ? [p[0] + W / 2, p[1]] : [p[0] + W / 2, p[1] + H];
+    }
+    let edges = "";
+    nodes.forEach(function (n) {
+      (n.needs || []).forEach(function (from) {
+        if (!L.at[from]) return;
+        const v = L.via[from + ">" + n.id] || L.dflt;
+        const a = pt(from, v[0]), b = pt(n.id, v[1]);
+        let d = "M" + a[0] + " " + a[1];
+        if (v[2] === "hv") d += " H" + b[0] + " V" + b[1];
+        else if (v[2] === "vh") d += " V" + b[1] + " H" + b[0];
+        else if (v[0] === "r" || v[0] === "l") { const mx = (a[0] + b[0]) / 2; d += " H" + mx + " V" + b[1] + " H" + b[0]; }
+        else { const my = (a[1] + b[1]) / 2; d += " V" + my + " H" + b[0] + " V" + b[1]; }
+        const dash = n.opt || (byId[from] && byId[from].opt);
+        edges += '<path class="rt-e' + (dash ? " opt" : "") + '" d="' + d + '" marker-end="url(#rtArrow' + cls + ')"/>';
+      });
+    });
+    let boxes = "";
+    nodes.forEach(function (n) {
+      const p = L.at[n.id];
+      if (!p) return;
+      const cx = p[0] + W / 2;
+      boxes += '<a class="rt-n' + (n.done ? " done" : "") + (n.opt ? " opt" : "") + '" href="' + n.href + '"' +
+          (n.id.indexOf("m0") === 0 ? "" : ' data-mod="' + n.id + '"') + ">" +
+        "<title>" + esc(n.label + (n.done ? ", пройден" : "") + (n.opt ? ", необязательный" : "")) + "</title>" +
+        '<rect x="' + p[0] + '" y="' + p[1] + '" width="' + W + '" height="' + H + '" rx="7"/>' +
+        (n.opt
+          ? '<text x="' + cx + '" y="' + (p[1] + 21) + '">' + esc(n.label) + "</text>" +
+            '<text class="rt-sub" x="' + cx + '" y="' + (p[1] + 38) + '">необязательный</text>'
+          : '<text x="' + cx + '" y="' + (p[1] + H / 2 + 5) + '">' + (n.done ? "✓ " : "") + esc(n.label) + "</text>") +
+        "</a>";
+    });
+    return '<svg class="rt-svg ' + cls + '" viewBox="0 0 ' + L.w + " " + L.h + '" role="img" ' +
+        'aria-label="Схема курса: какие модули на каких опираются">' +
+      '<defs><marker id="rtArrow' + cls + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+        '<path class="rt-ah" d="M0 1 L9 5 L0 9 z"/></marker></defs>' +
+      edges + boxes + "</svg>";
+  },
+
+  section: function () {
+    const node = el("section", { class: "route has-margin" });
+    node.innerHTML =
+      '<div class="aside"><p>короткий путь до оффера — без пунктира</p></div>' +
+      '<div class="sec-title">Маршрут</div>' +
+      Route.svg(Route.wide, "wide") + Route.svg(Route.tall, "tall") +
+      '<p class="rt-note">Стрелка — модуль опирается на предыдущий. Пунктир — математику можно ' +
+        "отложить до первого оффера: к собеседованию хватит модулей 1–4 и 6.</p>";
+    /* узел модуля ведёт к нему в оглавлении — прокруткой, чтобы адрес
+       не превратился в якорь, которого нет при перезагрузке */
+    Array.prototype.forEach.call(node.querySelectorAll("[data-mod]"), function (a) {
+      a.addEventListener("click", function (e) {
+        const t = document.getElementById("toc-" + a.dataset.mod);
+        if (!t) return;
+        e.preventDefault();
+        t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    return node;
+  }
+};
+
 function renderHome(app) {
   document.title = "Тетрадь аналитика — курс подготовки к Junior Data Analyst";
   mountHeader("");
@@ -1474,6 +1586,8 @@ function renderHome(app) {
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
+  main.appendChild(Route.section());
+
   /* ---------- программа: оглавление тетради ---------- */
   /* Не карточки, а оглавление: номер, название, отточие, вид практики
      и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
@@ -1482,13 +1596,14 @@ function renderHome(app) {
   Course.data.modules.forEach(function (m) {
     const d = Course.doneCount(m.lessons), t = m.lessons.length;
     tocHtml +=
-      '<section class="toc-mod">' +
+      '<section class="toc-mod" id="toc-' + m.id + '">' +
         '<header class="toc-mh">' +
           '<span class="toc-mn">' + m.num + "</span>" +
-          '<h3 class="toc-mt">' + esc(m.title) + "</h3>" +
+          '<h3 class="toc-mt">' + esc(m.title) +
+            (m.optional ? ' <span class="toc-opt" title="' + esc(m.optional) + '">необязательный</span>' : "") + "</h3>" +
           '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
         "</header>" +
-        '<p class="toc-ms">' + esc(m.sub) + "</p>" +
+        '<p class="toc-ms">' + esc(m.sub) + (m.optional ? " Модуль " + esc(m.optional) + "." : "") + "</p>" +
         (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
         '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
