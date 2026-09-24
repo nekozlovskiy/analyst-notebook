@@ -563,7 +563,7 @@ function mountHeader(crumbHtml) {
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
       '<nav class="hdr-nav" aria-label="Разделы">' + navLink("interview", "К собеседованию") +
-        navLink("my-notes", "Конспект") + navLink("glossary", "Словарь") + "</nav>" +
+        navLink("my-notes", "Конспект") + navLink("mistakes", "Ошибки") + navLink("glossary", "Словарь") + "</nav>" +
       '<button class="iconbtn" id="findBtn" type="button" aria-label="Найти урок" ' +
         'title="Найти урок — косая черта или Cmd K">' + ICON.find +
         '<span class="bl">Найти</span><span class="k">/</span></button>' +
@@ -576,7 +576,7 @@ function mountHeader(crumbHtml) {
     /* на узком экране ссылки шапки и тема уходят сюда */
     '<nav class="hdr-menu" id="hdrMenu" aria-label="Разделы" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
-      navLink("my-notes", "Конспект") + navLink("glossary", "Словарь") +
+      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("glossary", "Словарь") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
     "</nav>" +
     '<div class="hdr-bar" id="hdrBar"></div>';
@@ -1035,6 +1035,7 @@ const Pages = {
   find: function (id) {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
+    if (id === "mistakes") return renderMistakes;
     if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
     if (/^summary-m\d+$/.test(id)) return renderSummary;
     return null;
@@ -1169,6 +1170,91 @@ function renderMyNotes(app) {
   app.appendChild(main);
   const pb = $("#printBtn");
   if (pb) pb.addEventListener("click", function () { window.print(); });
+}
+
+/* ---------- мои ошибки ----------
+   Вопросы самопроверки и карточки, где ученик ошибался или не вспомнил
+   (поле miss в корзине review). Группы — уроки, сначала те, где ошибок
+   больше; в группе — сначала самые частые. Отсюда ведёт ссылка назад
+   к теории: ошибка чаще всего значит, что тему надо перечитать. */
+function renderMistakes(app) {
+  document.title = "Мои ошибки — Тетрадь аналитика";
+  mountHeader("<b>Мои ошибки</b>");
+  const all = Store.all().review || {};
+  const items = Object.keys(all).map(function (k) {
+    const x = Review.parse(k);
+    if (x) { x.r = all[k]; x.lesson = Course.byId(x.id); }
+    return x;
+  }).filter(function (x) { return x && x.lesson && x.r && x.r.miss > 0; });
+
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = pageHead("Мои ошибки",
+    items.length
+      ? "Вопросы и карточки, на которых вы ошибались, — по урокам, сначала самые трудные. " +
+        "Там, где ошибок много, быстрее перечитать теорию, чем ждать повторения."
+      : "Здесь соберутся вопросы самопроверки и карточки, на которых вы ошиблись или " +
+        "не вспомнили ответ. Пока таких нет.",
+    "ошибка — это адрес, куда вернуться") +
+    '<div id="mxBody">' + (items.length ? '<p class="page-wait">Собираю вопросы из уроков…</p>' : "") + "</div>";
+  app.appendChild(main);
+  if (!items.length) {
+    const r = Stats.resume();
+    $("#mxBody").innerHTML = '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m0l1") + '">' +
+      (r ? "Продолжить урок " + r.lesson.num : "Открыть первый урок") + "</a></p>";
+    return;
+  }
+
+  const mods = {};
+  items.forEach(function (x) { mods[x.lesson.module.id] = true; });
+  Promise.all(Object.keys(mods).map(function (m) { return Lazy.content(m); })).then(function () {
+    const box = $("#mxBody");
+    if (!box || location.hash !== "#mistakes") return;
+    /* урок могли переписать — вопроса с таким номером может уже не быть */
+    const live = items.filter(function (x) {
+      const C = window.CONTENT[x.id];
+      const list = C && (x.kind === "card" ? C.cards : C.quiz);
+      return list && list[x.n];
+    });
+    const byLesson = {};
+    live.forEach(function (x) { (byLesson[x.id] = byLesson[x.id] || []).push(x); });
+    const miss = function (xs) { return xs.reduce(function (s, x) { return s + x.r.miss; }, 0); };
+    const groups = Course.flat.filter(function (l) { return byLesson[l.id]; })
+      .map(function (l) { return { lesson: l, xs: byLesson[l.id] }; })
+      .sort(function (a, b) { return miss(b.xs) - miss(a.xs); });   /* sort устойчив: при равенстве — порядок курса */
+    const total = miss(live);
+
+    let h = '<p class="prep-sum">' + total + " " + plural(total, "ошибка", "ошибки", "ошибок") + " в " +
+      live.length + " " + plural(live.length, "вопросе", "вопросах", "вопросах") + " и карточках из " +
+      groups.length + " " + plural(groups.length, "урока", "уроков", "уроков") + ".</p>";
+    groups.forEach(function (g) {
+      const L = g.lesson, C = window.CONTENT[L.id], m = miss(g.xs);
+      g.xs.sort(function (a, b) { return b.r.miss - a.r.miss; });
+      h += '<section class="block mx-group"><div class="block-h"><h2>' + L.num + " " + esc(L.title) +
+          '<span class="prep-n">' + m + "</span></h2></div>" +
+        '<p class="mx-go"><a href="#' + L.id + '">Перечитать теорию урока ' + L.num + "</a></p>" +
+        '<ol class="mx-list">' + g.xs.map(function (x) {
+          const card = x.kind === "card";
+          const it = card ? C.cards[x.n] : C.quiz[x.n];
+          const state = x.r.done ? "выучено"
+            : x.r.due <= isoDay() ? "в повторении сегодня" : "вернётся " + Review.when(x.r.due);
+          return '<li class="mx-item"><div class="mx-meta"><span class="mx-n">' +
+              x.r.miss + " " + plural(x.r.miss, "ошибка", "ошибки", "ошибок") + "</span>" +
+              (card ? "карточка" : "вопрос") + " · " + state + "</div>" +
+            '<div class="mx-q">' + it.q + "</div>" +
+            '<details class="mx-a"><summary>Правильный ответ</summary><div>' +
+              (card ? it.a : "<p><b>" + it.opts[it.right] + "</b></p><p>" + it.why + "</p>") +
+            "</div></details></li>";
+        }).join("") + "</ol></section>";
+    });
+    box.innerHTML = h;
+    Terms.mark(box);
+  }, function () {
+    const box = $("#mxBody");
+    if (!box) return;
+    box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
+      '<button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#mxRetry").addEventListener("click", function () { Router.render(true); });
+  });
 }
 
 /* ---------- итог модуля ---------- */
@@ -1372,7 +1458,15 @@ function renderHome(app) {
 
   /* повторение — первым в программе: оно на сегодня, программа — на месяцы */
   const review = Review.section();
-  if (review) main.appendChild(review);
+  if (review) {
+    /* ошибки уже есть — к ним ссылка прямо из повторения */
+    const rv = Store.all().review || {};
+    if (Object.keys(rv).some(function (k) { return rv[k] && rv[k].miss > 0; })) {
+      $(".review-body", review).insertAdjacentHTML("beforeend",
+        '<p class="review-mx"><a href="#mistakes">Мои ошибки</a> — где вы ошибались чаще всего</p>');
+    }
+    main.appendChild(review);
+  }
 
   /* о страницах для собеседования — одна строка, а не ещё один блок карточек */
   main.insertAdjacentHTML("beforeend",
@@ -3208,6 +3302,9 @@ const Find = {
     out.push({ href: "#my-notes", title: "Мой конспект", where: "Раздел",
                note: "ваши заметки из всех уроков",
                hay: "заметки конспект записи" });
+    out.push({ href: "#mistakes", title: "Мои ошибки", where: "Раздел",
+               note: "вопросы и карточки, где вы ошибались",
+               hay: "ошибки промахи трудные слабые места повторить" });
     out.push({ href: "#glossary", title: "Словарь", where: "Раздел",
                note: "все термины курса простыми словами",
                hay: "словарь термины глоссарий понятия слова что значит" });
