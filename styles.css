@@ -1585,6 +1585,27 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .hdr-nav a { color: var(--ink-2); text-decoration: none; white-space: nowrap; }
 .hdr-nav a:hover, .hdr-nav a[aria-current="page"] { color: var(--pen); text-decoration: none; }
 
+/* Меню разделов — только на узком экране, где ссылки шапки не помещаются */
+.hdr #menuBtn { display: none; }
+.hdr-menu {
+  position: absolute; top: calc(100% + 6px); right: 18px; z-index: 45;
+  min-width: 220px; padding: 6px;
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+}
+.hdr-menu[hidden] { display: none; }
+.hdr-menu a, .hm-theme {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 0 14px; border-radius: var(--r);
+  color: var(--ink); font: inherit; font-size: 15.5px; text-decoration: none;
+  background: transparent; border: 0; text-align: left;
+}
+.hdr-menu a:hover, .hm-theme:hover { background: var(--paper-2); text-decoration: none; }
+.hdr-menu a[aria-current="page"] { color: var(--pen); font-weight: 600; }
+.hm-theme { border-top: 1px solid var(--rule-soft); border-radius: 0 0 var(--r) var(--r); margin-top: 4px; color: var(--ink-2); }
+.hm-theme svg { width: 16px; height: 16px; }
+
 .prep-line { margin: 30px 0 0; max-width: 62ch; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
 
 .page-wait, .page-empty { font-size: 16px; line-height: 1.6; color: var(--ink-2); padding: 18px 0 40px; margin: 0; }
@@ -1727,6 +1748,8 @@ body.no-scroll { overflow: hidden; }
 
 @media (max-width: 860px) {
   .hdr-nav { display: none; }
+  .hdr #themeBtn { display: none; }
+  .hdr #menuBtn { display: inline-flex; }
   /* подсказка про клавишу бесполезна там, где клавиатуры нет */
   .iconbtn .k { display: none; }
   .io { grid-template-columns: 1fr; }

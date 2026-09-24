@@ -297,6 +297,8 @@ const Theme = {
       b.setAttribute("aria-label", "Переключить на " + (t === "dark" ? "светлую" : "тёмную") + " тему");
       b.setAttribute("title", "Переключить тему");
     }
+    const m = $("#menuTheme");
+    if (m) m.innerHTML = (t === "dark" ? ICON.sun : ICON.moon) + (t === "dark" ? "Светлая тема" : "Тёмная тема");
   },
   toggle: function () {
     const next = Theme.current() === "dark" ? "light" : "dark";
@@ -550,7 +552,7 @@ function mountHeader(crumbHtml) {
   const here = location.hash.replace(/^#/, "");
   function navLink(to, t) {
     /* #glossary/left-join — тоже страница словаря */
-    const on = here === to || here.indexOf(to + "/") === 0;
+    const on = to ? here === to || here.indexOf(to + "/") === 0 : here === "";
     return '<a href="#' + to + '"' + (on ? ' aria-current="page"' : "") + ">" + t + "</a>";
   }
 
@@ -568,7 +570,15 @@ function mountHeader(crumbHtml) {
       '<button class="iconbtn" id="progBtn" type="button" title="Прогресс курса">' +
         '<span class="pb-n">' + done + " из " + total + "</span></button>" +
       '<button class="iconbtn" id="themeBtn" type="button">Тёмная</button>' +
+      '<button class="iconbtn" id="menuBtn" type="button" aria-expanded="false" aria-controls="hdrMenu">' +
+        ICON.menu + '<span class="bl">Меню</span></button>' +
     "</div>" +
+    /* на узком экране ссылки шапки и тема уходят сюда */
+    '<nav class="hdr-menu" id="hdrMenu" aria-label="Разделы" hidden>' +
+      navLink("", "Курс") + navLink("interview", "К собеседованию") +
+      navLink("my-notes", "Конспект") + navLink("glossary", "Словарь") +
+      '<button class="hm-theme" id="menuTheme" type="button"></button>' +
+    "</nav>" +
     '<div class="hdr-bar" id="hdrBar"></div>';
 
   const app = document.getElementById("app");
@@ -577,6 +587,8 @@ function mountHeader(crumbHtml) {
   $("#themeBtn").addEventListener("click", Theme.toggle);
   $("#findBtn").addEventListener("click", Find.open);
   $("#progBtn").addEventListener("click", Progress.openMenu);
+  $("#menuTheme").addEventListener("click", Theme.toggle);
+  Menu.init();
   Theme.apply(Theme.current());
   requestAnimationFrame(refreshBar);
 
@@ -591,6 +603,38 @@ function mountHeader(crumbHtml) {
     $("#barSave").addEventListener("click", Progress.save);
   }
 }
+
+/* Меню разделов на телефоне. Закрывается щелчком мимо, Escape и
+   переходом по ссылке — переход и так перерисует шапку. */
+const Menu = {
+  init: function () {
+    const btn = $("#menuBtn"), box = $("#hdrMenu");
+    function set(open) {
+      box.hidden = !open;
+      btn.setAttribute("aria-expanded", String(open));
+    }
+    btn.addEventListener("click", function () {
+      const open = box.hidden;
+      set(open);
+      if (open) box.querySelector("a, button").focus();
+    });
+    function outside(e) {
+      /* путь, а не contains: кнопка темы перерисовывает себя, и к этому
+         моменту щёлкнутый значок уже вынут из меню */
+      const path = e.composedPath();
+      if (!box.hidden && path.indexOf(box) < 0 && path.indexOf(btn) < 0) set(false);
+    }
+    function key(e) {
+      if (e.key === "Escape" && !box.hidden) { set(false); btn.focus(); }
+    }
+    document.addEventListener("click", outside);
+    document.addEventListener("keydown", key);
+    Router.cleanup.push(function () {
+      document.removeEventListener("click", outside);
+      document.removeEventListener("keydown", key);
+    });
+  }
+};
 
 function refreshBar() {
   const bar = $("#hdrBar");
@@ -1700,6 +1744,7 @@ const ICON = {
   bad:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+  menu:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="15" height="15" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   find:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>'
 };
 
