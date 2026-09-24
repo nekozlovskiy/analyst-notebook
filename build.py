@@ -69,8 +69,16 @@ for name in ("styles.css",) + EAGER + LAZY:
     if "</script" in read(name).lower():
         sys.exit("В файле %s есть </script — встраивание сломает страницу." % name)
 
+# Шрифты — внутрь стилей: у файла с диска папки fonts/ рядом нет.
+# Это ~0,8 МБ, зато файл и без интернета выглядит как сайт.
+html = drop(html, "<!-- основной текст — сразу, чтобы первая отрисовка шла уже своим шрифтом -->\n"
+                  '<link rel="preload" href="fonts/onest-cyrillic.woff2" as="font" type="font/woff2" crossorigin>\n')
+css = re.sub(r'url\("(fonts/[\w.-]+\.woff2)"\)',
+             lambda m: 'url("%s")' % data_uri(m.group(1), "font/woff2"), read("styles.css"))
+if "fonts/" in re.sub(r"/\*.*?\*/", "", css, flags=re.S):
+    sys.exit("Не встроились шрифты из styles.css")
 html = swap(html, '<link rel="stylesheet" href="styles.css">',
-            "<style>\n" + read("styles.css") + "\n</style>")
+            "<style>\n" + css + "\n</style>")
 
 for name in ("lessons.js", "content-core.js", "glossary.js"):
     html = swap(html, '<script src="%s"></script>' % name,
@@ -95,4 +103,4 @@ html = html.replace(
 
 OUT.write_text(html, encoding="utf-8")
 print("Готово: %s — %.0f КБ" % (OUT.name, OUT.stat().st_size / 1024))
-print("Внутри: шрифты, редактор кода, Python и SQLite подтягиваются из интернета при первом запуске.")
+print("Шрифты внутри. Редактор кода, Python и SQLite подтягиваются из интернета при первом запуске.")
