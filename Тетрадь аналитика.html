@@ -393,10 +393,12 @@ body.reading .hdr-bar { display: none; }
 @media (min-width: 1440px) {
   .hero-in.has-margin,
   .market.has-margin,
-  .review.has-margin { position: relative; }
+  .review.has-margin,
+  .route.has-margin { position: relative; }
   .hero-in.has-margin > .aside,
   .market.has-margin > .aside,
-  .review.has-margin > .aside {
+  .review.has-margin > .aside,
+  .route.has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
     width: var(--margin-w);
@@ -408,7 +410,8 @@ body.reading .hdr-bar { display: none; }
      внутри неё, поэтому его левый край сдвинут на отступ обёртки.
      Компенсируем, иначе две реплики стоят на разной вертикали. */
   .market.has-margin > .aside,
-  .review.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
+  .review.has-margin > .aside,
+  .route.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
 }
 
 /* Маркер. Ставится только на то, что спрашивают на собеседовании:
@@ -577,6 +580,33 @@ body.reading .hdr-bar { display: none; }
   display: flex; align-items: center; gap: 14px; margin-bottom: 22px;
 }
 .sec-title::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+/* Маршрут: схема модулей. Цвета — из переменных темы, поэтому в
+   тёмной теме схема перекрашивается сама. */
+.route { padding: 44px 0 0; }
+.rt-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.rt-svg.tall { display: none; max-width: 420px; margin: 0 auto; }
+.rt-e { fill: none; stroke: var(--pen-line); stroke-width: 1.6; }
+.rt-e.opt { stroke-dasharray: 5 5; }
+.rt-ah { fill: var(--pen-line); }
+.rt-n rect { fill: var(--card); stroke: var(--rule-hard); stroke-width: 1.2; transition: stroke .15s var(--ease); }
+.rt-n text { fill: var(--ink); font-family: var(--sans); font-size: 14.5px; font-weight: 500; text-anchor: middle; }
+.rt-n .rt-sub { fill: var(--ink-3); font-size: 12px; font-weight: 400; font-style: italic; }
+.rt-n.opt rect { stroke-dasharray: 5 4; }
+.rt-n.done rect { stroke: var(--pen); }
+.rt-n.done text { fill: var(--pen); }
+.rt-n:hover rect, .rt-n:focus-visible rect { stroke: var(--pen); stroke-width: 2; }
+.rt-n:focus { outline: none; }
+.rt-note { margin: 14px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-3); max-width: 70ch; }
+.toc-opt {
+  display: inline-block; vertical-align: middle; margin-left: 8px; padding: 2px 8px;
+  font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: 0;
+  color: var(--ink-3); border: 1px dashed var(--rule-hard); border-radius: var(--r);
+}
+@media (max-width: 640px) {
+  .rt-svg.wide { display: none; }
+  .rt-svg.tall { display: block; }
+}
 
 /* Программа — не набор карточек, а оглавление тетради: номер, название,
    отточие, вид практики и галочка ручкой у пройденных. */
@@ -1991,6 +2021,9 @@ body.no-scroll { overflow: hidden; }
    kind: sql | python | text — тип практики (влияет на редактор).
    Номер урока (1.1, 1.2…) — место в массиве, а прогресс ученика
    хранится по id: переставлять уроки можно, id менять нельзя.
+   short и needs у модуля — подпись и стрелки схемы «Маршрут» на главной
+   (needs — модули или уроки, на которые модуль опирается); optional —
+   модуль можно отложить: пунктир на схеме и метка в оглавлении.
    before: "id" — урок проходят прямо перед указанным (0.2 — перед 2.1),
    хотя в карте он стоит в своём модуле.
    Содержание готовых уроков лежит в content.js.
@@ -2038,7 +2071,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m1", num: 1,
+      id: "m1", num: 1, short: "SQL", needs: ["m0l1"],
       title: "SQL для аналитика",
       sub: "Запросы уровня junior+: соединения, окна, CTE. Самый весомый навык на рынке.",
       say: "с этого начинается почти любое собеседование",
@@ -2088,7 +2121,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m2", num: 2,
+      id: "m2", num: 2, short: "Python и pandas", needs: ["m0l2"],
       title: "Python и pandas",
       sub: "Всё, что делают руками в Excel, но воспроизводимо и на любом объёме.",
       say: "Excel, который не ломается на миллионе строк",
@@ -2133,7 +2166,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m3", num: 3,
+      id: "m3", num: 3, short: "Статистика и A/B", needs: ["m2"],
       title: "Статистика и A/B-тесты",
       sub: "Что отличает аналитика от человека, который считает суммы в Excel.",
       say: "здесь аналитик отличается от человека с калькулятором",
@@ -2178,7 +2211,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m4", num: 4,
+      id: "m4", num: 4, short: "Продуктовая", needs: ["m1", "m3"],
       title: "Продуктовая аналитика",
       sub: "Язык, на котором говорят продакты: воронка, retention, когорты, деньги.",
       say: "язык, на котором с вами говорит продакт",
@@ -2223,7 +2256,9 @@ window.COURSE = {
       ]
     },
     {
-      id: "m5", num: 5,
+      id: "m5", num: 5, short: "Математика", needs: ["m3"],
+      /* необязательный: на схеме «Маршрут» — пунктиром, в оглавлении — с меткой */
+      optional: "можно отложить до первого оффера",
       title: "Математика — прикладной буст",
       sub: "Ровно столько, чтобы понимать, что считает модель. Без академизма.",
       say: "ровно столько, чтобы понимать, что считает модель",
@@ -2258,7 +2293,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m6", num: 6,
+      id: "m6", num: 6, short: "Выход на рынок", needs: ["m4", "m5"],
       title: "Выход на рынок",
       sub: "Портфолио, резюме, отклики и репетиция собеседования.",
       say: "модуль, который чаще всего пропускают. Зря",
@@ -63419,6 +63454,118 @@ function renderSummary(app, id) {
   });
 }
 
+/* ============================================================
+   Маршрут: схема модулей на главной
+
+   Стрелки берутся из needs в lessons.js, а места узлов и изгибы
+   стрелок заданы здесь — для широкого экрана по горизонтали, для
+   телефона по вертикали (текст схемы не должен мельчать). Модуль с
+   optional рисуется пунктиром: короткий путь до оффера — без него.
+   ============================================================ */
+
+const Route = {
+  W: 164, H: 48,
+  /* узел: [колонка x, строка y]; стрелка «откуда>куда»: стороны и изгиб
+     (mid — ступенька посередине, hv — сначала вбок, vh — сначала вверх/вниз) */
+  wide: {
+    w: 964, h: 250,
+    at: { m0l1: [0, 10], m0l2: [0, 100], m1: [200, 10], m2: [200, 100], m3: [400, 100],
+          m4: [600, 100], m5: [600, 192], m6: [800, 100] },
+    via: { "m1>m4": ["r", "t", "hv"], "m3>m5": ["b", "l", "vh"], "m5>m6": ["r", "b", "hv"] },
+    dflt: ["r", "l", "mid"]
+  },
+  tall: {
+    w: 368, h: 402,
+    at: { m0l1: [2, 10], m0l2: [202, 10], m1: [2, 94], m2: [202, 94], m3: [202, 178],
+          m4: [2, 262], m5: [202, 262], m6: [2, 346] },
+    via: { "m3>m4": ["l", "t", "hv"], "m5>m6": ["b", "r", "vh"] },
+    dflt: ["b", "t", "mid"]
+  },
+
+  nodes: function () {
+    const out = [];
+    Course.data.modules.forEach(function (m) {
+      if (m.num === 0) {
+        m.lessons.forEach(function (l) {
+          out.push({ id: l.id, href: "#" + l.id, label: l.num + " " + l.title, done: Course.isDone(l.id) });
+        });
+      } else {
+        out.push({ id: m.id, href: "#toc-" + m.id, label: m.num + " · " + (m.short || m.title),
+                   done: Course.doneCount(m.lessons) === m.lessons.length, opt: m.optional,
+                   needs: m.needs || [] });
+      }
+    });
+    return out;
+  },
+
+  svg: function (L, cls) {
+    const W = Route.W, H = Route.H, nodes = Route.nodes();
+    const byId = {};
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    function pt(id, side) {
+      const p = L.at[id];
+      return side === "r" ? [p[0] + W, p[1] + H / 2] : side === "l" ? [p[0], p[1] + H / 2]
+           : side === "t" ? [p[0] + W / 2, p[1]] : [p[0] + W / 2, p[1] + H];
+    }
+    let edges = "";
+    nodes.forEach(function (n) {
+      (n.needs || []).forEach(function (from) {
+        if (!L.at[from]) return;
+        const v = L.via[from + ">" + n.id] || L.dflt;
+        const a = pt(from, v[0]), b = pt(n.id, v[1]);
+        let d = "M" + a[0] + " " + a[1];
+        if (v[2] === "hv") d += " H" + b[0] + " V" + b[1];
+        else if (v[2] === "vh") d += " V" + b[1] + " H" + b[0];
+        else if (v[0] === "r" || v[0] === "l") { const mx = (a[0] + b[0]) / 2; d += " H" + mx + " V" + b[1] + " H" + b[0]; }
+        else { const my = (a[1] + b[1]) / 2; d += " V" + my + " H" + b[0] + " V" + b[1]; }
+        const dash = n.opt || (byId[from] && byId[from].opt);
+        edges += '<path class="rt-e' + (dash ? " opt" : "") + '" d="' + d + '" marker-end="url(#rtArrow' + cls + ')"/>';
+      });
+    });
+    let boxes = "";
+    nodes.forEach(function (n) {
+      const p = L.at[n.id];
+      if (!p) return;
+      const cx = p[0] + W / 2;
+      boxes += '<a class="rt-n' + (n.done ? " done" : "") + (n.opt ? " opt" : "") + '" href="' + n.href + '"' +
+          (n.id.indexOf("m0") === 0 ? "" : ' data-mod="' + n.id + '"') + ">" +
+        "<title>" + esc(n.label + (n.done ? ", пройден" : "") + (n.opt ? ", необязательный" : "")) + "</title>" +
+        '<rect x="' + p[0] + '" y="' + p[1] + '" width="' + W + '" height="' + H + '" rx="7"/>' +
+        (n.opt
+          ? '<text x="' + cx + '" y="' + (p[1] + 21) + '">' + esc(n.label) + "</text>" +
+            '<text class="rt-sub" x="' + cx + '" y="' + (p[1] + 38) + '">необязательный</text>'
+          : '<text x="' + cx + '" y="' + (p[1] + H / 2 + 5) + '">' + (n.done ? "✓ " : "") + esc(n.label) + "</text>") +
+        "</a>";
+    });
+    return '<svg class="rt-svg ' + cls + '" viewBox="0 0 ' + L.w + " " + L.h + '" role="img" ' +
+        'aria-label="Схема курса: какие модули на каких опираются">' +
+      '<defs><marker id="rtArrow' + cls + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+        '<path class="rt-ah" d="M0 1 L9 5 L0 9 z"/></marker></defs>' +
+      edges + boxes + "</svg>";
+  },
+
+  section: function () {
+    const node = el("section", { class: "route has-margin" });
+    node.innerHTML =
+      '<div class="aside"><p>короткий путь до оффера — без пунктира</p></div>' +
+      '<div class="sec-title">Маршрут</div>' +
+      Route.svg(Route.wide, "wide") + Route.svg(Route.tall, "tall") +
+      '<p class="rt-note">Стрелка — модуль опирается на предыдущий. Пунктир — математику можно ' +
+        "отложить до первого оффера: к собеседованию хватит модулей 1–4 и 6.</p>";
+    /* узел модуля ведёт к нему в оглавлении — прокруткой, чтобы адрес
+       не превратился в якорь, которого нет при перезагрузке */
+    Array.prototype.forEach.call(node.querySelectorAll("[data-mod]"), function (a) {
+      a.addEventListener("click", function (e) {
+        const t = document.getElementById("toc-" + a.dataset.mod);
+        if (!t) return;
+        e.preventDefault();
+        t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    return node;
+  }
+};
+
 function renderHome(app) {
   document.title = "Тетрадь аналитика — курс подготовки к Junior Data Analyst";
   mountHeader("");
@@ -63509,6 +63656,8 @@ function renderHome(app) {
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
+  main.appendChild(Route.section());
+
   /* ---------- программа: оглавление тетради ---------- */
   /* Не карточки, а оглавление: номер, название, отточие, вид практики
      и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
@@ -63517,13 +63666,14 @@ function renderHome(app) {
   Course.data.modules.forEach(function (m) {
     const d = Course.doneCount(m.lessons), t = m.lessons.length;
     tocHtml +=
-      '<section class="toc-mod">' +
+      '<section class="toc-mod" id="toc-' + m.id + '">' +
         '<header class="toc-mh">' +
           '<span class="toc-mn">' + m.num + "</span>" +
-          '<h3 class="toc-mt">' + esc(m.title) + "</h3>" +
+          '<h3 class="toc-mt">' + esc(m.title) +
+            (m.optional ? ' <span class="toc-opt" title="' + esc(m.optional) + '">необязательный</span>' : "") + "</h3>" +
           '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
         "</header>" +
-        '<p class="toc-ms">' + esc(m.sub) + "</p>" +
+        '<p class="toc-ms">' + esc(m.sub) + (m.optional ? " Модуль " + esc(m.optional) + "." : "") + "</p>" +
         (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
         '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
