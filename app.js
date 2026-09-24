@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -114,7 +114,7 @@ const Store = (function () {
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
-      ["done", "attempts", "time", "days", "steps"].forEach(function (b) {
+      ["done", "attempts", "time", "days", "steps", "drills"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -1765,6 +1765,70 @@ const Check = {
     return { ok: true };
   },
 
+  /* Тренажёр на Python: формат вывода в условии не задан, поэтому
+     сверяются числа. Каждое число из вывода разбора должно найтись в
+     выводе ученика — с точностью до знаков, которые напечатал
+     разбор (или ученик, если он округлил грубее, но не до целого).
+     Даты — строками. Лишнее у ученика не мешает. */
+  numbers: function (got, exp) {
+    function toks(s) {
+      const dates = [], nums = [];
+      s = String(s).replace(/\d{1,3}(?:,\d{3})+(?!\d)/g, function (m) { return m.replace(/,/g, ""); });
+      s = s.replace(/\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?/g, function (m) { dates.push(m); return " "; });
+      const re = /(?<![\p{L}\p{N}_.])-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/giu;
+      let m;
+      while ((m = re.exec(s))) {
+        const t = m[0], dot = t.split(/e/i)[0].split(".")[1];
+        nums.push({ v: parseFloat(t), d: dot ? dot.length : 0, e: /e/i.test(t) });
+      }
+      return { dates: dates, nums: nums };
+    }
+    const a = toks(got), b = toks(exp);
+    if (!b.nums.length && !b.dates.length) {
+      const norm = function (s) { return String(s).toLowerCase().replace(/\s+/g, " ").trim(); };
+      const ok = Check.normLines(exp).every(function (l) { return norm(got).indexOf(norm(l)) >= 0; });
+      return ok ? { ok: true, total: 0 } : { ok: false, why: "Вывод не совпал с разбором." };
+    }
+    const used = [];
+    let miss = 0;
+    b.nums.forEach(function (e) {
+      const j = a.nums.findIndex(function (x, k) {
+        if (used[k]) return false;
+        if (e.e || x.e) return Math.abs(x.v - e.v) <= Math.abs(e.v) * 1e-3 + 1e-12;
+        const d = Math.min(e.d, Math.max(x.d, Math.min(e.d, 1)));
+        return Math.abs(x.v - e.v) <= 0.5 * Math.pow(10, -d) * 1.0001 + 1e-9 * Math.abs(e.v);
+      });
+      if (j < 0) miss++; else used[j] = true;
+    });
+    const usedD = [];
+    b.dates.forEach(function (e) {
+      const j = a.dates.findIndex(function (x, k) { return !usedD[k] && x.slice(0, 10) === e.slice(0, 10); });
+      if (j < 0) miss++; else usedD[j] = true;
+    });
+    const total = b.nums.length + b.dates.length;
+    return miss ? { ok: false, total: total,
+                    why: "Из " + total + " " + plural(total, "числа", "чисел", "чисел") + " разбора в вашем выводе не нашлось " + miss + "." }
+                : { ok: true, total: total };
+  },
+
+  /* Тренажёр на SQL: как основная задача, но имена столбцов не обязаны
+     совпадать — в условии их часто не называют. */
+  drillSql: function (res, exp) {
+    let r = Check.sql(res, exp), note = "";
+    if (!r.ok && res && res.columns.length === exp.columns.length && /называется/.test(r.why)) {
+      res = { columns: exp.columns, values: res.values };
+      r = Check.sql(res, exp);
+      note = "Значения сошлись. Столбцы в разборе названы так: " + exp.columns.join(", ") + ".";
+    }
+    if (r.ok) return note ? { ok: true, note: note } : r;
+    /* те же строки, но в другом порядке — так и сказать, а не «строка 1 не та» */
+    if (exp.ordered && r.row !== undefined &&
+        Check.sql(res, { columns: exp.columns, rows: exp.rows, ordered: false }).ok) {
+      return { ok: false, why: "строки те же, но порядок другой — задача просит сортировку, проверьте ORDER BY" };
+    }
+    return r;
+  },
+
   cellEq: function (a, b) {
     if (a === null || a === undefined) a = "";
     if (b === null || b === undefined) b = "";
@@ -2794,6 +2858,298 @@ function renderStepsLesson(app, L, C) {
   mountTimer(id);
 }
 
+/* ============================================================
+   Тренажёр: задачи после основной, каждая со своим редактором
+
+   Эталон не хранится готовым: его считает решение из разбора на той
+   же базе, в момент первой проверки. Код разбора — часть solution до
+   строки «Результат…», либо поле check, если разбор — рассказ с
+   таблицами. Задача с answer: "text" (и все задачи текстовых уроков,
+   и python-задачи без print в разборе) — ответ словами и самооценка.
+
+   SQL сверяется как основная задача, но имена столбцов не обязаны
+   совпадать с разбором: в условии тренажёра их часто не называют.
+   Python — по числам: каждое число из вывода разбора должно найтись
+   в выводе ученика (с точностью до округления), подписи не важны.
+
+   Хранилище: код — «code» под ключом урок:dN, решено — «drills»
+   урок:N, число проверок — «attempts» урок:dN. Решение открывается
+   после первой проверки.
+   ============================================================ */
+
+/* Запуск кода без интерфейса — для тренажёра и его эталона. Python
+   один на страницу и печатает в общий stdout, поэтому запуски идут
+   строго по очереди. */
+const Run = {
+  queue: Promise.resolve(),
+  sql: async function (code) {
+    const db = await Engine.sql();
+    try {
+      const r = db.exec(code);
+      return { res: r.length ? r[r.length - 1] : null };
+    } catch (e) { return { err: "SQLite: " + e.message }; }
+  },
+  /* pre — код, который выполняется до кода ученика молча (его вывод не
+     попадает в сверку): решение основной задачи, на функции которого
+     опирается задача тренажёра. */
+  python: function (code, env, pre) {
+    const job = Run.queue.then(async function () {
+      const pyi = (await Promise.all([Engine.python(env.packages || []), Lazy.data()]))[0];
+      const ns = pyi.toPy({});
+      (env.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
+      const out = [];
+      pyi.setStdout({ batched: function (s) { out.push(s); } });
+      pyi.setStderr({ batched: function () {} });
+      try {
+        if (env.prelude) await pyi.runPythonAsync(env.prelude, { globals: ns });
+        if (pre) {
+          await pyi.runPythonAsync(pre, { globals: ns });
+          out.length = 0;
+        }
+        await pyi.runPythonAsync(code, { globals: ns });
+        return { out: out.join("\n") };
+      } catch (e) {
+        /* трассировка — с кадра кода ученика: внутренние кадры Pyodide новичку ничего не скажут */
+        const all = String(e.message || e).split("\n");
+        let from = -1;
+        all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
+        const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
+          return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
+        }).slice(-8);
+        return { err: lines.join("\n").trim() };
+      } finally { ns.destroy(); }
+    });
+    Run.queue = job.catch(function () {});
+    return job;
+  }
+};
+
+const Drills = {
+  kind: function (L, d) {
+    if (d.answer === "text" || L.kind === "text") return "text";
+    if (L.kind === "sql") return "sql";
+    return /print\(/.test(d.solution) ? "python" : "text";
+  },
+  code: function (d) {
+    return d.check || d.solution.split(/\n\s*(?:Результат|Что получается)/)[0];
+  },
+  /* Разбор пользуется функцией или переменной из основной задачи
+     (welch, group_size…) — тогда её решение выполняется перед кодом
+     тренажёра, и у ученика, и у эталона. */
+  pre: function (C, d) {
+    const names = function (src) {
+      const out = {};
+      String(src || "").replace(/^(?:def\s+([A-Za-z_]\w*)|([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=))/gm,
+        function (m, fn, vars) { (fn ? [fn] : vars.split(",")).forEach(function (v) { out[v.trim()] = 1; }); return m; });
+      return out;
+    };
+    if (!C.solution) return null;
+    const main = names(C.solution), own = names(Drills.code(d)), code = Drills.code(d);
+    const need = Object.keys(main).some(function (n) {
+      return !own[n] && new RegExp("\\b" + n + "\\b").test(code);
+    });
+    return need ? C.solution : null;
+  },
+  solved: function (id, i) { return !!Store.get("drills", id + ":" + i, false); },
+  count: function (id, C) {
+    return C.drills.filter(function (d, i) { return Drills.solved(id, i); }).length;
+  },
+
+  /* эталон считается один раз на задачу, пока открыт урок */
+  cache: {},
+  expected: function (L, C, i) {
+    const key = L.id + ":" + i;
+    if (!Drills.cache[key]) {
+      const d = C.drills[i], code = Drills.code(d);
+      Drills.cache[key] = Drills.kind(L, d) === "sql"
+        ? Run.sql(code).then(function (r) {
+            if (r.err || !r.res) return { err: r.err || "пусто" };
+            /* порядок строк важен, только если его задаёт сам запрос, а не окно */
+            const ordered = /\bORDER\s+BY\b/i.test(code.replace(/OVER\s*\([^()]*(\([^()]*\)[^()]*)*\)/gi, ""));
+            return { exp: { columns: r.res.columns, rows: r.res.values, ordered: ordered } };
+          })
+        : Run.python(code, C, Drills.pre(C, d)).then(function (r) { return r.err ? { err: r.err } : { out: r.out }; });
+      Drills.cache[key].catch(function () { delete Drills.cache[key]; });
+    }
+    return Drills.cache[key];
+  },
+
+  itemHtml: function (L, d, i) {
+    const k = Drills.kind(L, d);
+    if (k === "text") {
+      return '<div class="dr-work">' +
+        '<textarea class="answer dr-ans" aria-label="Ваш ответ на задачу ' + (i + 1) + '" ' +
+          'placeholder="Ваш ответ: расчёт, вывод или план — своими словами"></textarea>' +
+        '<div class="st-actions"><button class="btn dr-cmp" type="button" disabled>Сравнить с разбором</button></div>' +
+        '<div class="dr-self" hidden><span>По сути сошлось с разбором?</span>' +
+          '<button class="btn dr-yes" type="button">Да, сошлось</button>' +
+          '<button class="btn dr-no" type="button">Нет</button></div>' +
+        '<div class="status dr-status"></div></div>';
+    }
+    return '<div class="dr-work">' +
+      '<div class="editor-shell st-ed"><div class="editor-h"><span>задача ' + (i + 1) +
+        (k === "sql" ? ".sql" : ".py") + "</span></div><textarea class=\"dr-ta\"></textarea></div>" +
+      '<div class="st-actions">' +
+        '<button class="btn primary dr-run" type="button">' + ICON.play + "Запустить</button>" +
+        '<button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button>" +
+      "</div>" +
+      '<div class="status dr-status"></div>' +
+      '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
+        '<div class="io-body dr-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
+      "</div>";
+  },
+
+  /* счётчик и галочки; редактор создаётся, только когда задачу раскрыли */
+  mount: function (L, C, root) {
+    const id = L.id;
+    function counter() {
+      const n = Drills.count(id, C), c = $("#drCount", root);
+      if (c) c.textContent = "Решено " + n + " из " + C.drills.length + ".";
+    }
+    counter();
+    Array.prototype.forEach.call(root.querySelectorAll(".drill"), function (det) {
+      const i = +det.dataset.i;
+      det.addEventListener("toggle", function () {
+        if (det.open && !det.dataset.ready) {
+          det.dataset.ready = "1";
+          Drills.mountOne(L, C, det, i, counter);
+        }
+      });
+    });
+  },
+
+  mountOne: function (L, C, det, i, counter) {
+    const id = L.id, d = C.drills[i], k = Drills.kind(L, d);
+    const q = function (sel) { return $(sel, det); };
+    const codeKey = id + ":d" + i, triesKey = id + ":d" + i;
+    const reveal = q(".d-reveal");
+
+    function status(kind, title, body) {
+      const s = q(".dr-status");
+      if (!kind) { s.className = "status dr-status"; s.innerHTML = ""; return; }
+      const ico = kind === "ok" ? ICON.ok : kind === "bad" ? ICON.bad : ICON.warn;
+      s.className = "status dr-status show " + kind;
+      s.innerHTML = '<span class="s-ico">' + ico + "</span>" +
+        '<span class="s-body"><b>' + esc(title) + "</b>" + (body ? "<br>" + body : "") + "</span>";
+    }
+    function solve() {
+      const fresh = !Drills.solved(id, i);
+      if (fresh) Store.set("drills", id + ":" + i, Date.now());
+      const mk = q(".d-ok");
+      if (mk && fresh) mk.innerHTML = penTick(id + ":d" + i, "draw") + '<span class="sr">решено</span>';
+      if (reveal) reveal.hidden = false;
+      counter();
+    }
+    function tried() {
+      Store.set("attempts", triesKey, Store.get("attempts", triesKey, 0) + 1);
+      if (reveal) reveal.hidden = false;
+    }
+
+    if (k === "text") {
+      const ta = q(".dr-ans"), cmp = q(".dr-cmp"), self = q(".dr-self");
+      ta.value = Store.get("code", codeKey, "") || "";
+      cmp.disabled = !ta.value.trim();
+      ta.addEventListener("input", function () {
+        Store.set("code", codeKey, ta.value);
+        cmp.disabled = !ta.value.trim();
+      });
+      cmp.addEventListener("click", function () {
+        tried();
+        reveal.open = true;
+        self.hidden = false;
+        reveal.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      q(".dr-yes").addEventListener("click", function () {
+        self.hidden = true;
+        solve();
+        status("ok", "Отмечено как решённое", "Сверяли по сути, а не по словам — так и надо.");
+      });
+      q(".dr-no").addEventListener("click", function () {
+        self.hidden = true;
+        status("warn", "Не беда", "Перечитайте разбор и попробуйте пересказать его своими словами через день-два — тогда отметьте.");
+      });
+      return;
+    }
+
+    let editor = null, last = null;
+    const py = k === "python";
+    const res = q(".dr-res");
+    /* эталон и движок — заранее, пока ученик читает условие */
+    idle(function () { Drills.expected(L, C, i).catch(function () {}); });
+
+    mountEditor(q(".dr-ta"), k, Store.get("code", codeKey, "") || "",
+      function (v) { Store.set("code", codeKey, v); }, function () { run(); },
+      function () {}).then(function (ed) { editor = ed; });
+
+    async function run() {
+      status(null);
+      const code = editor ? editor.get() : q(".dr-ta").value;
+      if (!code.trim()) { status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос."); return null; }
+      const rb = q(".dr-run");
+      rb.disabled = true;
+      res.innerHTML = '<div class="empty">' + (py && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
+        : !py && !Engine.db ? "Поднимаю базу в браузере…" : "Выполняю…") + "</div>";
+      try {
+        const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
+        if (r.err) {
+          last = null;
+          res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
+          status("bad", py ? "Код упал с ошибкой" : "Запрос упал с ошибкой",
+            "Прочитайте последнюю строку вывода: там сказано, что не понравилось " + (py ? "Python." : "базе."));
+          return null;
+        }
+        last = r;
+        if (py) {
+          res.innerHTML = r.out.trim() ? "<pre>" + esc(r.out) + "</pre>"
+            : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+        } else if (r.res) {
+          res.innerHTML = renderTable(r.res.columns, r.res.values, -1) +
+            '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
+        } else {
+          res.innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+        }
+        return r;
+      } catch (e) {
+        res.innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+        status("bad", py ? "Python не загрузился" : "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+        return null;
+      } finally { rb.disabled = false; }
+    }
+
+    async function check() {
+      const cb = q(".dr-check");
+      cb.disabled = true;
+      try {
+        const r = await run();
+        if (!r) return;
+        let want;
+        try { want = await Drills.expected(L, C, i); }
+        catch (e) { status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        tried();
+        if (want.err) {
+          status("warn", "Эту задачу проверить не получилось", "Сравните свой ответ с разбором ниже.");
+          return;
+        }
+        if (py) {
+          const c = Check.numbers(r.out, want.out);
+          if (c.ok) { solve(); status("ok", "Решено", c.total ? "Все " + c.total + " " + plural(c.total, "число", "числа", "чисел") + " из разбора нашлись в вашем выводе." : "Вывод сошёлся с разбором."); }
+          else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+          return;
+        }
+        const c = Check.drillSql(r.res, want.exp);
+        if (c.ok) { solve(); status("ok", "Решено", c.note || "Столбцы и строки сошлись с разбором."); }
+        else {
+          if (r.res && c.row !== undefined) res.innerHTML = renderTable(r.res.columns, r.res.values, c.row);
+          status("bad", "Пока не сходится", esc(c.why) + ". Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+        }
+      } finally { cb.disabled = false; }
+    }
+
+    q(".dr-run").addEventListener("click", run);
+    q(".dr-check").addEventListener("click", check);
+  }
+};
+
 function renderLesson(app, id) {
   const L = Course.byId(id);
 
@@ -2891,21 +3247,23 @@ function renderLesson(app, id) {
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
       "Ещё " + C.drills.length + " " + plural(C.drills.length, "задача", "задачи", "задач") +
-      " на ту же базу. Пишите ответ в редакторе выше, запускайте, и только потом открывайте разбор. " +
-      "Готовый ответ, который вы не пробовали написать сами, не запоминается.</p>" +
+      " на ту же базу. У каждой свой редактор и проверка, разбор открывается после первой попытки: " +
+      'готовый ответ, который вы не пробовали написать сами, не запоминается. <span id="drCount"></span></p>' +
       '<div class="drills">';
     C.drills.forEach(function (d, i) {
       const lvl = d.level || "mid";
       const lvlText = lvl === "easy" ? "разминка" : lvl === "hard" ? "сложная" : "рабочая";
       drillsHtml +=
-        '<details class="drill"><summary>' +
+        '<details class="drill" data-i="' + i + '"><summary>' +
           '<span class="d-n">' + (i + 1) + "</span>" +
           "<span>" + esc(d.title) + "</span>" +
           '<span class="d-lvl ' + lvl + '">' + lvlText + "</span>" +
+          '<span class="d-ok">' + (Drills.solved(id, i) ? penTick(id + ":d" + i) + '<span class="sr">решено</span>' : "") + "</span>" +
         "</summary>" +
-        '<div class="drill-body">' + d.body +
+        '<div class="drill-body">' + d.body + Drills.itemHtml(L, d, i) +
           (d.solution
-            ? '<details class="d-reveal"><summary>показать решение</summary>' +
+            ? '<details class="d-reveal"' + (Drills.solved(id, i) || Store.get("attempts", id + ":d" + i, 0) ? "" : " hidden") +
+              "><summary>" + (Drills.kind(L, d) === "text" ? "разбор" : "показать решение") + "</summary>" +
               solutionHtml(d.solution) +
               (d.note ? '<div style="font-size:15px;color:var(--ink-2)">' + d.note + "</div>" : "") +
               "</details>"
@@ -3030,6 +3388,7 @@ function renderLesson(app, id) {
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
+  if (hasDrills) Drills.mount(L, C, main);
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   mountReadbar(secs);

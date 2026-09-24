@@ -1249,6 +1249,18 @@ table.res td.num { text-align: right; }
 .drill-body pre code { background: none; border: 0; padding: 0; font-size: inherit; }
 
 .d-reveal { margin-top: 8px; border-top: 1px dashed var(--rule); padding-top: 14px; }
+.d-reveal[hidden] { display: none; }
+/* рабочее место задачи тренажёра: редактор, кнопки, вывод */
+.dr-work { margin: 18px 0 6px; font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.drill-body > .dr-work { max-width: none; }
+.dr-work .status { margin-bottom: 14px; }
+textarea.answer.dr-ans { min-height: 130px; margin-bottom: 12px; }
+.dr-self { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
+.dr-self[hidden] { display: none; }
+.dr-self span { color: var(--ink-2); margin-right: 4px; }
+.drill .d-ok { flex: none; width: 22px; height: 22px; margin-left: 4px; position: relative; top: 3px; }
+.drill .d-ok .pen-tick { width: 22px; height: 22px; }
+#drCount { color: var(--ink-2); font-weight: 500; }
 .d-reveal > summary {
   cursor: pointer; list-style: none; font-family: var(--sans);
   font-size: 13.5px; color: var(--ink-3); padding: 4px 0;
