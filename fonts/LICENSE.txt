@@ -1,0 +1,10 @@
+Шрифты в этой папке распространяются по лицензии SIL Open Font License 1.1:
+https://openfontlicense.org/open-font-license-official-text/
+
+Onest          — Copyright 2023 The Onest Project Authors
+Literata       — Copyright 2017 The Literata Project Authors
+JetBrains Mono — Copyright 2020 The JetBrains Mono Project Authors
+Bad Script     — Copyright 2011 Cyreal (www.cyreal.org)
+
+Файлы — подмножества символов (woff2) в том виде, в каком их отдаёт
+Google Fonts; сами шрифты не изменялись.

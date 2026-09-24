@@ -294,7 +294,8 @@ const Theme = {
     if (b) {
       b.innerHTML = (t === "dark" ? ICON.sun : ICON.moon) +
         '<span class="bl">' + (t === "dark" ? "Светлая" : "Тёмная") + "</span>";
-      b.setAttribute("aria-label", "Переключить на " + (t === "dark" ? "светлую" : "тёмную") + " тему");
+      /* имя кнопки начинается с видимой подписи — так её найдёт и голосовое управление */
+      b.setAttribute("aria-label", (t === "dark" ? "Светлая" : "Тёмная") + " тема");
       b.setAttribute("title", "Переключить тему");
     }
     const m = $("#menuTheme");
@@ -507,7 +508,16 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js"];
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js"]
+      /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
+      .concat([
+        "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
+        "jetbrains-mono-cyrillic", "jetbrains-mono-greek", "jetbrains-mono-latin-ext",
+        "jetbrains-mono-latin", "literata-cyrillic", "literata-greek",
+        "literata-italic-cyrillic", "literata-italic-greek", "literata-italic-latin-ext",
+        "literata-italic-latin", "literata-latin-ext", "literata-latin", "onest-cyrillic",
+        "onest-latin-ext", "onest-latin", "onest-math", "onest-symbols"
+      ].map(function (f) { return "fonts/" + f + ".woff2"; }));
     /* редактор кода, движок SQL и вёрстка формул: без них урок
        откроется, но решать задачу будет нечем */
     const cdn = [CDN.cmBase + "codemirror.min.css", CDN.cmBase + "codemirror.min.js",
@@ -574,7 +584,7 @@ function mountHeader(crumbHtml) {
         ICON.menu + '<span class="bl">Меню</span></button>' +
     "</div>" +
     /* на узком экране ссылки шапки и тема уходят сюда */
-    '<nav class="hdr-menu" id="hdrMenu" aria-label="Разделы" hidden>' +
+    '<nav class="hdr-menu" id="hdrMenu" aria-label="Меню разделов" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
       navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("glossary", "Словарь") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
@@ -1467,7 +1477,8 @@ const Route = {
           : '<text x="' + cx + '" y="' + (p[1] + H / 2 + 5) + '">' + (n.done ? "✓ " : "") + esc(n.label) + "</text>") +
         "</a>";
     });
-    return '<svg class="rt-svg ' + cls + '" viewBox="0 0 ' + L.w + " " + L.h + '" role="img" ' +
+    /* group, а не img: внутри ссылки, а у картинки их быть не может */
+    return '<svg class="rt-svg ' + cls + '" viewBox="0 0 ' + L.w + " " + L.h + '" role="group" ' +
         'aria-label="Схема курса: какие модули на каких опираются">' +
       '<defs><marker id="rtArrow' + cls + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
         '<path class="rt-ah" d="M0 1 L9 5 L0 9 z"/></marker></defs>' +
@@ -1538,12 +1549,13 @@ function renderHome(app) {
     ? '<div class="pace"><p class="pace-say">' + esc(Stats.phrase()) + "</p>" + Stats.calendar() + "</div>"
     : "";
 
-  const hero = el("section", { class: "hero" });
+  /* с именем секция становится областью страницы — обложка не висит вне разметки */
+  const hero = el("section", { class: "hero", "aria-labelledby": "heroTitle" });
   hero.innerHTML =
     '<div class="wrap hero-in has-margin">' +
       '<div class="aside"><p>за 2-3 месяца реально, если по часу-два в день</p>' +
         "<p>начните с первого модуля, остальное подождёт</p></div>" +
-      "<h1>Тетрадь аналитика данных</h1>" +
+      '<h1 id="heroTitle">Тетрадь аналитика данных</h1>' +
       '<p class="lede">Программа на 2-3 месяца до первого оффера. Каждый урок ' +
         "заканчивается задачей, которую вы решаете прямо в браузере.</p>" +
       resumeHtml +
@@ -1599,8 +1611,8 @@ function renderHome(app) {
       '<section class="toc-mod" id="toc-' + m.id + '">' +
         '<header class="toc-mh">' +
           '<span class="toc-mn">' + m.num + "</span>" +
-          '<h3 class="toc-mt">' + esc(m.title) +
-            (m.optional ? ' <span class="toc-opt" title="' + esc(m.optional) + '">необязательный</span>' : "") + "</h3>" +
+          '<h2 class="toc-mt">' + esc(m.title) +
+            (m.optional ? ' <span class="toc-opt" title="' + esc(m.optional) + '">необязательный</span>' : "") + "</h2>" +
           '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
         "</header>" +
         '<p class="toc-ms">' + esc(m.sub) + (m.optional ? " Модуль " + esc(m.optional) + "." : "") + "</p>" +
@@ -2159,9 +2171,24 @@ function lessonHeadHtml(L, C, kindLabel) {
     "</header>";
 }
 
+/* Блок кода или таблица, которые шире колонки, прокручиваются вбок. С
+   клавиатуры это возможно, только если блок получает фокус, — даём его
+   тем, кому он нужен, а окнам вывода и эталона всегда: их содержимое
+   меняется после каждого запуска. */
+function focusScrollers(root) {
+  Array.prototype.forEach.call(root.querySelectorAll("pre, .theory table"), function (n) {
+    if (n.closest(".CodeMirror") || n.hasAttribute("tabindex")) return;
+    if (n.scrollWidth > n.clientWidth + 1) n.setAttribute("tabindex", "0");
+  });
+  [["#outBox", "Ваш вывод"], ["#refBox", "Ожидаемый результат"]].forEach(function (x) {
+    const b = $(x[0], root);
+    if (b) { b.setAttribute("tabindex", "0"); b.setAttribute("role", "region"); b.setAttribute("aria-label", x[1]); }
+  });
+}
+
 /* якорная навигация по разделам урока */
 function secNavHtml(secs) {
-  let navHtml = '<nav class="secnav" id="secnav"><div class="secnav-in">';
+  let navHtml = '<nav class="secnav" id="secnav" aria-label="Разделы урока"><div class="secnav-in">';
   secs.forEach(function (s, i) {
     navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
   });
@@ -2364,6 +2391,8 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
         Tab: function (c) { c.replaceSelection("    "); }
       }
     });
+    /* у скрытого поля ввода CodeMirror своей подписи нет — экранный диктор молчал бы */
+    cm.getInputField().setAttribute("aria-label", "Редактор кода");
     cm.setValue(value);
     cm.on("change", function () { onChange(cm.getValue()); });
     return { get: function () { return cm.getValue(); }, set: function (v) { cm.setValue(v); } };
@@ -2503,6 +2532,7 @@ const Steps = {
       Array.prototype.forEach.call(list.querySelectorAll(".st-b .theory"), function (n) { Terms.mark(n); });
       Array.prototype.forEach.call(list.querySelectorAll(".st.done"), bindDone);
       if (open >= 0) mountOpen();
+      focusScrollers(list);
     }
 
     function mountOpen() {
@@ -2733,6 +2763,7 @@ function renderStepsLesson(app, L, C) {
   }
 
   Terms.mark($("#s-after .theory"));
+  focusScrollers(app);
   mountReadbar(secs);
   if (hasCards) mountDeck(id, C);
 
@@ -2998,6 +3029,7 @@ function renderLesson(app, id) {
   Terms.mark($("#s-theory .theory"));
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
+  focusScrollers(main);
 
   /* ---------- полоса прочитанного + подсветка активной секции ---------- */
   mountReadbar(secs);
