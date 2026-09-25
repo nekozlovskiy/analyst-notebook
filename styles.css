@@ -2146,3 +2146,45 @@ body.no-scroll { overflow: hidden; }
 .ck-bar .ck-schema { color: var(--pen); }
 /* пока набирают код, прилипшие к низу кнопки задачи не спорят со строкой клавиш */
 body.ck-typing .actions { position: static; }
+
+/* ============================================================
+   Песочница (renderSandbox в app.js)
+   ============================================================ */
+.sb-tabs { display: inline-flex; gap: 4px; padding: 4px; margin: 6px 0 16px;
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: 10px; }
+.sb-tabs button {
+  font: 600 14px var(--sans); color: var(--ink-2); background: none; border: 0;
+  padding: 8px 18px; border-radius: 7px; cursor: pointer; min-height: 40px;
+}
+.sb-tabs button[aria-selected="true"] { background: var(--card); color: var(--pen); box-shadow: var(--shadow-1); }
+.sb-tabs button:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.sb-starts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.sb-lbl { font: 13px var(--sans); color: var(--ink-3); margin-right: 2px; }
+.sb-starts .chip {
+  font: 13px var(--sans); color: var(--ink); background: var(--card);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  min-height: 34px;
+}
+.sb-starts .chip:hover { border-color: var(--pen-line); color: var(--pen); background: var(--pen-soft); }
+.sb-starts .chip:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.sandbox .io-box { margin-top: 4px; }
+.sandbox .io-body { max-height: 520px; }
+.sb-hist { margin: 38px 0 60px; }
+.sb-hist-h { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; }
+.sb-hist-h h2 { font-size: 21px; margin: 0; }
+.sb-hist-h .spacer { margin-left: auto; }
+#sbHist { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+#sbHist li { border-bottom: 1px solid var(--rule-soft); }
+#sbHist li.empty { padding: 12px 0; font: 14px var(--sans); color: var(--ink-3); }
+#sbHist button {
+  display: flex; align-items: baseline; gap: 12px; width: 100%; text-align: left;
+  background: none; border: 0; padding: 10px 6px; cursor: pointer; color: var(--ink); border-radius: 6px;
+}
+#sbHist button:hover { background: var(--pen-soft); }
+#sbHist button:focus-visible { outline: 2px solid var(--pen); outline-offset: -2px; }
+.sb-k { flex: none; width: 30px; font: 600 11px var(--sans); color: var(--pen); }
+.sb-l { flex: 1 1 auto; min-width: 0; font: 13px var(--mono); background: none; padding: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-t { flex: none; font: 12px var(--sans); color: var(--ink-3); }
+/* в шапке редактора урока ссылок стало три — на узком экране переносим */
+.editor-h { flex-wrap: wrap; row-gap: 6px; }
