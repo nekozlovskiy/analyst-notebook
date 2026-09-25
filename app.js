@@ -2828,6 +2828,7 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
     cm.getInputField().setAttribute("aria-label", "Редактор кода");
     cm.setValue(value);
     cm.on("change", function () { onChange(cm.getValue()); });
+    CodeKit.attach(cm, ta, onRun);
     return { get: function () { return cm.getValue(); }, set: function (v) { cm.setValue(v); } };
   }).catch(function () {
     if (!ta || !document.body.contains(ta)) return null;
@@ -2839,6 +2840,279 @@ function mountEditor(ta, kind, value, onChange, onRun, onFail) {
     return { get: function () { return ta.value; }, set: function (v) { ta.value = v; } };
   });
 }
+
+/* ============================================================
+   Схема базы у редактора и клавиши на телефоне
+
+   Схема урока (C.schema) — HTML для чтения. Из её блоков <pre>
+   достаём таблицы и столбцы: формат SQL-уроков («users -- 220 строк»,
+   ниже столбцы с отступом) и формат pandas («users (220, 5) a, b, c»).
+   Блок, где хоть одна строка не похожа на таблицу или столбец
+   (примеры функций, числа), пропускается целиком — в уроках без базы
+   схемы просто нет.
+   На широком экране схема висит на правом поле, пока на экране есть
+   редактор. На узком — кнопка «схема» в шапке редактора открывает
+   шторку снизу. На телефоне, пока редактор в фокусе, над клавиатурой
+   строка клавиш: то, что на телефонной клавиатуре спрятано на второй
+   раскладке. Нажатие на столбец, таблицу или клавишу вставляет текст
+   в последний редактор, где стоял курсор.
+   ============================================================ */
+
+const CodeKit = {
+  tables: [],
+  kind: "sql",
+  cms: [],
+  active: null,
+  aside: null,
+  bar: null,
+  sheet: null,
+  seen: null,
+
+  /* разбор схемы: [{ name, note, cols: [{ n, t, d }] }] */
+  parse: function (html) {
+    const dec = document.createElement("textarea");
+    const out = [], have = {};
+    (String(html || "").match(/<pre><code>[\s\S]*?<\/code><\/pre>/g) || []).forEach(function (b) {
+      /* только настоящие теги: в описаниях бывают «<- цель» и «> 0» */
+      dec.innerHTML = b.replace(/<\/?[a-z][^>]*>/gi, "");
+      const got = [];
+      let cur = null, ind = -1, ok = true;
+      dec.value.split("\n").forEach(function (l) {
+        if (!ok || !l.trim()) return;
+        let m;
+        if (!/^\s/.test(l)) {
+          if ((m = l.match(/^([A-Za-z_]\w*)\s+--\s*(.*)$/))) {
+            cur = { name: m[1], note: m[2].trim(), cols: [] };
+          } else if ((m = l.match(/^([A-Za-z_]\w*)\s*\((\d+),\s*\d+\)\s*(.*)$/))) {
+            cur = { name: m[1], note: m[2] + " строк", cols: [] };
+            if (m[3].trim()) m[3].split(",").forEach(function (c) {
+              c = c.trim();
+              if (/^[A-Za-z_]\w*$/.test(c)) cur.cols.push({ n: c, t: "", d: "" }); else ok = false;
+            });
+          } else { ok = false; return; }
+          got.push(cur); ind = -1;
+          return;
+        }
+        if (!cur) { ok = false; return; }
+        const sp = l.match(/^\s*/)[0].length;
+        if (ind < 0) ind = sp;
+        /* продолжение описания предыдущего столбца — отступ глубже */
+        if (sp > ind && cur.cols.length) {
+          const last = cur.cols[cur.cols.length - 1];
+          last.d = (last.d + " " + l.trim()).trim();
+          return;
+        }
+        if (!(m = l.match(/^\s+([A-Za-z_]\w*)(?:\s+(.*))?$/))) { ok = false; return; }
+        let rest = (m[2] || "").trim(), t = "";
+        const ty = rest.match(/^(INTEGER|TEXT|REAL|FLOAT|DATE|NUMERIC|BOOLEAN)\b\s*/i);
+        if (ty) { t = ty[1].toUpperCase(); rest = rest.slice(ty[0].length); }
+        cur.cols.push({ n: m[1], t: t, d: rest.replace(/^--\s*/, "").trim() });
+      });
+      if (!ok || !got.length || !got.every(function (x) { return x.cols.length >= 2; })) return;
+      got.forEach(function (x) { if (!have[x.name]) { have[x.name] = 1; out.push(x); } });
+    });
+    return out;
+  },
+
+  /* новый урок: своя схема и свой язык; всё прошлое убираем */
+  lesson: function (L, C) {
+    CodeKit.reset();
+    CodeKit.kind = L.kind === "sql" ? "sql" : "python";
+    CodeKit.tables = L.kind === "text" ? [] : CodeKit.parse(C.schema);
+    Router.cleanup.push(CodeKit.reset);
+  },
+  reset: function () {
+    CodeKit.cms = []; CodeKit.active = null; CodeKit.tables = [];
+    if (CodeKit.seen) { CodeKit.seen.disconnect(); CodeKit.seen = null; }
+    if (CodeKit.aside) { CodeKit.aside.remove(); CodeKit.aside = null; }
+    CodeKit.closeSheet();
+    CodeKit.hideBar();
+  },
+
+  /* редактор готов: запоминаем, ставим кнопку «схема», слушаем фокус */
+  attach: function (cm, ta, onRun) {
+    CodeKit.cms.push(cm);
+    cm.ckRun = onRun;
+    cm.on("focus", function () { CodeKit.active = cm; CodeKit.showBar(); });
+    cm.on("blur", function () {
+      /* фокус мог перейти в соседний редактор — проверяем чуть позже */
+      setTimeout(function () {
+        if (!CodeKit.live().some(function (c) { return c.hasFocus(); })) CodeKit.hideBar();
+      }, 120);
+    });
+    if (!CodeKit.tables.length) return;
+    const shell = ta && ta.closest ? ta.closest(".editor-shell") : null;
+    const h = shell && shell.querySelector(".editor-h");
+    if (h && !h.querySelector(".ck-open")) {
+      if (!h.querySelector(".spacer")) h.appendChild(el("span", { class: "spacer" }));
+      const b = el("button", { class: "linkbtn ck-open", type: "button", "aria-label": "Схема базы" }, "схема");
+      b.addEventListener("click", function () { CodeKit.active = cm; CodeKit.openSheet(); });
+      h.appendChild(b);
+    }
+    CodeKit.mountAside();
+    if (CodeKit.seen && shell) CodeKit.seen.observe(shell);
+  },
+  live: function () {
+    CodeKit.cms = CodeKit.cms.filter(function (c) { return document.body.contains(c.getWrapperElement()); });
+    return CodeKit.cms;
+  },
+  /* куда вставлять: редактор с курсором, иначе последний, где он был,
+     иначе первый видимый на экране */
+  target: function () {
+    const all = CodeKit.live();
+    if (CodeKit.active && all.indexOf(CodeKit.active) >= 0) return CodeKit.active;
+    for (let i = 0; i < all.length; i++) {
+      const r = all[i].getWrapperElement().getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) return all[i];
+    }
+    return all[0] || null;
+  },
+  /* слово не приклеивается к соседнему: «WHERE» + «city» → «WHERE city» */
+  insert: function (text) {
+    const cm = CodeKit.target();
+    if (!cm) return;
+    const at = cm.getCursor("from"), to = cm.getCursor("to");
+    const before = cm.getRange({ line: at.line, ch: Math.max(0, at.ch - 1) }, at);
+    const after = cm.getRange(to, { line: to.line, ch: to.ch + 1 });
+    if (/^["\w]/.test(text) && /\w/.test(before)) text = " " + text;
+    if (/[\w"]$/.test(text) && /\w/.test(after)) text = text + " ";
+    cm.replaceSelection(text);
+    cm.focus();
+  },
+
+  /* текст для вставки: в pandas столбец — это строка в кавычках */
+  colText: function (n) { return CodeKit.kind === "python" ? '"' + n + '"' : n; },
+
+  tablesHtml: function () {
+    return CodeKit.tables.map(function (t) {
+      return '<div class="ck-t">' +
+        '<button class="ck-tn" type="button" data-ins="' + esc(t.name) + '">' + esc(t.name) + "</button>" +
+        (t.note ? '<span class="ck-note">' + esc(t.note) + "</span>" : "") +
+        '<ul class="ck-cols">' + t.cols.map(function (c) {
+          return '<li><button class="ck-c" type="button" data-ins="' + esc(CodeKit.colText(c.n)) + '"' +
+            (c.d ? ' title="' + esc(c.d) + '"' : "") + '><span class="ck-cn">' + esc(c.n) + "</span>" +
+            (c.t ? '<span class="ck-ty">' + esc(c.t.toLowerCase()) + "</span>" : "") +
+            (c.d ? '<span class="ck-d">' + esc(c.d) + "</span>" : "") + "</button></li>";
+        }).join("") + "</ul></div>";
+    }).join("");
+  },
+  /* нажатие не должно уводить фокус из редактора (иначе на телефоне
+     прячется клавиатура): mousedown гасим, прокрутку касанием не трогаем */
+  keepFocus: function (box) {
+    box.addEventListener("mousedown", function (e) { if (e.target.closest("button")) e.preventDefault(); });
+  },
+
+  mountAside: function () {
+    if (CodeKit.aside) return;
+    const a = el("aside", { class: "ck-aside", "aria-label": "Схема базы" },
+      '<div class="ck-h">Схема базы<span class="ck-hint">нажмите — вставится в код</span></div>' +
+      CodeKit.tablesHtml());
+    CodeKit.keepFocus(a);
+    a.addEventListener("click", function (e) {
+      const b = e.target.closest("[data-ins]");
+      if (b) CodeKit.insert(b.getAttribute("data-ins"));
+    });
+    document.body.appendChild(a);
+    CodeKit.aside = a;
+    /* видна, пока на экране хоть один редактор */
+    const on = new Set();
+    CodeKit.seen = new IntersectionObserver(function (es) {
+      es.forEach(function (x) { if (x.isIntersecting) on.add(x.target); else on.delete(x.target); });
+      a.classList.toggle("on", on.size > 0);
+    });
+  },
+
+  /* ---------- шторка ---------- */
+  openSheet: function () {
+    CodeKit.closeSheet();
+    const s = el("div", { class: "ck-sheet", role: "dialog", "aria-label": "Схема базы" },
+      '<div class="ck-sh-h"><span>Схема базы</span><span class="ck-hint">нажмите — вставится в код</span>' +
+        '<button class="linkbtn ck-close" type="button">закрыть</button></div>' +
+      '<div class="ck-sh-b">' + CodeKit.tablesHtml() + "</div>");
+    const bg = el("div", { class: "ck-bg" });
+    CodeKit.keepFocus(s);
+    s.addEventListener("click", function (e) {
+      if (e.target.closest(".ck-close")) { CodeKit.closeSheet(); return; }
+      const b = e.target.closest("[data-ins]");
+      if (b) { CodeKit.insert(b.getAttribute("data-ins")); CodeKit.closeSheet(); }
+    });
+    bg.addEventListener("click", CodeKit.closeSheet);
+    bg.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    document.body.appendChild(bg);
+    document.body.appendChild(s);
+    CodeKit.sheet = [s, bg];
+    CodeKit.place();
+    const f = s.querySelector(".ck-close");
+    if (!CodeKit.active || !CodeKit.active.hasFocus()) f.focus();
+  },
+  closeSheet: function () {
+    if (!CodeKit.sheet) return;
+    CodeKit.sheet.forEach(function (n) { n.remove(); });
+    CodeKit.sheet = null;
+  },
+
+  /* ---------- клавиши над клавиатурой ---------- */
+  keys: function () {
+    const sql = ["SELECT ", "FROM ", "WHERE ", "GROUP BY ", "ORDER BY ", "JOIN ", "ON ", "AS ",
+                 "COUNT(", "SUM(", "(", ")", ",", "*", "'", "=", ">", "<", "_"];
+    const py = ["⇥", "[", "]", "(", ")", '"', ".", ",", "=", "==", ":", "_", "#",
+                "print(", ".groupby(", ".sum()", ".mean()"];
+    const k = (CodeKit.kind === "sql" ? sql : py).concat(CodeKit.tables.map(function (t) { return t.name; }));
+    return k;
+  },
+  touch: function () { return window.matchMedia("(pointer: coarse)").matches; },
+  showBar: function () {
+    if (!CodeKit.touch()) return;
+    if (!CodeKit.bar) {
+      const b = el("div", { class: "ck-bar", role: "toolbar", "aria-label": "Быстрые клавиши" });
+      CodeKit.keepFocus(b);
+      b.addEventListener("click", function (e) {
+        const k = e.target.closest("button");
+        if (!k) return;
+        if (k.classList.contains("ck-schema")) { CodeKit.openSheet(); return; }
+        if (k.classList.contains("ck-run")) {
+          const cm = CodeKit.target();
+          if (cm && cm.ckRun) { cm.getInputField().blur(); cm.ckRun(); }
+          return;
+        }
+        const v = k.getAttribute("data-k");
+        CodeKit.insert(v === "⇥" ? "    " : v);
+      });
+      document.body.appendChild(b);
+      CodeKit.bar = b;
+      if (window.visualViewport) {
+        visualViewport.addEventListener("resize", CodeKit.place);
+        visualViewport.addEventListener("scroll", CodeKit.place);
+      }
+    }
+    CodeKit.bar.innerHTML = '<div class="ck-keys">' + CodeKit.keys().map(function (k) {
+      return '<button type="button" data-k="' + esc(k) + '"' + (k === "⇥" ? ' aria-label="Отступ"' : "") + ">" +
+        esc(k.trim()) + "</button>";
+    }).join("") + "</div>" +
+      (CodeKit.tables.length ? '<button type="button" class="ck-schema">схема</button>' : "") +
+      '<button type="button" class="ck-run" aria-label="Запустить код">▶</button>';
+    CodeKit.bar.hidden = false;
+    document.body.classList.add("ck-typing");
+    CodeKit.place();
+  },
+  hideBar: function () {
+    if (CodeKit.bar) CodeKit.bar.hidden = true;
+    document.body.classList.remove("ck-typing");
+  },
+  /* position: fixed держится за низ окна, а клавиатура телефона
+     закрывает его; поднимаем строку и шторку до верха клавиатуры */
+  place: function () {
+    const vv = window.visualViewport;
+    const lift = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) : 0;
+    const barH = CodeKit.bar && !CodeKit.bar.hidden ? CodeKit.bar.offsetHeight : 0;
+    if (CodeKit.bar) CodeKit.bar.style.bottom = lift + "px";
+    if (CodeKit.sheet) {
+      const s = CodeKit.sheet[0];
+      s.style.bottom = (lift + barH) + "px";
+      s.style.maxHeight = Math.round((vv ? vv.height : innerHeight) * 0.62 - barH) + "px";
+    }
+  }
+};
 
 /* ============================================================
    Пошаговый урок
@@ -3590,6 +3864,8 @@ function renderLesson(app, id) {
   /* Пошаговый урок (0.1, 0.2) устроен иначе: вместо теории и одной
      задачи — лента шагов со своими редакторами. Движок поднимает сама
      страница урока, чтобы первое «Запустить» не ждало загрузки. */
+  CodeKit.lesson(L, C);
+
   if (C.steps) {
     renderStepsLesson(app, L, C);
     return;

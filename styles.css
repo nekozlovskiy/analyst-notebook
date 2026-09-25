@@ -2056,3 +2056,93 @@ body.no-scroll { overflow: hidden; }
   .term { text-decoration: none; }
   .term-x { display: none !important; }
 }
+
+/* ============================================================
+   Схема базы у редактора и клавиши на телефоне (CodeKit в app.js)
+   ============================================================ */
+
+/* столбцы и таблицы — общие для панели на поле и для шторки */
+.ck-t { margin: 0 0 14px; }
+.ck-t:last-child { margin-bottom: 0; }
+.ck-tn {
+  font: 600 13px var(--mono); color: var(--ink); background: none; border: 0;
+  padding: 3px 0; cursor: pointer; border-radius: 4px;
+}
+.ck-note { display: block; font: 12px var(--sans); color: var(--ink-3); margin: 0 0 4px; }
+.ck-cols { list-style: none; margin: 0; padding: 0; }
+.ck-c {
+  display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: baseline;
+  width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 4px 6px; margin: 0 -6px; border-radius: 5px; color: var(--ink);
+}
+.ck-cn { font: 12.5px var(--mono); overflow-wrap: anywhere; }
+.ck-ty { font: 11px var(--mono); color: var(--ink-4); }
+.ck-d  { grid-column: 1 / -1; font: 11.5px/1.35 var(--sans); color: var(--ink-3); }
+.ck-c:hover, .ck-tn:hover { background: var(--pen-soft); color: var(--pen); }
+.ck-c:focus-visible, .ck-tn:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.ck-hint { font: 11.5px var(--sans); color: var(--ink-3); font-weight: 400; }
+
+/* панель на правом поле: только там, где поле вмещает 200px */
+.ck-aside { display: none; }
+@media (min-width: 1260px) {
+  .ck-aside {
+    display: block; position: fixed; z-index: 25;
+    top: calc(var(--header-h) + 58px);
+    left: calc(50% + var(--lesson) / 2 - 12px); width: 200px;
+    max-height: calc(100vh - var(--header-h) - 80px); overflow-y: auto;
+    padding: 12px 12px 14px; background: var(--card);
+    border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-1);
+    opacity: 0; visibility: hidden; transition: opacity .18s, visibility .18s;
+  }
+  .ck-aside.on { opacity: 1; visibility: visible; }
+  .ck-aside .ck-h { font: 600 13px var(--sans); color: var(--ink-2); margin: 0 0 10px; }
+  .ck-aside .ck-hint { display: block; margin-top: 2px; }
+  .ck-aside .ck-d { display: none; }   /* на поле узко: описание — во всплывающей подсказке */
+  .editor-h .ck-open { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .ck-aside { transition: none; } }
+
+/* шторка снизу */
+.ck-bg { position: fixed; inset: 0; z-index: 104; background: rgba(20, 18, 15, .28); }
+.ck-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 105;
+  max-height: 62vh; display: flex; flex-direction: column;
+  background: var(--card); border-top: 1px solid var(--rule);
+  border-radius: 16px 16px 0 0; box-shadow: var(--shadow-2);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 700px) {
+  .ck-sheet { left: 50%; right: auto; width: 560px; transform: translateX(-50%); }
+}
+.ck-sh-h {
+  display: flex; align-items: baseline; gap: 10px; padding: 14px 18px 10px;
+  font: 600 14px var(--sans); color: var(--ink); border-bottom: 1px solid var(--rule-soft);
+}
+.ck-sh-h .ck-close { margin-left: auto; font-size: 14px; padding: 6px 0; }
+.ck-sh-b { overflow-y: auto; padding: 12px 18px 16px; overscroll-behavior: contain; }
+.ck-sheet .ck-c { padding: 8px 6px; }          /* палец, а не курсор */
+.ck-sheet .ck-tn { padding: 6px 0; font-size: 14px; }
+
+/* строка клавиш над клавиатурой телефона */
+.ck-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 106;
+  display: flex; align-items: stretch; gap: 6px;
+  padding: 6px 8px; background: var(--paper-2); border-top: 1px solid var(--rule);
+}
+.ck-bar[hidden] { display: none; }
+.ck-keys {
+  display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.ck-keys::-webkit-scrollbar { display: none; }
+.ck-bar button {
+  flex: none; min-width: 40px; height: 40px; padding: 0 10px;
+  font: 14px var(--mono); color: var(--ink); background: var(--card);
+  border: 1px solid var(--rule); border-radius: var(--r);
+  touch-action: manipulation;
+}
+.ck-bar .ck-schema, .ck-bar .ck-run { font-family: var(--sans); font-weight: 600; }
+.ck-bar .ck-run { background: var(--pen); color: var(--on-pen); border-color: var(--pen); }
+.ck-bar .ck-schema { color: var(--pen); }
+/* пока набирают код, прилипшие к низу кнопки задачи не спорят со строкой клавиш */
+body.ck-typing .actions { position: static; }
