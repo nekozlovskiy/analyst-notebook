@@ -313,7 +313,83 @@ def write_block(module, figs):
     p.write_text(s, encoding="utf8")
 
 
-MODULES = {"m1": (FIGS_M1, check_m1)}
+# ---------------------------------------------------------------- схемы m2
+
+def groupby_data():
+    """По два первых оплаченных заказа трёх каналов — маленький пример,
+    на котором видно все три шага groupby. Суммы — по этим шести строкам."""
+    c = db()
+    src = c.execute(
+        "SELECT order_id, channel, revenue FROM ("
+        " SELECT o.order_id, u.channel, o.revenue,"
+        "  ROW_NUMBER() OVER (PARTITION BY u.channel ORDER BY o.order_id) AS rn"
+        " FROM orders o JOIN users u USING (user_id)"
+        " WHERE o.status = 'paid' AND u.channel IN ('organic', 'paid_search', 'social'))"
+        " WHERE rn <= 2 ORDER BY order_id").fetchall()
+    sums = {}
+    for _, ch, r in src:
+        sums[ch] = sums.get(ch, 0) + r
+    return src, sorted((ch, round(v, 2)) for ch, v in sums.items())
+
+
+def fig_groupby_sac():
+    src, sums = groupby_data()
+    groups = [ch for ch, _ in sums]
+    rh = 24
+    svg = Svg("groupby-sac", 420,
+              "groupby: разделить, посчитать, собрать",
+              "Шесть заказов трёх каналов. groupby сначала раскладывает строки по группам channel, "
+              "потом считает сумму revenue в каждой группе отдельно, потом собирает по строке на группу: "
+              + ", ".join(f"{ch} {num(v)}" for ch, v in sums) + ".")
+    srcm = table(svg, 0, 22, 168, "orders", [("channel", 8, None), ("revenue", 160, "end")],
+                 [(ch, num(r)) for _, ch, r in src], row_h=rh)
+    svg.text(196, 15, "1 разделить", "f-hd", 12.5)
+    svg.text(334, 15, "2 сумма", "f-hd", 12.5, anchor="end")
+    gm = {}
+    for i, ch in enumerate(groups):
+        top = 40 + i * 66
+        svg.text(198, top - 5, ch, "f-sub", 10.5)
+        svg.rect(196, top, 70, 2 * rh)
+        svg.line(196, top + rh, 266, top + rh)
+        rows = [r for _, c2, r in src if c2 == ch]
+        for k, r in enumerate(rows):
+            svg.text(260, top + k * rh + rh / 2 + 4.5, num(r), anchor="end")
+        gm[ch] = [top + rh / 2, top + rh * 1.5]
+        mid = top + rh
+        svg.path(f"M268 {mid:g} h8")
+        svg.text(334, mid + 4.5, num(dict(sums)[ch]), "f-pen-t", anchor="end")
+    used = {ch: 0 for ch in groups}
+    for i, (_, ch, _) in enumerate(src):
+        a, b = srcm[i], gm[ch][used[ch]]
+        used[ch] += 1
+        svg.path(f"M168 {a:g} C 182 {a:g}, 182 {b:g}, 196 {b:g}", "f-soft")
+    svg.text(0, 250, "3 собрать", "f-hd", 12.5)
+    table(svg, 0, 276, 200, 'groupby("channel")["revenue"].sum()',
+          [("channel", 8, None), ("revenue", 192, "end")],
+          [(ch, num(v)) for ch, v in sums], row_h=rh)
+    svg.note(0, 394, ["в каждой группе — своя маленькая таблица,", "от неё остаётся одна строка"])
+    return svg.render()
+
+
+FIGS_M2 = {
+    "groupby-sac": fig_groupby_sac,
+}
+
+
+def check_m2():
+    errs = []
+    src, sums = groupby_data()
+    if [(o, ch, num(r)) for o, ch, r in src] != [
+            (1, "organic", "2997.2"), (2, "organic", "4968.24"), (8, "social", "5096.46"),
+            (26, "social", "3670.6"), (40, "paid_search", "3368.34"), (42, "paid_search", "3734.48")]:
+        errs.append(f"groupby-sac: строки {src}")
+    if [(ch, num(v)) for ch, v in sums] != [
+            ("organic", "7965.44"), ("paid_search", "7102.82"), ("social", "8767.06")]:
+        errs.append(f"groupby-sac: суммы {sums}")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""

@@ -2212,4 +2212,5 @@ figure.fig figcaption {
 .fig-svg .f-soft { fill: none; stroke: var(--rule-hard); stroke-width: 1; }
 .fig-svg .f-pen { fill: none; stroke: var(--pen); stroke-width: 1.4; }
 .fig-svg .f-pen-fill { fill: var(--pen); }
+.fig-svg .f-pen-t { fill: var(--pen); }
 .fig-svg .f-tint { fill: var(--pen); stroke: none; }
