@@ -1169,6 +1169,24 @@ textarea.answer::placeholder { color: var(--ink-3); }
 }
 .io-body pre .err { color: var(--red); }
 .io-body .empty { color: var(--ink-3); font-size: 14px; font-family: var(--sans); }
+/* График matplotlib: PNG на белом, как бумага — в тёмной теме
+   остаётся светлой карточкой, иначе чёрные подписи осей не прочесть.
+   Окно вывода с графиком не ограничиваем по высоте: прокрутка внутри
+   прокрутки на телефоне теряет картинку. */
+figure.plot {
+  margin: 0 0 10px; padding: 8px; background: #fff; border-radius: 6px;
+  border: 1px solid var(--rule); max-width: 100%;
+}
+figure.plot:last-child { margin-bottom: 0; }
+figure.plot img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.io-body pre + figure.plot { margin-top: 12px; }
+.io-body:has(figure.plot) { max-height: none; }
+@media (max-width: 600px) {
+  /* на телефоне каждый пиксель ширины — графику */
+  .io-body:has(figure.plot) { padding-left: 8px; padding-right: 8px; }
+  figure.plot { padding: 4px; }
+}
+.ref-say { margin: 0 0 10px; font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
 .io-body pre mark.diff {
   background: var(--red-soft); color: var(--red); border-bottom: 2px solid var(--red);
   padding: 0 2px; border-radius: 2px;
