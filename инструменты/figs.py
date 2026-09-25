@@ -76,14 +76,16 @@ def table(svg, x, y, w, title, cols, rows, row_h=26):
     SVG схлопывает их. rows — кортежи значений. Возвращает центры
     строк по y."""
     svg.text(x + 2, y - 7, title, "f-hd", 12.5)
-    h = 22 + row_h * len(rows)
+    hh = 22 if any(c[0] for c in cols) else 0      # без подписей столбцов — без пустой полосы
+    h = hh + row_h * len(rows)
     svg.rect(x, y, w, h)
     for label, dx, anchor in cols:
         svg.text(x + dx, y + 15, label, "f-sub", 10.5, anchor)
     mids = []
     for i, r in enumerate(rows):
-        top = y + 22 + i * row_h
-        svg.line(x, top, x + w, top)
+        top = y + hh + i * row_h
+        if i or hh:
+            svg.line(x, top, x + w, top)
         for (_, dx, anchor), v in zip(cols, r):
             svg.text(x + dx, top + row_h / 2 + 4.5, v, anchor=anchor)
         mids.append(top + row_h / 2)
@@ -371,8 +373,67 @@ def fig_groupby_sac():
     return svg.render()
 
 
+def iqr_data():
+    """Квартили оплаченных чеков так, как их считает pandas (quantile,
+    линейная интерполяция), граница q3 + 1.5 * IQR и что за ней."""
+    r = sorted(v for (v,) in db().execute("SELECT revenue FROM orders WHERE status = 'paid'"))
+
+    def q(p):
+        i = (len(r) - 1) * p
+        lo = int(i)
+        return r[lo] + (r[min(lo + 1, len(r) - 1)] - r[lo]) * (i - lo)
+
+    q1, med, q3 = q(.25), q(.5), q(.75)
+    iqr = q3 - q1
+    hi = q3 + 1.5 * iqr
+    out = [v for v in r if v > hi]
+    return {"n": len(r), "q1": q1, "med": med, "q3": q3, "iqr": iqr, "hi": hi, "out": out,
+            "top": max(v for v in r if v <= hi), "low": r[0], "share": sum(out) / sum(r) * 100}
+
+
+def fig_iqr_box():
+    d = iqr_data()
+    k = 330 / 11000                    # 0…11 000 рублей: самый крупный чек около 10 тысяч
+    X = lambda v: v * k
+    y0, h = 48, 36                     # ящик
+    cy = y0 + h / 2
+    svg = Svg("iqr-box", 318,
+              "Ящик с усами и граница выбросов по методу IQR",
+              f"Оплаченные чеки, {d['n']} заказов. Ящик — от первого квартиля {num(d['q1'])} до третьего {num(d['q3'])}, "
+              f"внутри медиана {num(d['med'])}. Граница q3 + 1.5 × IQR = {num(d['hi'])} рубля. "
+              f"За ней {len(d['out'])} заказов — {d['share']:.1f}% всей выручки.")
+    svg.text(0, 14, "оплаченные чеки, руб.", "f-hd", 12.5)
+    # ус, ящик, медиана
+    svg.line(X(d["low"]), cy, X(d["q1"]), cy, "f-box")
+    svg.line(X(d["q3"]), cy, X(d["top"]), cy, "f-box")
+    for v in (d["low"], d["top"]):
+        svg.line(X(v), cy - 8, X(v), cy + 8, "f-box")
+    svg.rect(X(d["q1"]), y0, X(d["q3"]) - X(d["q1"]), h, rx=2)
+    svg.line(X(d["med"]), y0, X(d["med"]), y0 + h, "f-box")
+    # граница и выбросы
+    svg.path(f"M{X(d['hi']):.1f} {y0 - 18} V{y0 + h + 10}")
+    svg.text(X(d["hi"]) + 4, y0 - 8, num(d["hi"]), "f-pen-t", 11.5)
+    for i, v in enumerate(d["out"]):
+        svg.circle(X(v), cy + (-6 if i % 2 else 6), 3)
+    svg.text(X(d["out"][-1]) - 20, y0 + h + 22, f"{len(d['out'])} выбросов", "f-pen-t", 11.5, anchor="end")
+    # ось
+    ay = y0 + h + 36
+    svg.line(0, ay, 330, ay, "f-row")
+    for v in (0, 5000, 10000):
+        svg.line(X(v), ay, X(v), ay + 4, "f-row")
+        svg.text(X(v), ay + 16, f"{v:,}".replace(",", " "), "f-sub", 10.5,
+                 anchor="start" if v == 0 else "middle")
+    table(svg, 0, ay + 48, 300, "как считается граница",
+          [("", 8, None), ("", 292, "end")],
+          [("q1 — 25%", num(d["q1"])), ("медиана — 50%", num(d["med"])), ("q3 — 75%", num(d["q3"])),
+           ("IQR = q3 − q1", num(d["iqr"])), ("граница = q3 + 1.5 × IQR", num(d["hi"]))], row_h=22)
+    svg.note(0, 308, [f"{len(d['out'])} заказов — {d['share']:.1f}% выручки: не выбрасывать"], 14)
+    return svg.render()
+
+
 FIGS_M2 = {
     "groupby-sac": fig_groupby_sac,
+    "iqr-box": fig_iqr_box,
 }
 
 
@@ -386,6 +447,11 @@ def check_m2():
     if [(ch, num(v)) for ch, v in sums] != [
             ("organic", "7965.44"), ("paid_search", "7102.82"), ("social", "8767.06")]:
         errs.append(f"groupby-sac: суммы {sums}")
+    q = iqr_data()
+    got = (q["n"], num(q["q1"]), num(q["med"]), num(q["q3"]), num(q["iqr"]), num(q["hi"]),
+           len(q["out"]), num(q["top"]), num(q["low"]), f"{q['share']:.1f}")
+    if got != (189, "2136.56", "2997.2", "4260.25", "2123.69", "7445.78", 7, "7437.5", "791.47", "9.4"):
+        errs.append(f"iqr-box: {got}")
     return errs
 
 
