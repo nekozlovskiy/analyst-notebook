@@ -1,0 +1,60 @@
+# Проверка курса: на каждом PR в main и после каждого слияния.
+# Сами проверки — в инструменты/ci.sh (их можно запустить и локально).
+# После слияния второй шаг ждёт, пока GitHub Pages опубликует сайт,
+# и сверяет, что на живом сайте та же VERSION, что в main.
+name: Проверка курса
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Проверка курса
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Зависимости (pandas для шагов урока 0.2, sqlite3 для тренажёра)
+        run: |
+          pip install --quiet pandas
+          command -v sqlite3 || (sudo apt-get update -q && sudo apt-get install -y -q sqlite3)
+      - name: Проверки
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: bash инструменты/ci.sh
+
+  live:
+    name: Сайт обновился
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: На сайте та же версия, что в main
+        run: |
+          want=$(grep -o 'const VERSION = "[^"]*"' sw.js)
+          url="https://nekozlovskiy.github.io/analyst-notebook/sw.js"
+          for i in $(seq 1 40); do
+            got=$(curl -fsS "$url?nocache=$RANDOM" | grep -o 'const VERSION = "[^"]*"' || true)
+            echo "попытка $i: на сайте ${got:-нет ответа}, нужно $want"
+            if [ "$got" = "$want" ]; then echo "Сайт обновился."; exit 0; fi
+            sleep 20
+          done
+          echo "::error title=Сайт не обновился::за 13 минут на сайте так и не появилась $want — посмотрите вкладку Actions → pages-build-deployment"
+          exit 1
