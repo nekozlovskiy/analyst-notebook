@@ -1978,7 +1978,10 @@ body.no-scroll { overflow: hidden; }
   .lesson-nav #markBtn { order: -1; width: 100%; justify-content: center; }
   /* Соседние уроки — в столбик и во всю ширину: одно полное название
      полезнее двух обрезанных, и палец не мажет мимо. */
-  .lesson-nav .navlink { flex: 1 1 100%; max-width: none; justify-content: center; }
+  .lesson-nav .navlink { flex: 1 1 100%; max-width: none; justify-content: center; min-width: 0; }
+  /* длинное название («1.7 Проект: анализ поведения пользователей»)
+     переносится, а не выталкивает страницу вбок */
+  .lesson-nav .nl-t { white-space: normal; text-align: center; }
   /* «Карта курса» на телефоне лишняя: наверху есть знак-ссылка */
   .lesson-nav .navlink[href="#"] { display: none; }
   .lesson-nav .spacer { display: none; }

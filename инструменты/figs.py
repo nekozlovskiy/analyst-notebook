@@ -199,10 +199,70 @@ def fig_window_frame():
     return svg.render()
 
 
+LAST_FULL = "2024-09-01"   # заказы в базе по 11.09.2024: август — последний полный месяц
+
+
+def cohort_data():
+    """Доля когорты, купившей хотя бы раз к концу N-го месяца жизни
+    (N = 0 — месяц регистрации). Месяц, не прожитый целиком, — None."""
+    c = db()
+    out = []
+    for cm, cs, n in c.execute(
+            "SELECT strftime('%Y-%m', signup_date), date(signup_date, 'start of month'), COUNT(*) "
+            "FROM users GROUP BY 1 ORDER BY 1").fetchall():
+        vals = []
+        for k in range(6):
+            end = c.execute("SELECT date(?, ?)", (cs, f"+{k + 1} month")).fetchone()[0]
+            if end > LAST_FULL:
+                vals.append(None)
+                continue
+            got = c.execute(
+                "SELECT COUNT(*) FROM users u WHERE strftime('%Y-%m', u.signup_date) = ? AND EXISTS ("
+                "SELECT 1 FROM orders o WHERE o.user_id = u.user_id AND o.status = 'paid' AND o.order_date < ?)",
+                (cm, end)).fetchone()[0]
+            vals.append(round(got * 100.0 / n, 1))
+        out.append((cm, n, vals))
+    return out
+
+
+def fig_cohort_triangle():
+    data = cohort_data()
+    top = max(v for _, _, vs in data for v in vs if v is not None)
+    lx, cw, rh, y0 = 58, 46, 26, 30
+    h = y0 + rh * len(data) + 64
+    svg = Svg("cohort-triangle", h,
+              "Когортная таблица: доля купивших по месяцам жизни",
+              "Строки — когорты по месяцу регистрации, столбцы — месяцы жизни от 0 до 5, в ячейке — процент когорты, "
+              "купившей хотя бы раз к концу этого месяца. "
+              f"Мартовская когорта дошла до {data[2][2][3]:g}%, январская остановилась на {data[0][2][1]:g}%. "
+              "Правый нижний угол пуст: свежие когорты ещё не прожили эти месяцы.")
+    svg.text(0, 14, "когорта", "f-hd", 12)
+    for k in range(6):
+        svg.text(lx + k * cw + cw / 2, 14, f"мес {k}", "f-sub", 10.5, anchor="middle")
+    svg.line(0, y0 - 8, lx + 6 * cw, y0 - 8)
+    for i, (cm, n, vals) in enumerate(data):
+        y = y0 + i * rh
+        svg.text(0, y + 12, cm, "f-t", 11.5)
+        for k, v in enumerate(vals):
+            if v is None:
+                continue
+            x = lx + k * cw
+            op = 0.06 + 0.24 * v / top
+            svg.rect(x + 1, y - 4, cw - 2, rh - 2, "f-tint", 3, f' fill-opacity="{op:.2f}"')
+            svg.text(x + cw / 2, y + 12, f"{v:g}", "f-t", 11.5, anchor="middle")
+    # стрелка от реплики в пустой угол (месяцы 4–5 у майской и июньской когорт)
+    ex, ey = lx + 4.5 * cw, y0 + 4.5 * rh
+    sy = y0 + rh * len(data) + 22
+    svg.path(f"M{ex - 40:g} {sy:g} C {ex - 10:g} {sy:g}, {ex:g} {sy - 14:g}, {ex:g} {ey + 8:g}")
+    svg.note(0, y0 + rh * len(data) + 30, ["у свежих когорт хвоста ещё нет —", "это не падение"])
+    return svg.render()
+
+
 FIGS_M1 = {
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
     "window-frame": fig_window_frame,
+    "cohort-triangle": fig_cohort_triangle,
 }
 
 
@@ -223,6 +283,17 @@ def check_m1():
             (3, "2024-05-26", "9071.54", "10433.38"), (3, "2024-07-08", "3071.02", "13504.4"),
             (3, "2024-07-31", "1796.6", "15301.0")]:
         errs.append(f"window-frame: {w}")
+    want = [
+        ("2024-01", 33, [15.2, 45.5, 45.5, 45.5, 45.5, 45.5]),
+        ("2024-02", 34, [11.8, 35.3, 38.2, 38.2, 38.2, 38.2]),
+        ("2024-03", 49, [20.4, 55.1, 61.2, 63.3, 63.3, 63.3]),
+        ("2024-04", 34, [11.8, 41.2, 47.1, 47.1, 47.1, None]),
+        ("2024-05", 44, [9.1, 38.6, 45.5, 45.5, None, None]),
+        ("2024-06", 26, [11.5, 30.8, 34.6, None, None, None]),
+    ]
+    got = cohort_data()
+    if got != want:
+        errs.append(f"cohort-triangle: {got}")
     return errs
 
 
