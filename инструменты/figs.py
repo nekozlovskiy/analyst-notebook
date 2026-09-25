@@ -76,14 +76,16 @@ def table(svg, x, y, w, title, cols, rows, row_h=26):
     SVG схлопывает их. rows — кортежи значений. Возвращает центры
     строк по y."""
     svg.text(x + 2, y - 7, title, "f-hd", 12.5)
-    h = 22 + row_h * len(rows)
+    hh = 22 if any(c[0] for c in cols) else 0      # без подписей столбцов — без пустой полосы
+    h = hh + row_h * len(rows)
     svg.rect(x, y, w, h)
     for label, dx, anchor in cols:
         svg.text(x + dx, y + 15, label, "f-sub", 10.5, anchor)
     mids = []
     for i, r in enumerate(rows):
-        top = y + 22 + i * row_h
-        svg.line(x, top, x + w, top)
+        top = y + hh + i * row_h
+        if i or hh:
+            svg.line(x, top, x + w, top)
         for (_, dx, anchor), v in zip(cols, r):
             svg.text(x + dx, top + row_h / 2 + 4.5, v, anchor=anchor)
         mids.append(top + row_h / 2)
@@ -313,7 +315,211 @@ def write_block(module, figs):
     p.write_text(s, encoding="utf8")
 
 
-MODULES = {"m1": (FIGS_M1, check_m1)}
+# ---------------------------------------------------------------- схемы m2
+
+def groupby_data():
+    """По два первых оплаченных заказа трёх каналов — маленький пример,
+    на котором видно все три шага groupby. Суммы — по этим шести строкам."""
+    c = db()
+    src = c.execute(
+        "SELECT order_id, channel, revenue FROM ("
+        " SELECT o.order_id, u.channel, o.revenue,"
+        "  ROW_NUMBER() OVER (PARTITION BY u.channel ORDER BY o.order_id) AS rn"
+        " FROM orders o JOIN users u USING (user_id)"
+        " WHERE o.status = 'paid' AND u.channel IN ('organic', 'paid_search', 'social'))"
+        " WHERE rn <= 2 ORDER BY order_id").fetchall()
+    sums = {}
+    for _, ch, r in src:
+        sums[ch] = sums.get(ch, 0) + r
+    return src, sorted((ch, round(v, 2)) for ch, v in sums.items())
+
+
+def fig_groupby_sac():
+    src, sums = groupby_data()
+    groups = [ch for ch, _ in sums]
+    rh = 24
+    svg = Svg("groupby-sac", 420,
+              "groupby: разделить, посчитать, собрать",
+              "Шесть заказов трёх каналов. groupby сначала раскладывает строки по группам channel, "
+              "потом считает сумму revenue в каждой группе отдельно, потом собирает по строке на группу: "
+              + ", ".join(f"{ch} {num(v)}" for ch, v in sums) + ".")
+    srcm = table(svg, 0, 22, 168, "orders", [("channel", 8, None), ("revenue", 160, "end")],
+                 [(ch, num(r)) for _, ch, r in src], row_h=rh)
+    svg.text(196, 15, "1 разделить", "f-hd", 12.5)
+    svg.text(334, 15, "2 сумма", "f-hd", 12.5, anchor="end")
+    gm = {}
+    for i, ch in enumerate(groups):
+        top = 40 + i * 66
+        svg.text(198, top - 5, ch, "f-sub", 10.5)
+        svg.rect(196, top, 70, 2 * rh)
+        svg.line(196, top + rh, 266, top + rh)
+        rows = [r for _, c2, r in src if c2 == ch]
+        for k, r in enumerate(rows):
+            svg.text(260, top + k * rh + rh / 2 + 4.5, num(r), anchor="end")
+        gm[ch] = [top + rh / 2, top + rh * 1.5]
+        mid = top + rh
+        svg.path(f"M268 {mid:g} h8")
+        svg.text(334, mid + 4.5, num(dict(sums)[ch]), "f-pen-t", anchor="end")
+    used = {ch: 0 for ch in groups}
+    for i, (_, ch, _) in enumerate(src):
+        a, b = srcm[i], gm[ch][used[ch]]
+        used[ch] += 1
+        svg.path(f"M168 {a:g} C 182 {a:g}, 182 {b:g}, 196 {b:g}", "f-soft")
+    svg.text(0, 250, "3 собрать", "f-hd", 12.5)
+    table(svg, 0, 276, 200, 'groupby("channel")["revenue"].sum()',
+          [("channel", 8, None), ("revenue", 192, "end")],
+          [(ch, num(v)) for ch, v in sums], row_h=rh)
+    svg.note(0, 394, ["в каждой группе — своя маленькая таблица,", "от неё остаётся одна строка"])
+    return svg.render()
+
+
+def iqr_data():
+    """Квартили оплаченных чеков так, как их считает pandas (quantile,
+    линейная интерполяция), граница q3 + 1.5 * IQR и что за ней."""
+    r = sorted(v for (v,) in db().execute("SELECT revenue FROM orders WHERE status = 'paid'"))
+
+    def q(p):
+        i = (len(r) - 1) * p
+        lo = int(i)
+        return r[lo] + (r[min(lo + 1, len(r) - 1)] - r[lo]) * (i - lo)
+
+    q1, med, q3 = q(.25), q(.5), q(.75)
+    iqr = q3 - q1
+    hi = q3 + 1.5 * iqr
+    out = [v for v in r if v > hi]
+    return {"n": len(r), "q1": q1, "med": med, "q3": q3, "iqr": iqr, "hi": hi, "out": out,
+            "top": max(v for v in r if v <= hi), "low": r[0], "share": sum(out) / sum(r) * 100}
+
+
+def fig_iqr_box():
+    d = iqr_data()
+    k = 330 / 11000                    # 0…11 000 рублей: самый крупный чек около 10 тысяч
+    X = lambda v: v * k
+    y0, h = 48, 36                     # ящик
+    cy = y0 + h / 2
+    svg = Svg("iqr-box", 318,
+              "Ящик с усами и граница выбросов по методу IQR",
+              f"Оплаченные чеки, {d['n']} заказов. Ящик — от первого квартиля {num(d['q1'])} до третьего {num(d['q3'])}, "
+              f"внутри медиана {num(d['med'])}. Граница q3 + 1.5 × IQR = {num(d['hi'])} рубля. "
+              f"За ней {len(d['out'])} заказов — {d['share']:.1f}% всей выручки.")
+    svg.text(0, 14, "оплаченные чеки, руб.", "f-hd", 12.5)
+    # ус, ящик, медиана
+    svg.line(X(d["low"]), cy, X(d["q1"]), cy, "f-box")
+    svg.line(X(d["q3"]), cy, X(d["top"]), cy, "f-box")
+    for v in (d["low"], d["top"]):
+        svg.line(X(v), cy - 8, X(v), cy + 8, "f-box")
+    svg.rect(X(d["q1"]), y0, X(d["q3"]) - X(d["q1"]), h, rx=2)
+    svg.line(X(d["med"]), y0, X(d["med"]), y0 + h, "f-box")
+    # граница и выбросы
+    svg.path(f"M{X(d['hi']):.1f} {y0 - 18} V{y0 + h + 10}")
+    svg.text(X(d["hi"]) + 4, y0 - 8, num(d["hi"]), "f-pen-t", 11.5)
+    for i, v in enumerate(d["out"]):
+        svg.circle(X(v), cy + (-6 if i % 2 else 6), 3)
+    svg.text(X(d["out"][-1]) - 20, y0 + h + 22, f"{len(d['out'])} выбросов", "f-pen-t", 11.5, anchor="end")
+    # ось
+    ay = y0 + h + 36
+    svg.line(0, ay, 330, ay, "f-row")
+    for v in (0, 5000, 10000):
+        svg.line(X(v), ay, X(v), ay + 4, "f-row")
+        svg.text(X(v), ay + 16, f"{v:,}".replace(",", " "), "f-sub", 10.5,
+                 anchor="start" if v == 0 else "middle")
+    table(svg, 0, ay + 48, 300, "как считается граница",
+          [("", 8, None), ("", 292, "end")],
+          [("q1 — 25%", num(d["q1"])), ("медиана — 50%", num(d["med"])), ("q3 — 75%", num(d["q3"])),
+           ("IQR = q3 − q1", num(d["iqr"])), ("граница = q3 + 1.5 × IQR", num(d["hi"]))], row_h=22)
+    svg.note(0, 308, [f"{len(d['out'])} заказов — {d['share']:.1f}% выручки: не выбрасывать"], 14)
+    return svg.render()
+
+
+def weekly_data(last="2024-08-26"):
+    """Недельная выручка по оплаченным, как resample("W-MON").sum():
+    неделя заканчивается понедельником и им подписана. Хвост после
+    last — незакрытый период (урок 2.4 его отрезает). Третий столбец —
+    rolling(4).mean(): первые три недели без среднего (None)."""
+    import datetime as dt
+    wk = {}
+    for d, r in db().execute("SELECT order_date, revenue FROM orders WHERE status = 'paid'"):
+        d = dt.date.fromisoformat(d)
+        lab = d + dt.timedelta(days=(0 - d.weekday()) % 7)
+        wk[lab] = wk.get(lab, 0) + r
+    k, end, out = min(wk), dt.date.fromisoformat(last), []
+    while k <= end:
+        out.append([k.isoformat(), round(wk.get(k, 0), 2), None])
+        k += dt.timedelta(days=7)
+    for i in range(3, len(out)):
+        out[i][2] = round(sum(v for _, v, _ in out[i - 3:i + 1]) / 4, 2)
+    return [tuple(r) for r in out]
+
+
+def fig_rolling_ma():
+    wk = weekly_data()
+    top = 50000
+    x0, x1, y0, y1 = 26, 334, 48, 200            # поле графика
+    X = lambda i: x0 + (x1 - x0) * i / (len(wk) - 1)
+    Y = lambda v: y1 - (y1 - y0) * v / top
+    # неделя из примера урока: «в середине августа рост на 104 процента»
+    spike = [d for d, _, _ in wk].index("2024-08-19")
+    svg = Svg("rolling-ma", 272,
+              "Недельная выручка: сырой ряд и скользящее среднее за 4 недели",
+              "Сырые недельные суммы с января по август скачут от недели к неделе. "
+              "Среднее за четыре недели показывает рост до весны, плато и спад в августе. "
+              f"Всплеск недели {wk[spike][0]} ({num(wk[spike][1])}) на сглаженном ряду — просто неделя внутри спада.")
+    svg.text(0, 14, "выручка за неделю, тыс. руб.", "f-hd", 12.5)
+    svg.line(0, 30, 18, 30, "f-raw")
+    svg.text(24, 34, "как есть", "f-sub", 10.5)
+    svg.line(90, 30, 108, 30, "f-pen")
+    svg.text(114, 34, "среднее за 4 недели", "f-sub", 10.5)
+    for v in (0, 25000, 50000):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 4, Y(v) + 4, f"{v // 1000}", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(i):.1f} {Y(v):.1f}" for i, (_, v, _) in enumerate(wk)), "f-raw")
+    svg.path("M" + " L".join(f"{X(i):.1f} {Y(m):.1f}" for i, (_, _, m) in enumerate(wk) if m is not None))
+    months = "янв фев мар апр май июн июл авг".split()
+    seen = set()
+    for i, (d, _, _) in enumerate(wk):
+        mo = int(d[5:7])
+        if mo not in seen:
+            seen.add(mo)
+            svg.text(X(i), y1 + 15, months[mo - 1], "f-sub", 10.5, anchor="middle")
+    svg.circle(X(spike), Y(wk[spike][1]), 3)
+    svg.note(0, 244, ["«рост на 104%» — одна неделя,", "тренд по среднему идёт вниз"], 14)
+    svg.path(f"M186 236 C 230 232, {X(spike) - 6:.1f} 222, {X(spike):.1f} {Y(wk[spike][1]) + 6:.1f}")
+    return svg.render()
+
+
+FIGS_M2 = {
+    "groupby-sac": fig_groupby_sac,
+    "iqr-box": fig_iqr_box,
+    "rolling-ma": fig_rolling_ma,
+}
+
+
+def check_m2():
+    errs = []
+    src, sums = groupby_data()
+    if [(o, ch, num(r)) for o, ch, r in src] != [
+            (1, "organic", "2997.2"), (2, "organic", "4968.24"), (8, "social", "5096.46"),
+            (26, "social", "3670.6"), (40, "paid_search", "3368.34"), (42, "paid_search", "3734.48")]:
+        errs.append(f"groupby-sac: строки {src}")
+    if [(ch, num(v)) for ch, v in sums] != [
+            ("organic", "7965.44"), ("paid_search", "7102.82"), ("social", "8767.06")]:
+        errs.append(f"groupby-sac: суммы {sums}")
+    q = iqr_data()
+    got = (q["n"], num(q["q1"]), num(q["med"]), num(q["q3"]), num(q["iqr"]), num(q["hi"]),
+           len(q["out"]), num(q["top"]), num(q["low"]), f"{q['share']:.1f}")
+    if got != (189, "2136.56", "2997.2", "4260.25", "2123.69", "7445.78", 7, "7437.5", "791.47", "9.4"):
+        errs.append(f"iqr-box: {got}")
+    wk = weekly_data()
+    tail = [(d, num(v), num(m)) for d, v, m in wk[-4:]]
+    if tail != [("2024-08-05", "8970.0", "15927.75"), ("2024-08-12", "6578.38", "15763.65"),
+                ("2024-08-19", "13420.73", "11167.22"), ("2024-08-26", "1963.54", "7733.16")]:
+        errs.append(f"rolling-ma: хвост {tail}")
+    if (wk[0][0], len(wk), wk[0][2], wk[3][2] is None) != ("2024-01-08", 34, None, False):
+        errs.append(f"rolling-ma: начало {wk[:4]}")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
