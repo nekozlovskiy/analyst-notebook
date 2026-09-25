@@ -96,8 +96,6 @@ LEFT JOIN orders o ON o.user_id = u.user_id
 
 <h3>Порядок выполнения запроса</h3>
 <p>SQL пишется не в том порядке, в котором выполняется. Это объясняет половину странностей:</p>
-<pre><code>FROM / JOIN   ->  WHERE  ->  GROUP BY  ->  HAVING  ->  SELECT  ->  ORDER BY  ->  LIMIT
-   1              2           3            4           5           6            7</code></pre>
 <figure class="fig" data-fig="sql-order"><figcaption>Рис. Запрос пишут в одном порядке, а база выполняет в другом</figcaption></figure>
 <ul>
   <li><code>WHERE</code> отрабатывает <em>до</em> группировки — поэтому в нём нельзя написать <code>SUM(...) &gt; 100</code>;</li>
