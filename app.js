@@ -1851,6 +1851,29 @@ const Plots = {
 };
 
 /* ============================================================
+   Схемы в теории
+
+   SVG схем лежат в window.FIGS (блок FIGS в content-mN.js, его пишет
+   инструменты/figs.py). В теории на месте схемы — <figure class="fig"
+   data-fig="id"> с подписью; mount вставляет SVG перед подписью.
+   Вызывается после разметки терминов: иначе Terms.mark залез бы
+   в <text> схемы. Повторный вызов ничего не удваивает. Схемы нет —
+   рамка убирается целиком, чтобы ученик не видел пустое место.
+   ============================================================ */
+
+const Figs = {
+  mount: function (root) {
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll("figure[data-fig]"), function (f) {
+      if (f.querySelector("svg")) return;
+      const id = f.getAttribute("data-fig"), svg = (window.FIGS || {})[id];
+      if (!svg) { console.warn("Нет схемы " + id); f.remove(); return; }
+      f.insertAdjacentHTML("afterbegin", svg);
+    });
+  }
+};
+
+/* ============================================================
    Проверка результата
    ============================================================ */
 
@@ -4311,6 +4334,7 @@ function renderLesson(app, id) {
 
   /* ---------- термины из словаря ---------- */
   Terms.mark($("#s-theory .theory"));
+  Figs.mount($("#s-theory .theory"));
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
