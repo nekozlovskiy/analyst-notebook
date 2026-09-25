@@ -573,7 +573,8 @@ function mountHeader(crumbHtml) {
       '<div class="crumbs">' + (crumbHtml || "") + "</div>" +
       '<div class="spacer"></div>' +
       '<nav class="hdr-nav" aria-label="Разделы">' + navLink("interview", "К собеседованию") +
-        navLink("my-notes", "Конспект") + navLink("mistakes", "Ошибки") + navLink("glossary", "Словарь") + "</nav>" +
+        navLink("my-notes", "Конспект") + navLink("mistakes", "Ошибки") + navLink("glossary", "Словарь") +
+        navLink("sandbox", "Песочница") + "</nav>" +
       '<button class="iconbtn" id="findBtn" type="button" aria-label="Найти урок" ' +
         'title="Найти урок — косая черта или Cmd K">' + ICON.find +
         '<span class="bl">Найти</span><span class="k">/</span></button>' +
@@ -587,6 +588,7 @@ function mountHeader(crumbHtml) {
     '<nav class="hdr-menu" id="hdrMenu" aria-label="Меню разделов" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
       navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("glossary", "Словарь") +
+      navLink("sandbox", "Песочница") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
     "</nav>" +
     '<div class="hdr-bar" id="hdrBar"></div>';
@@ -1046,6 +1048,7 @@ const Pages = {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
     if (id === "mistakes") return renderMistakes;
+    if (id === "sandbox") return renderSandbox;
     if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
     if (/^summary-m\d+$/.test(id)) return renderSummary;
     return null;
@@ -1799,6 +1802,29 @@ const PLOT_PY = [
   "    plt.close('all')",
   "    return json.dumps(out, default=float)",
   "m = types.ModuleType('_nb_plots'); m.reset = _reset; m.collect = _collect; sys.modules['_nb_plots'] = m"
+].join("\n");
+
+/* DataFrame или Series → { cols, rows, n } для renderTable. Индекс, если
+   он не просто 0, 1, 2…, становится первым столбцом — как в Jupyter.
+   Даты — строками, дробные — до 4 знаков, пропуски — null. */
+const TABLE_PY = [
+  "import json, pandas as pd, numpy as np",
+  "def _nb_table(v):",
+  "    df = v.to_frame() if isinstance(v, pd.Series) else v",
+  "    n = len(df)",
+  "    df = df.head(200)",
+  "    if not isinstance(df.index, pd.RangeIndex) or df.index.name is not None:",
+  "        df = df.reset_index()",
+  "    def cell(x):",
+  "        if x is None or (isinstance(x, float) and np.isnan(x)) or x is pd.NaT: return None",
+  "        if isinstance(x, (np.integer,)): return int(x)",
+  "        if isinstance(x, (float, np.floating)): return round(float(x), 4)",
+  "        if isinstance(x, pd.Timestamp): return str(x.date()) if x == x.normalize() else str(x)",
+  "        if isinstance(x, (bool, np.bool_)): return str(bool(x))",
+  "        return x if isinstance(x, (int, str)) else str(x)",
+  "    rows = [[cell(x) for x in r] for r in df.itertuples(index=False, name=None)]",
+  "    return json.dumps({'cols': [str(c) for c in df.columns], 'rows': rows, 'n': n}, ensure_ascii=False)",
+  "_nb_table"
 ].join("\n");
 
 const Plots = {
@@ -2916,9 +2942,14 @@ const CodeKit = {
 
   /* новый урок: своя схема и свой язык; всё прошлое убираем */
   lesson: function (L, C) {
+    CodeKit.setup(L.kind === "sql" ? "sql" : "python", L.kind === "text" ? [] : CodeKit.parse(C.schema), false);
+  },
+  /* sandbox — сама песочница: ссылки «в песочницу» у её редактора нет */
+  setup: function (kind, tables, sandbox) {
     CodeKit.reset();
-    CodeKit.kind = L.kind === "sql" ? "sql" : "python";
-    CodeKit.tables = L.kind === "text" ? [] : CodeKit.parse(C.schema);
+    CodeKit.kind = kind;
+    CodeKit.tables = tables;
+    CodeKit.sandbox = !!sandbox;
     Router.cleanup.push(CodeKit.reset);
   },
   reset: function () {
@@ -2940,9 +2971,19 @@ const CodeKit = {
         if (!CodeKit.live().some(function (c) { return c.hasFocus(); })) CodeKit.hideBar();
       }, 120);
     });
-    if (!CodeKit.tables.length) return;
     const shell = ta && ta.closest ? ta.closest(".editor-shell") : null;
     const h = shell && shell.querySelector(".editor-h");
+    /* из урока — в песочницу с тем же кодом: покрутить решение, не портя задачу */
+    if (h && !CodeKit.sandbox && !h.querySelector(".ck-sand")) {
+      if (!h.querySelector(".spacer")) h.appendChild(el("span", { class: "spacer" }));
+      const b = el("button", { class: "linkbtn ck-sand", type: "button", title: "Открыть этот код в песочнице" }, "в песочницу");
+      b.addEventListener("click", function () {
+        Store.set("sandbox", "incoming", { k: CodeKit.kind, code: cm.getValue() });
+        location.hash = "#sandbox";
+      });
+      h.appendChild(b);
+    }
+    if (!CodeKit.tables.length) return;
     if (h && !h.querySelector(".ck-open")) {
       if (!h.querySelector(".spacer")) h.appendChild(el("span", { class: "spacer" }));
       const b = el("button", { class: "linkbtn ck-open", type: "button", "aria-label": "Схема базы" }, "схема");
@@ -3113,6 +3154,213 @@ const CodeKit = {
     }
   }
 };
+
+/* ============================================================
+   Песочница
+
+   Свободный редактор над обеими базами курса — «Дельта Маркет» и
+   журналом приложения. Ничего не проверяется и не засчитывается.
+   SQL и Python — вкладки одного редактора; код каждой вкладки
+   хранится отдельно (корзина code, «sandbox:sql» / «sandbox:python»).
+   Каждый запуск ложится в историю (корзина sandbox, 20 последних):
+   старое не теряется, даже если стереть редактор или взять старт.
+   Из урока сюда приходят с кодом задачи (CodeKit, «в песочницу»).
+   ============================================================ */
+
+const Sandbox = {
+  HIST: 20,
+  starts: {
+    sql: [
+      { t: "Первые строки таблицы", c: "-- Первые 10 строк: с чего начинается знакомство с любой таблицей\nSELECT *\nFROM orders\nLIMIT 10;" },
+      { t: "Выручка по месяцам", c: "-- Оплаченные заказы и выручка по месяцам\nSELECT\n    strftime('%Y-%m', order_date) AS month,\n    COUNT(*) AS orders,\n    ROUND(SUM(revenue), 2) AS revenue\nFROM orders\nWHERE status = 'paid'\nGROUP BY month\nORDER BY month;" },
+      { t: "Топ-10 покупателей", c: "-- Кто принёс больше всего денег\nSELECT\n    u.user_id, u.city, u.channel,\n    COUNT(*) AS orders,\n    ROUND(SUM(o.revenue), 2) AS revenue\nFROM orders o\nJOIN users u ON u.user_id = o.user_id\nWHERE o.status = 'paid'\nGROUP BY u.user_id, u.city, u.channel\nORDER BY revenue DESC\nLIMIT 10;" },
+      { t: "Воронка событий", c: "-- Сколько людей дошло до каждого шага\nSELECT event_name, COUNT(DISTINCT user_id) AS users\nFROM events\nGROUP BY event_name\nORDER BY users DESC;" },
+      { t: "Каналы: пришли и купили", c: "-- LEFT JOIN: каналы без покупателей тоже останутся\nSELECT\n    u.channel,\n    COUNT(DISTINCT u.user_id) AS users,\n    COUNT(DISTINCT o.user_id) AS buyers\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nGROUP BY u.channel\nORDER BY users DESC;" },
+      { t: "Приложение: MAU", c: "-- Журнал приложения: уникальные активные по месяцам\nSELECT\n    strftime('%Y-%m', activity_date) AS month,\n    COUNT(DISTINCT user_id) AS mau\nFROM app_activity\nGROUP BY month\nORDER BY month;" }
+    ],
+    python: [
+      { t: "Первые строки таблицы", c: "# Последняя строка показывается сама, print не нужен\norders.head(10)" },
+      { t: "Выручка по месяцам", c: "paid = orders[orders[\"status\"] == \"paid\"]\npaid.set_index(\"order_date\")[\"revenue\"].resample(\"MS\").sum().round(2)" },
+      { t: "Сводная: город × платформа", c: "# Сколько пользователей в каждой паре «город + платформа»\nusers.pivot_table(index=\"city\", columns=\"platform\",\n                  values=\"user_id\", aggfunc=\"count\")" },
+      { t: "Описание чисел", c: "# Среднее, медиана (50%), разброс — одной строкой\norders[\"revenue\"].describe().round(2)" },
+      { t: "График", c: "import matplotlib.pyplot as plt\n\npaid = orders[orders[\"status\"] == \"paid\"]\nmth = paid.set_index(\"order_date\")[\"revenue\"].resample(\"MS\").sum() / 1000\n\nplt.plot(mth.index, mth.values, marker=\"o\")\nplt.ylabel(\"тыс. руб.\")\nplt.title(\"Выручка по месяцам\")\nplt.show()" },
+      { t: "Приложение: заказы", c: "# Журнал приложения: заказы по платформам\napp_orders.merge(app_users, on=\"user_id\").groupby(\"platform\")[\"revenue\"].agg([\"count\", \"sum\", \"mean\"]).round(2)" }
+    ]
+  },
+  env: function () {
+    return { packages: ["pandas", "matplotlib"],
+             data: window.SH.pyData.concat(window.SH.appData),
+             prelude: window.SH.pyPrelude + "\n" + window.SH.appPrelude };
+  },
+  tables: function () { return CodeKit.parse(window.SH.sqlSchema + window.SH.appSchema); },
+  hist: function () { return Store.get("sandbox", "hist", []) || []; },
+  remember: function (k, code) {
+    if (!code.trim()) return;
+    const h = Sandbox.hist().filter(function (x) { return !(x.k === k && x.code === code); });
+    h.unshift({ k: k, code: code, t: Date.now() });
+    Store.set("sandbox", "hist", h.slice(0, Sandbox.HIST));
+  }
+};
+
+function renderSandbox(app) {
+  document.title = "Песочница — Тетрадь аналитика";
+  mountHeader("<b>Песочница</b>");
+
+  /* пришли из урока с кодом: он становится текущим, прежний — в историю */
+  const inc = Store.get("sandbox", "incoming", null);
+  if (inc && inc.code !== undefined) {
+    const was = Store.get("code", "sandbox:" + inc.k, "");
+    if (was && was !== inc.code) Sandbox.remember(inc.k, was);
+    Store.set("code", "sandbox:" + inc.k, inc.code);
+    Store.set("sandbox", "kind", inc.k);
+    Store.set("sandbox", "incoming", null);
+  }
+  let kind = Store.get("sandbox", "kind", "sql") === "python" ? "python" : "sql";
+  let editor = null;
+
+  const main = el("main", { class: "wrap lesson-wrap page sandbox" });
+  main.innerHTML = pageHead("Песочница",
+    "Свободный редактор над обеими базами курса: интернет-магазин «Дельта Маркет» и журнал приложения. " +
+    "Здесь ничего не проверяется и не засчитывается — задавайте данным свои вопросы.",
+    "здесь можно ломать") +
+    '<div class="sb-tabs" role="tablist" aria-label="Язык">' +
+      '<button type="button" role="tab" data-k="sql">SQL</button>' +
+      '<button type="button" role="tab" data-k="python">Python</button></div>' +
+    '<div class="sb-starts"></div>' +
+    '<div class="sb-ed"></div>' +
+    '<div class="actions"><button class="btn primary" id="sbRun" type="button">' + ICON.play +
+      'Запустить<span class="k">Cmd+Enter</span></button></div>' +
+    '<div class="io-box"><div class="io-h"><span id="sbOutH">результат</span></div>' +
+      '<div class="io-body" id="sbOut"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
+    '<section class="sb-hist"><div class="sb-hist-h"><h2>История</h2><span class="spacer"></span>' +
+      '<button class="linkbtn" id="sbHistClear" type="button">очистить</button></div>' +
+      '<ol id="sbHist"></ol></section>';
+  app.appendChild(main);
+
+  function codeKey() { return "sandbox:" + kind; }
+
+  function mount() {
+    CodeKit.setup(kind, Sandbox.tables(), true);
+    Array.prototype.forEach.call($(".sb-tabs").children, function (b) {
+      b.setAttribute("aria-selected", b.getAttribute("data-k") === kind ? "true" : "false");
+    });
+    $(".sb-starts").innerHTML = '<span class="sb-lbl">Начать с:</span>' +
+      Sandbox.starts[kind].map(function (x, i) {
+        return '<button class="chip" type="button" data-i="' + i + '">' + esc(x.t) + "</button>";
+      }).join("");
+    $(".sb-ed").innerHTML = '<div class="editor-shell"><div class="editor-h"><span>' +
+      (kind === "sql" ? "песочница.sql" : "песочница.py") + '</span><span class="spacer"></span>' +
+      '<button class="linkbtn" id="sbClear" type="button">очистить</button></div>' +
+      '<textarea id="sbEditor"></textarea></div>';
+    editor = null;
+    const saved = Store.get("code", codeKey(), null);
+    mountEditor($("#sbEditor"), kind, saved !== null ? saved : Sandbox.starts[kind][0].c,
+      function (v) { Store.set("code", codeKey(), v); }, function () { run(); },
+      function () {}).then(function (ed) { editor = ed; });
+    $("#sbClear").addEventListener("click", function () {
+      const cur = editor ? editor.get() : "";
+      Sandbox.remember(kind, cur);
+      if (editor) editor.set("");
+      Store.set("code", codeKey(), "");
+      drawHist();
+    });
+    $("#sbOut").innerHTML = '<div class="empty">Пока пусто — нажмите «Запустить».</div>';
+    $("#sbOutH").textContent = "результат";
+    if (kind === "python") idle(function () { Engine.python(["pandas", "matplotlib"]).catch(function () {}); });
+  }
+
+  function setCode(code) {
+    const cur = editor ? editor.get() : "";
+    if (cur.trim() && cur !== code) Sandbox.remember(kind, cur);
+    if (editor) editor.set(code);
+    Store.set("code", codeKey(), code);
+    drawHist();
+  }
+
+  async function run() {
+    const code = editor ? editor.get() : "";
+    const out = $("#sbOut"), rb = $("#sbRun");
+    if (!code.trim()) { out.innerHTML = '<div class="empty">Редактор пуст — напишите ' + (kind === "sql" ? "запрос" : "код") + " или возьмите старт выше.</div>"; return; }
+    Sandbox.remember(kind, code);
+    drawHist();
+    rb.disabled = true;
+    out.innerHTML = '<div class="empty">' + (kind === "python" && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
+      : kind === "sql" && !Engine.db ? "Поднимаю базу в браузере…" : "Выполняю…") + "</div>";
+    try {
+      if (kind === "sql") {
+        const r = await Run.sql(code);
+        if (r.err) { out.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>"; $("#sbOutH").textContent = "ошибка"; }
+        else if (r.res) {
+          const n = r.res.values.length;
+          out.innerHTML = renderTable(r.res.columns, r.res.values, -1);
+          $("#sbOutH").textContent = "результат: " + n + " " + plural(n, "строка", "строки", "строк");
+        } else {
+          out.innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          $("#sbOutH").textContent = "результат";
+        }
+      } else {
+        const r = await Run.python(code, Sandbox.env(), null, { echo: true });
+        if (r.err) { out.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>"; $("#sbOutH").textContent = "ошибка"; }
+        else {
+          const text = [r.out, r.echo].filter(function (x) { return x && x.trim(); }).join("\n");
+          const tb = r.table ? renderTable(r.table.cols, r.table.rows, -1) +
+            '<div class="st-rows">' + r.table.n + " " + plural(r.table.n, "строка", "строки", "строк") + "</div>" : "";
+          out.innerHTML = (text ? "<pre>" + esc(text) + "</pre>" : "") + tb + Plots.html(r.figs || []) ||
+            '<div class="empty">Код отработал, но ничего не показал. Последняя строка показывается сама, для остального — print().</div>';
+          $("#sbOutH").textContent = "результат";
+        }
+      }
+    } catch (e) {
+      out.innerHTML = '<div class="empty">Не получилось запустить — похоже, пропал интернет. Попробуйте ещё раз.</div>';
+    } finally { rb.disabled = false; }
+  }
+
+  function when(t) {
+    const d = new Date(t), now = new Date();
+    const hm = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+    return d.toDateString() === now.toDateString() ? hm : d.getDate() + " " + MONTHS_GEN[d.getMonth()] + ", " + hm;
+  }
+  function drawHist() {
+    const h = Sandbox.hist(), box = $("#sbHist");
+    if (!box) return;
+    $("#sbHistClear").hidden = !h.length;
+    box.innerHTML = h.length ? h.map(function (x, i) {
+      /* весь код одной строкой: у SQL первая строка — почти всегда просто SELECT */
+      const line = x.code.split("\n").filter(function (l) {
+        return l.trim() && !/^\s*(--|#|import |from \S+ import )/.test(l);
+      }).join(" ").replace(/\s+/g, " ").trim() || x.code.trim();
+      return '<li><button type="button" data-i="' + i + '"><span class="sb-k">' + (x.k === "sql" ? "SQL" : "Py") + "</span>" +
+        '<code class="sb-l">' + esc(line) + "</code>" + '<span class="sb-t">' + when(x.t) + "</span></button></li>";
+    }).join("") : '<li class="empty">Здесь появятся ваши запуски — любой можно вернуть в редактор одним нажатием.</li>';
+  }
+
+  $(".sb-tabs").addEventListener("click", function (e) {
+    const b = e.target.closest("button[data-k]");
+    if (!b || b.getAttribute("data-k") === kind) return;
+    kind = b.getAttribute("data-k");
+    Store.set("sandbox", "kind", kind);
+    mount();
+  });
+  $(".sb-starts").addEventListener("click", function (e) {
+    const b = e.target.closest("button[data-i]");
+    if (b) setCode(Sandbox.starts[kind][+b.getAttribute("data-i")].c);
+  });
+  $("#sbHist").addEventListener("click", function (e) {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    const x = Sandbox.hist()[+b.getAttribute("data-i")];
+    if (!x) return;
+    if (x.k !== kind) { kind = x.k; Store.set("sandbox", "kind", kind); Store.set("code", codeKey(), x.code); mount(); }
+    else setCode(x.code);
+    $(".sb-ed").scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+  $("#sbHistClear").addEventListener("click", function () { Store.set("sandbox", "hist", []); drawHist(); });
+  $("#sbRun").addEventListener("click", run);
+
+  mount();
+  drawHist();
+  idle(function () { Lazy.data().catch(function () {}); });
+}
 
 /* ============================================================
    Пошаговый урок
@@ -3537,7 +3785,9 @@ const Run = {
   /* pre — код, который выполняется до кода ученика молча (его вывод не
      попадает в сверку): решение основной задачи, на функции которого
      опирается задача тренажёра. */
-  python: function (code, env, pre) {
+  /* opts.echo — как в Jupyter: значение последней строки
+     (orders.head(), df.describe()) показывается без print */
+  python: function (code, env, pre, opts) {
     const job = Run.queue.then(async function () {
       const pyi = (await Promise.all([Engine.python(env.packages || []), Lazy.data()]))[0];
       const ns = pyi.toPy({});
@@ -3554,8 +3804,22 @@ const Run = {
           out.length = 0;
           if (plots) pyi.runPython("import _nb_plots; _nb_plots.reset()");
         }
-        await pyi.runPythonAsync(code, { globals: ns });
-        return { out: out.join("\n"), figs: plots ? Plots.collect(pyi) : [] };
+        const val = await pyi.runPythonAsync(code, { globals: ns });
+        let echo = "", table = null;
+        if (val !== undefined && val !== null) {
+          if (opts && opts.echo && (val.type === "DataFrame" || val.type === "Series")) {
+            /* таблица pandas — настоящей таблицей, как результат SQL */
+            try {
+              const f = pyi.runPython(TABLE_PY);
+              table = JSON.parse(f(val)); f.destroy();
+            } catch (e) { table = null; }
+          }
+          if (!table && opts && opts.echo) echo = typeof val === "object" && val.toString ? val.toString() : String(val);
+          if (val.destroy) val.destroy();
+        }
+        /* список линий и подписи от plt.plot / plt.title — не результат, а шум */
+        if (/^\[?<matplotlib|^Text\(/.test(echo)) echo = "";
+        return { out: out.join("\n"), echo: echo, table: table, figs: plots ? Plots.collect(pyi) : [] };
       } catch (e) {
         /* трассировка — с кадра кода ученика: внутренние кадры Pyodide новичку ничего не скажут */
         const all = String(e.message || e).split("\n");
