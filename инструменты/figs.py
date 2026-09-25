@@ -69,19 +69,23 @@ class Svg:
                 + "".join(self.parts) + "</svg>")
 
 
-def table(svg, x, y, w, title, head, rows, row_h=26):
-    """Таблица-рамка: заголовок над ней, подпись столбцов, строки.
-    rows — строки текста (моноширинный, колонки выровнены пробелами
-    заранее). Возвращает центры строк по y."""
+def table(svg, x, y, w, title, cols, rows, row_h=26):
+    """Таблица-рамка: заголовок над ней, подписи столбцов, строки.
+    cols — [(подпись, dx, anchor)]: столбец стоит на x + dx, числа
+    прижимают вправо (anchor="end"). Пробелами выравнивать нельзя —
+    SVG схлопывает их. rows — кортежи значений. Возвращает центры
+    строк по y."""
     svg.text(x + 2, y - 7, title, "f-hd", 12.5)
     h = 22 + row_h * len(rows)
     svg.rect(x, y, w, h)
-    svg.text(x + 8, y + 15, head, "f-sub", 10.5)
+    for label, dx, anchor in cols:
+        svg.text(x + dx, y + 15, label, "f-sub", 10.5, anchor)
     mids = []
     for i, r in enumerate(rows):
         top = y + 22 + i * row_h
         svg.line(x, top, x + w, top)
-        svg.text(x + 8, top + row_h / 2 + 4.5, r)
+        for (_, dx, anchor), v in zip(cols, r):
+            svg.text(x + dx, top + row_h / 2 + 4.5, v, anchor=anchor)
         mids.append(top + row_h / 2)
     return mids
 
@@ -119,8 +123,48 @@ def fig_sql_order():
     return svg.render()
 
 
+def join_data():
+    """Пользователь с наименьшим id ровно с двумя заказами (любого статуса:
+    JOIN в уроке без фильтра) и следующий за ним — ровно с одним."""
+    c = db()
+    two = c.execute("SELECT user_id FROM orders GROUP BY user_id HAVING COUNT(*) = 2 "
+                    "ORDER BY user_id LIMIT 1").fetchone()[0]
+    one = c.execute("SELECT user_id FROM orders GROUP BY user_id HAVING COUNT(*) = 1 AND user_id > ? "
+                    "ORDER BY user_id LIMIT 1", (two,)).fetchone()[0]
+    users = c.execute("SELECT user_id, city FROM users WHERE user_id IN (?, ?) ORDER BY user_id",
+                      (two, one)).fetchall()
+    orders = c.execute("SELECT user_id, revenue FROM orders WHERE user_id IN (?, ?) "
+                       "ORDER BY user_id, order_date", (two, one)).fetchall()
+    return users, orders
+
+
+def fig_join_rows():
+    users, orders = join_data()
+    city = dict(users)
+    dup = users[0][0]
+    svg = Svg("join-rows", 318,
+              "JOIN соединяет строки двух таблиц",
+              f"У пользователя {dup} два заказа, у пользователя {users[1][0]} один. "
+              f"После JOIN пользователь {dup} встречается в результате дважды: строк стало три, хотя пользователей два.")
+    um = table(svg, 0, 22, 156, "users", [("user_id", 8, None), ("city", 54, None)],
+               [(u, c) for u, c in users])
+    om = table(svg, 234, 22, 102, "orders", [("user_id", 8, None), ("revenue", 94, "end")],
+               [(u, num(r)) for u, r in orders])
+    ui = {u: um[i] for i, (u, _) in enumerate(users)}
+    for i, (u, _) in enumerate(orders):
+        a, b = ui[u], om[i]
+        svg.path(f"M156 {a:g} C 195 {a:g}, 195 {b:g}, 234 {b:g}")
+    svg.circle(156, ui[dup], 3.4)
+    table(svg, 0, 176, 214, "users JOIN orders",
+          [("user_id", 8, None), ("city", 54, None), ("revenue", 206, "end")],
+          [(u, city[u], num(r)) for u, r in orders])
+    svg.note(0, 300, [f"у {dup}-го два заказа — две строки"])
+    return svg.render()
+
+
 FIGS_M1 = {
     "sql-order": fig_sql_order,
+    "join-rows": fig_join_rows,
 }
 
 
@@ -128,7 +172,13 @@ FIGS_M1 = {
 
 def check_m1():
     """Числа, которые стоят на схемах, — ровно те, что даёт база."""
-    return []
+    errs = []
+    users, orders = join_data()
+    if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
+        errs.append(f"join-rows: пользователи {users}")
+    if [(u, num(r)) for u, r in orders] != [(16, "2822.77"), (16, "1931.78"), (21, "5886.6")]:
+        errs.append(f"join-rows: заказы {orders}")
+    return errs
 
 
 # ---------------------------------------------------------------- запись
