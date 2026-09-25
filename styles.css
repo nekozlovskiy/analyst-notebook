@@ -1978,7 +1978,10 @@ body.no-scroll { overflow: hidden; }
   .lesson-nav #markBtn { order: -1; width: 100%; justify-content: center; }
   /* Соседние уроки — в столбик и во всю ширину: одно полное название
      полезнее двух обрезанных, и палец не мажет мимо. */
-  .lesson-nav .navlink { flex: 1 1 100%; max-width: none; justify-content: center; }
+  .lesson-nav .navlink { flex: 1 1 100%; max-width: none; justify-content: center; min-width: 0; }
+  /* длинное название («1.7 Проект: анализ поведения пользователей»)
+     переносится, а не выталкивает страницу вбок */
+  .lesson-nav .nl-t { white-space: normal; text-align: center; }
   /* «Карта курса» на телефоне лишняя: наверху есть знак-ссылка */
   .lesson-nav .navlink[href="#"] { display: none; }
   .lesson-nav .spacer { display: none; }
@@ -2188,3 +2191,25 @@ body.ck-typing .actions { position: static; }
 .sb-t { flex: none; font: 12px var(--sans); color: var(--ink-3); }
 /* в шапке редактора урока ссылок стало три — на узком экране переносим */
 .editor-h { flex-wrap: wrap; row-gap: 6px; }
+
+/* ============================================================
+   Схемы в теории (Figs в app.js, SVG — инструменты/figs.py)
+   Стиль «Тетрадь»: тонкая линия без заливки, ручка — только на
+   главном. Цвета — только токены: тёмная тема работает сама.
+   ============================================================ */
+.theory > figure.fig { max-width: 520px; margin: 26px auto 30px; }
+figure.fig .fig-svg { display: block; width: 100%; height: auto; overflow: visible; }
+figure.fig figcaption {
+  margin-top: 10px; text-align: center;
+  font: 13px/1.45 var(--sans); color: var(--ink-3);
+}
+.fig-svg text   { font-family: var(--mono); fill: var(--ink); }
+.fig-svg .f-hd  { font-family: var(--sans); font-weight: 600; fill: var(--ink-2); }
+.fig-svg .f-sub { font-family: var(--sans); fill: var(--ink-3); }
+.fig-svg .f-note { font-family: var(--hand); fill: var(--pen); }
+.fig-svg .f-box { fill: none; stroke: var(--rule-hard); stroke-width: 1; }
+.fig-svg .f-row { stroke: var(--rule); stroke-width: .8; }
+.fig-svg .f-soft { fill: none; stroke: var(--rule-hard); stroke-width: 1; }
+.fig-svg .f-pen { fill: none; stroke: var(--pen); stroke-width: 1.4; }
+.fig-svg .f-pen-fill { fill: var(--pen); }
+.fig-svg .f-tint { fill: var(--pen); stroke: none; }
