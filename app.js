@@ -1751,14 +1751,16 @@ const Engine = {
    делает, а после запуска все открытые фигуры снимаются: PNG для
    показа и «паспорт» для проверки — тип, данные, подписи, пределы осей.
    Включается, только если в packages урока есть matplotlib.
+   У столбцов по категориям координаты — numpy.int64, json их не
+   берёт: всё приводится к float, иначе график молча пропадёт.
    ============================================================ */
 
 const PLOT_PY = [
-  "import sys, types, io, base64, json",
+  "import sys, types, io, base64, json, struct",
   "import matplotlib",
   "matplotlib.use('Agg')",
   "import matplotlib.pyplot as plt",
-  "from matplotlib.patches import Rectangle",
+  "from matplotlib.patches import Rectangle, Wedge",
   "plt.show = lambda *a, **k: None",
   "plt.rcParams.update({'figure.figsize': (7.2, 4), 'figure.dpi': 100, 'axes.spines.top': False, 'axes.spines.right': False})",
   "def _num(v):",
@@ -1772,7 +1774,7 @@ const PLOT_PY = [
   "    for l in ax.get_lines():",
   "        xs = [_num(x) for x in l.get_xdata()]; ys = [_num(y) for y in l.get_ydata()]",
   "        if len(ys) > 1: lines.append({'x': xs, 'y': ys})",
-  "    bars = [{'x': p.get_x(), 'y': p.get_y(), 'w': p.get_width(), 'h': p.get_height()}",
+  "    bars = [{'x': float(p.get_x()), 'y': float(p.get_y()), 'w': float(p.get_width()), 'h': float(p.get_height())}",
   "            for p in ax.patches if isinstance(p, Rectangle)]",
   "    pts = 0",
   "    for c in ax.collections:",
@@ -1782,18 +1784,20 @@ const PLOT_PY = [
   "            'xticks': [t.get_text() for t in ax.get_xticklabels()],",
   "            'yticks': [t.get_text() for t in ax.get_yticklabels()],",
   "            'xlim': list(ax.get_xlim()), 'ylim': list(ax.get_ylim()),",
-  "            'lines': lines, 'bars': bars, 'points': pts}",
+  "            'lines': lines, 'bars': bars, 'points': pts,",
+  "            'pie': sum(1 for p in ax.patches if isinstance(p, Wedge))}",
   "def _reset():",
   "    plt.close('all')",
   "def _collect():",
   "    out = []",
   "    for n in plt.get_fignums():",
   "        fig = plt.figure(n)",
-  "        buf = io.BytesIO(); fig.savefig(buf, format='png', bbox_inches='tight')",
+  "        buf = io.BytesIO(); fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)",
+  "        png = buf.getvalue(); w = struct.unpack('>I', png[16:20])[0]",
   "        axes = [_axes(a) for a in fig.axes if a.has_data()]",
-  "        out.append({'png': base64.b64encode(buf.getvalue()).decode(), 'title': fig._suptitle.get_text() if fig._suptitle else '', 'axes': axes})",
+  "        out.append({'png': base64.b64encode(png).decode(), 'w': round(w / 1.5), 'title': fig._suptitle.get_text() if fig._suptitle else '', 'axes': axes})",
   "    plt.close('all')",
-  "    return json.dumps(out)",
+  "    return json.dumps(out, default=float)",
   "m = types.ModuleType('_nb_plots'); m.reset = _reset; m.collect = _collect; sys.modules['_nb_plots'] = m"
 ].join("\n");
 
@@ -1808,12 +1812,13 @@ const Plots = {
   },
   collect: function (pyi) {
     try { return JSON.parse(pyi.runPython("import _nb_plots; _nb_plots.collect()")); }
-    catch (e) { return []; }
+    catch (e) { console.warn("Plots.collect:", e); return []; }
   },
   html: function (figs) {
     return figs.map(function (f) {
       const t = f.title || (f.axes[0] && f.axes[0].title) || "";
-      return '<figure class="plot"><img src="data:image/png;base64,' + f.png + '" alt="' +
+      /* PNG в 1,5 раза плотнее, чем показывается: чёткий на телефоне и при увеличении */
+      return '<figure class="plot"><img src="data:image/png;base64,' + f.png + '"' + (f.w ? ' width="' + f.w + '"' : "") + ' alt="' +
         esc(t ? "График: " + t : "График без заголовка") + '"></figure>';
     }).join("");
   }
@@ -1893,6 +1898,7 @@ const Check = {
       const touch = byX.every(function (b, i) { return i === 0 || Math.abs(byX[i - 1].x + byX[i - 1].w - b.x) < 1e-6 * Math.max(1, Math.abs(b.x)); });
       return touch && flat(ws) && !flat(hs) && a.bars.length > 3 && !a.xticks.some(function (t) { return /[A-Za-zА-Яа-я]/.test(t); }) ? "hist" : "bar";
     }
+    if (a.pie) return "pie";
     if (a.lines.length) return "line";
     if (a.points) return "scatter";
     return "empty";
@@ -1905,7 +1911,7 @@ const Check = {
   },
   plot: function (got, exp) {
     const KIND = { line: "линейный график", bar: "столбчатая диаграмма", barh: "горизонтальные столбцы",
-                   hist: "гистограмма", scatter: "точечная диаграмма", empty: "пустой график" };
+                   hist: "гистограмма", scatter: "точечная диаграмма", pie: "круговая диаграмма", empty: "пустой график" };
     const ga = [], ea = [];
     got.forEach(function (f) { f.axes.forEach(function (a) { ga.push({ a: a, sup: f.title }); }); });
     exp.forEach(function (f) { f.axes.forEach(function (a) { ea.push({ a: a, sup: f.title }); }); });
@@ -1920,13 +1926,16 @@ const Check = {
       const g = ga[i].a, e = ea[i].a, where = ea.length > 1 ? "график " + (i + 1) + ": " : "";
       const gk = Check.plotKind(g), ek = Check.plotKind(e);
       const kindOk = gk === ek || (ek === "hist" && gk === "bar") || (ek === "bar" && gk === "hist");
-      if (!kindOk) return { ok: false, why: where + "нужна " + KIND[ek] + ", а получилась " + KIND[gk],
-        hint: ek === "line" ? "Для динамики — plt.plot(x, y)." : ek === "barh" ? "Горизонтальные столбцы — plt.barh(категории, значения)."
+      if (!kindOk) return { ok: false, why: where + "тип графика другой: нужно «" + KIND[ek] + "», а получилось «" + KIND[gk] + "»",
+        hint: gk === "pie" ? "Углы глаз сравнивает плохо: близкие доли на круге не различить. Горизонтальные столбцы: plt.barh(категории, значения)."
+            : ek === "line" ? "Для динамики — plt.plot(x, y)." : ek === "barh" ? "Горизонтальные столбцы — plt.barh(категории, значения)."
             : ek === "hist" ? "Распределение — plt.hist(значения, bins=…)." : ek === "bar" ? "Столбцы — plt.bar(категории, значения)." : "" };
       const gv = Check.plotValues(g, gk), ev = Check.plotValues(e, ek);
       if (gv.length !== ev.length) return { ok: false,
         why: where + (ek === "line" ? "точек " : "столбцов ") + gv.length + ", а нужно " + ev.length,
-        hint: ek === "hist" ? "Проверьте границы корзин: bins задаёт число или сами границы." : "Проверьте, по каким строкам и как сгруппированы данные." };
+        hint: ek === "hist" ? "Проверьте границы корзин: bins задаёт число или сами границы."
+            : ek === "line" && gv.length === ev.length + 1 ? "Одна точка лишняя. Не попал ли на график последний месяц, который ещё не закончился? Его срезают: s.loc[:\"ГГГГ-ММ\"]."
+            : "Проверьте, по каким строкам и как сгруппированы данные." };
       /* столбцы, отсортированные в обратную сторону, — тоже сортировка */
       const rev = gk === "bar" || gk === "barh" ? gv.slice().reverse() : null;
       const eq = gv.every(function (v, j) { return same(v, ev[j]); }) ||
@@ -1953,8 +1962,13 @@ const Check = {
       if ((gk === "bar" || gk === "barh" || gk === "hist") && elow <= 0 && low > 0) return { ok: false,
         why: where + "ось обрезана: столбцы начинаются не с нуля",
         hint: "Столбец кодирует величину длиной — с обрезанной осью разница в проценты выглядит как разница в разы. Уберите ylim / xlim." };
-      if (gt && !note && gt.split(/\s+/).length <= 4 && !/\d/.test(gt) && !/(ет|ит|ут|ют|ат|ят|ла|ло|ли|ся|сь|ёт)\b/i.test(gt)) {
-        note = "Заголовок «" + gt + "» похож на тему. Перепишите его выводом: что должен понять читатель, даже не глядя на график.";
+      /* в сетке у маленьких графиков заголовок — имя категории,
+         вывод стоит в общем заголовке фигуры: его и оцениваем */
+      if (ea.length > 1 && ea[i].sup && !ga[i].sup) return { ok: false, why: "нет общего заголовка у фигуры",
+        hint: "fig.suptitle(\"…\") — один вывод на всю сетку; у маленьких графиков заголовки остаются названиями." };
+      const concl = ea.length > 1 ? ga[i].sup : gt;
+      if (concl && !note && concl.split(/\s+/).length <= 4 && !/\d/.test(concl) && !/(ет|ит|ут|ют|ат|ят|ла|ло|ли|ся|сь|ёт)\b/i.test(concl)) {
+        note = "Заголовок «" + concl + "» похож на тему. Перепишите его выводом: что должен понять читатель, даже не глядя на график.";
       }
     }
     return { ok: true, note: note };
@@ -3824,8 +3838,9 @@ function renderLesson(app, id) {
   } else if (C.expected.plot) {
     /* эталон-график: описание словами, картинка — по кнопке (её рисует решение урока) */
     const drawPlotRef = function () {
-      refBox.innerHTML = '<div class="empty">Рисую эталон…</div>';
-      solutionFigs().then(function (figs) { refBox.innerHTML = Plots.html(figs); },
+      const say = '<p class="ref-say">' + C.expected.plot + "</p>";
+      refBox.innerHTML = say + '<div class="empty">Рисую эталон…</div>';
+      solutionFigs().then(function (figs) { refBox.innerHTML = say + Plots.html(figs); },
         function () { refBox.innerHTML = '<div class="empty">Эталон не нарисовался — похоже, пропал интернет.</div>'; });
     };
     refBox.innerHTML = '<p class="ref-say">' + C.expected.plot + "</p>";
