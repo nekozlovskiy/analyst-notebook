@@ -162,9 +162,47 @@ def fig_join_rows():
     return svg.render()
 
 
+def window_data():
+    """Два первых пользователя с 3–4 оплаченными заказами; накопительная
+    сумма — тем же окном, что в уроке."""
+    c = db()
+    ids = [r[0] for r in c.execute(
+        "SELECT user_id FROM orders WHERE status = 'paid' GROUP BY user_id "
+        "HAVING COUNT(*) BETWEEN 3 AND 4 ORDER BY user_id LIMIT 2")]
+    return c.execute(
+        "SELECT user_id, order_date, revenue, "
+        "SUM(revenue) OVER (PARTITION BY user_id ORDER BY order_date) "
+        "FROM orders WHERE status = 'paid' AND user_id IN (?, ?) "
+        "ORDER BY user_id, order_date", ids).fetchall()
+
+
+def fig_window_frame():
+    rows = window_data()
+    n1 = sum(1 for r in rows if r[0] == rows[0][0])
+    y, rh, w = 22, 26, 282
+    svg = Svg("window-frame", y + 22 + rh * len(rows) + 54,
+              "Окна PARTITION BY user_id и накопительная сумма",
+              "Оплаченные заказы двух пользователей по дате. SUM(revenue) OVER (PARTITION BY user_id ORDER BY order_date) "
+              "копит сумму внутри окна пользователя и начинается заново в следующем окне: "
+              f"{num(rows[n1 - 1][3])} у первого, {num(rows[-1][3])} у второго.")
+    table(svg, 0, y, w, "orders, оплаченные",
+                 [("user_id", 8, None), ("order_date", 54, None), ("revenue", 190, "end"), ("накопительно", 274, "end")],
+                 [(u, d, num(r), num(s)) for u, d, r, s in rows])
+    # граница окон — ручкой: здесь сумма начинается заново
+    cut = y + 22 + n1 * rh
+    svg.line(0, cut, w, cut, "f-pen")
+    # рамка третьей строки второго окна: от начала окна до текущей строки
+    a, b = cut + 3, cut + 3 * rh - 3
+    svg.path(f"M{w + 5} {a:g} h7 V{b:g} h-7")
+    svg.text(w + 15, (a + b) / 2 + 4, "рамка", "f-sub", 10.5)
+    svg.note(0, y + 22 + rh * len(rows) + 26, ["сумма начинается заново", "в каждом окне"])
+    return svg.render()
+
+
 FIGS_M1 = {
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
+    "window-frame": fig_window_frame,
 }
 
 
@@ -178,6 +216,13 @@ def check_m1():
         errs.append(f"join-rows: пользователи {users}")
     if [(u, num(r)) for u, r in orders] != [(16, "2822.77"), (16, "1931.78"), (21, "5886.6")]:
         errs.append(f"join-rows: заказы {orders}")
+    w = window_data()
+    if [(u, d, num(r), num(s)) for u, d, r, s in w] != [
+            (1, "2024-06-20", "2997.2", "2997.2"), (1, "2024-07-22", "4968.24", "7965.44"),
+            (1, "2024-08-18", "1994.76", "9960.2"), (3, "2024-04-23", "1361.84", "1361.84"),
+            (3, "2024-05-26", "9071.54", "10433.38"), (3, "2024-07-08", "3071.02", "13504.4"),
+            (3, "2024-07-31", "1796.6", "15301.0")]:
+        errs.append(f"window-frame: {w}")
     return errs
 
 
