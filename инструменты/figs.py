@@ -431,9 +431,66 @@ def fig_iqr_box():
     return svg.render()
 
 
+def weekly_data(last="2024-08-26"):
+    """Недельная выручка по оплаченным, как resample("W-MON").sum():
+    неделя заканчивается понедельником и им подписана. Хвост после
+    last — незакрытый период (урок 2.4 его отрезает). Третий столбец —
+    rolling(4).mean(): первые три недели без среднего (None)."""
+    import datetime as dt
+    wk = {}
+    for d, r in db().execute("SELECT order_date, revenue FROM orders WHERE status = 'paid'"):
+        d = dt.date.fromisoformat(d)
+        lab = d + dt.timedelta(days=(0 - d.weekday()) % 7)
+        wk[lab] = wk.get(lab, 0) + r
+    k, end, out = min(wk), dt.date.fromisoformat(last), []
+    while k <= end:
+        out.append([k.isoformat(), round(wk.get(k, 0), 2), None])
+        k += dt.timedelta(days=7)
+    for i in range(3, len(out)):
+        out[i][2] = round(sum(v for _, v, _ in out[i - 3:i + 1]) / 4, 2)
+    return [tuple(r) for r in out]
+
+
+def fig_rolling_ma():
+    wk = weekly_data()
+    top = 50000
+    x0, x1, y0, y1 = 26, 334, 48, 200            # поле графика
+    X = lambda i: x0 + (x1 - x0) * i / (len(wk) - 1)
+    Y = lambda v: y1 - (y1 - y0) * v / top
+    # неделя из примера урока: «в середине августа рост на 104 процента»
+    spike = [d for d, _, _ in wk].index("2024-08-19")
+    svg = Svg("rolling-ma", 272,
+              "Недельная выручка: сырой ряд и скользящее среднее за 4 недели",
+              "Сырые недельные суммы с января по август скачут от недели к неделе. "
+              "Среднее за четыре недели показывает рост до весны, плато и спад в августе. "
+              f"Всплеск недели {wk[spike][0]} ({num(wk[spike][1])}) на сглаженном ряду — просто неделя внутри спада.")
+    svg.text(0, 14, "выручка за неделю, тыс. руб.", "f-hd", 12.5)
+    svg.line(0, 30, 18, 30, "f-raw")
+    svg.text(24, 34, "как есть", "f-sub", 10.5)
+    svg.line(90, 30, 108, 30, "f-pen")
+    svg.text(114, 34, "среднее за 4 недели", "f-sub", 10.5)
+    for v in (0, 25000, 50000):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 4, Y(v) + 4, f"{v // 1000}", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(i):.1f} {Y(v):.1f}" for i, (_, v, _) in enumerate(wk)), "f-raw")
+    svg.path("M" + " L".join(f"{X(i):.1f} {Y(m):.1f}" for i, (_, _, m) in enumerate(wk) if m is not None))
+    months = "янв фев мар апр май июн июл авг".split()
+    seen = set()
+    for i, (d, _, _) in enumerate(wk):
+        mo = int(d[5:7])
+        if mo not in seen:
+            seen.add(mo)
+            svg.text(X(i), y1 + 15, months[mo - 1], "f-sub", 10.5, anchor="middle")
+    svg.circle(X(spike), Y(wk[spike][1]), 3)
+    svg.note(0, 244, ["«рост на 104%» — одна неделя,", "тренд по среднему идёт вниз"], 14)
+    svg.path(f"M186 236 C 230 232, {X(spike) - 6:.1f} 222, {X(spike):.1f} {Y(wk[spike][1]) + 6:.1f}")
+    return svg.render()
+
+
 FIGS_M2 = {
     "groupby-sac": fig_groupby_sac,
     "iqr-box": fig_iqr_box,
+    "rolling-ma": fig_rolling_ma,
 }
 
 
@@ -452,6 +509,13 @@ def check_m2():
            len(q["out"]), num(q["top"]), num(q["low"]), f"{q['share']:.1f}")
     if got != (189, "2136.56", "2997.2", "4260.25", "2123.69", "7445.78", 7, "7437.5", "791.47", "9.4"):
         errs.append(f"iqr-box: {got}")
+    wk = weekly_data()
+    tail = [(d, num(v), num(m)) for d, v, m in wk[-4:]]
+    if tail != [("2024-08-05", "8970.0", "15927.75"), ("2024-08-12", "6578.38", "15763.65"),
+                ("2024-08-19", "13420.73", "11167.22"), ("2024-08-26", "1963.54", "7733.16")]:
+        errs.append(f"rolling-ma: хвост {tail}")
+    if (wk[0][0], len(wk), wk[0][2], wk[3][2] is None) != ("2024-01-08", 34, None, False):
+        errs.append(f"rolling-ma: начало {wk[:4]}")
     return errs
 
 
