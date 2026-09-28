@@ -261,7 +261,61 @@ def fig_cohort_triangle():
     return svg.render()
 
 
+# Игрушечные заказы к уроку 1.1: клиент, статус, сумма. Смысл схемы —
+# без WHERE у B было бы 7000 и группа прошла бы HAVING.
+WH_ORDERS = [("A", "paid", 1000), ("A", "paid", 3000), ("B", "paid", 2000),
+             ("B", "cancelled", 5000), ("C", "paid", 1000), ("C", "paid", 2000),
+             ("C", "paid", 3000)]
+WH_LIMIT = 3000
+
+
+def where_having_data():
+    sums = {}
+    for u, st, r in WH_ORDERS:
+        if st == "paid":
+            sums[u] = sums.get(u, 0) + r
+    return sums
+
+
+def fig_where_having():
+    sums = where_having_data()
+    w, rh, ax = 170, 20, 184                        # ширина таблиц, строка, колонка подписей
+    rub = lambda v: f"{v:,}".replace(",", " ")
+    svg = Svg("where-having", 392,
+              "WHERE фильтрует строки до группировки, HAVING — группы после",
+              "Семь заказов трёх клиентов. WHERE status = paid выбрасывает отменённый заказ клиента B "
+              "на 5 000 ещё до группировки. GROUP BY user_id сжимает строки: одна строка — один клиент, "
+              f"суммы A {rub(sums['A'])}, B {rub(sums['B'])}, C {rub(sums['C'])}. "
+              f"HAVING SUM(revenue) >= {rub(WH_LIMIT)} выбрасывает целую группу B. Без WHERE у B было бы "
+              "7 000, и группа прошла бы фильтр.")
+    mids = table(svg, 0, 30, w, "orders: строка = заказ",
+                 [("user", 12, "start"), ("status", 44, "start"), ("revenue", w - 10, "end")],
+                 [(u, st, rub(r)) for u, st, r in WH_ORDERS], rh)
+    k = next(i for i, o in enumerate(WH_ORDERS) if o[1] != "paid")
+    svg.line(4, mids[k], w - 4, mids[k], "f-pen")
+    svg.text(ax, mids[k] - 4, "WHERE", "f-pen-t", 11.5)
+    svg.text(ax, mids[k] + 11, "status = 'paid'", "f-pen-t", 11.5)
+    svg.text(ax, mids[k] + 26, "строку выбросили", "f-sub", 10.5)
+    svg.text(ax, mids[k] + 40, "до группировки", "f-sub", 10.5)
+    top2 = mids[-1] + rh / 2 + 44
+    svg.text(w / 2, top2 - 26, "↓ GROUP BY user_id", "f-hd", 11.5, anchor="middle")
+    g = sorted(sums.items())
+    mids2 = table(svg, 0, top2 + 14, w, "строка = клиент",
+                  [("user", 12, "start"), ("SUM(revenue)", w - 10, "end")],
+                  [(u, rub(v)) for u, v in g], rh)
+    for (u, v), m in zip(g, mids2):
+        if v < WH_LIMIT:
+            svg.line(4, m, w - 4, m, "f-pen")
+            svg.text(ax, m - 11, "HAVING", "f-pen-t", 11.5)
+            svg.text(ax, m + 4, "SUM(revenue)", "f-pen-t", 11.5)
+            svg.text(ax, m + 19, f">= {rub(WH_LIMIT)}", "f-pen-t", 11.5)
+            svg.text(ax, m + 34, "выбросили всю группу", "f-sub", 10.5)
+    svg.note(0, mids2[-1] + 44, ["без WHERE у B было бы 7 000 —", "и группа прошла бы HAVING"], 15)
+    return svg.render()
+
+
 FIGS_M1 = {
+    "where-having": fig_where_having,
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
     "window-frame": fig_window_frame,
@@ -274,6 +328,8 @@ FIGS_M1 = {
 def check_m1():
     """Числа, которые стоят на схемах, — ровно те, что даёт база."""
     errs = []
+    if where_having_data() != {"A": 4000, "B": 2000, "C": 6000}:
+        errs.append(f"where-having: суммы {where_having_data()}")
     users, orders = join_data()
     if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
         errs.append(f"join-rows: пользователи {users}")
