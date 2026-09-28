@@ -1084,10 +1084,58 @@ def fig_roc_steps():
     return svg.render()
 
 
+# Учебная чаша L(b) = b²: вторая производная 2, граница шага 2/2 = 1.
+# Шаги свои, не 0,5 и 1,1 из задачи урока 5.5.
+GD_STEPS = [(.1, -1.0, "шаг 0,1 — мал", "ползёт к минимуму"),
+            (.35, -1.0, "шаг 0,35 — в самый раз", "доходит за пару шагов"),
+            (1.05, -.8, "шаг 1,05 — велик", "перепрыгивает и уходит")]
+
+
+def gd_path(lr, b, n=6):
+    out = [b]
+    for _ in range(n - 1):
+        b = b - lr * 2 * b                          # градиент b² равен 2b
+        out.append(b)
+    return out
+
+
+def fig_gd_steps():
+    lim, w, ph, gap, y = 1.3, 200, 74, 22, 30
+    X = lambda b: w * (b + lim) / (2 * lim)
+    svg = Svg("gd-steps", 360,
+              "Градиентный спуск по параболе при трёх длинах шага",
+              "Три копии одной чаши, потеря равна b в квадрате, минимум в нуле. Шаг 0,1: точки медленно "
+              "ползут по одному склону. Шаг 0,35: за два шага почти в минимуме. Шаг 1,05: каждая точка "
+              "перепрыгивает на другой склон и оказывается выше предыдущей — спуск расходится. "
+              "Для этой чаши граница шага равна 1.")
+    svg.text(0, 14, "шесть шагов спуска по чаше L = b²", "f-hd", 12.5)
+    for lr, b0, title, sub in GD_STEPS:
+        base = y + ph
+        Y = lambda b: base - (ph - 6) * b * b / lim ** 2
+        k = 60
+        svg.path("M" + " L".join(f"{X(-lim + 2 * lim * i / k):.1f} {Y(-lim + 2 * lim * i / k):.1f}"
+                                 for i in range(k + 1)), "f-soft")
+        svg.line(0, base, w, base, "f-row")
+        svg.line(X(0), base, X(0), base + 4, "f-row")
+        pts = gd_path(lr, b0)
+        svg.path("M" + " L".join(f"{X(b):.1f} {Y(b):.1f}" for b in pts), "f-pen")
+        for i, b in enumerate(pts):
+            svg.circle(round(X(b), 1), round(Y(b), 1), 3 if i == 0 else 2.2,
+                       "f-sub" if i == 0 else "f-pen-fill")
+        svg.text(330, y + ph / 2 - 2, title, "f-hd", 11.5, anchor="end")
+        svg.text(330, y + ph / 2 + 14, sub, "f-pen-t" if lr > 1 else "f-sub",
+                 11.5 if lr > 1 else 10.5, anchor="end")
+        y = base + gap
+    svg.text(X(0), y - gap + 16, "минимум", "f-sub", 10.5, anchor="middle")
+    svg.note(0, y + 20, ["граница η < 2/λ: здесь λ = 2,", "значит, шаг больше 1 уже расходится"], 15)
+    return svg.render()
+
+
 FIGS_M5 = {
     "ols-squares": fig_ols_squares,
     "resid-patterns": fig_resid_patterns,
     "roc-steps": fig_roc_steps,
+    "gd-steps": fig_gd_steps,
 }
 
 
@@ -1098,6 +1146,9 @@ def check_m5():
         errs.append(f"ols-squares: прямая {b0:.3f} + {b1:.3f}x — поменялись учебные точки?")
     if roc_auc(ROC_PTS) != .8:
         errs.append(f"roc-steps: AUC {roc_auc(ROC_PTS)} вместо 0,80")
+    ends = [abs(gd_path(lr, b)[-1]) < abs(b) for lr, b, _, _ in GD_STEPS]
+    if ends != [True, True, False]:
+        errs.append(f"gd-steps: сходимость {ends} — два первых шага должны сходиться, третий расходиться")
     return errs
 
 
