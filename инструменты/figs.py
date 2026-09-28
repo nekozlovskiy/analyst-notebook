@@ -745,7 +745,41 @@ def fig_clean_order():
     return svg.render()
 
 
+# Пример из урока 2.5: столбцы 98 и 100 при оси от 0 и от 97 до 101.
+AXIS_BARS, AXIS_CUT = (98, 100), (97, 101)
+
+
+def fig_axis_cut():
+    pw, gap, top, ph = 150, 30, 50, 150
+    svg = Svg("axis-cut", 284,
+              "Обрезанная ось на столбцах",
+              f"Одни и те же числа, {AXIS_BARS[0]} и {AXIS_BARS[1]}, на двух графиках. Слева ось с нуля: "
+              "столбцы почти равны, разница два процента. Справа ось от 97 до 101: столбцы "
+              "выглядят как 1 и 3, то есть разница кажется трёхкратной.")
+    svg.text(0, 14, "те же числа, другая ось", "f-hd", 12.5)
+    for j, (lo, hi) in enumerate(((0, 105), AXIS_CUT)):
+        x0 = j * (pw + gap)
+        base = top + ph
+        cut = j == 1
+        svg.line(x0, base, x0 + pw, base, "f-row")
+        svg.line(x0, top, x0, base, "f-row")
+        svg.text(x0 + 3, base + 13, str(lo), "f-sub", 10)   # подписи оси: низ и верх
+        if cut:                                     # у оси с нуля верх не подписываем
+            svg.text(x0 + 3, top - 3, str(hi), "f-sub", 10)
+        for k, v in enumerate(AXIS_BARS):
+            h = ph * (v - lo) / (hi - lo)
+            bx = x0 + 34 + k * 56
+            svg.rect(bx, base - h, 36, h, "f-pen" if cut else "f-box", 2)
+            svg.text(bx + 18, base - h - 6, str(v), "f-pen-t" if cut else "f-sub",
+                     11.5 if cut else 10.5, anchor="middle")
+        svg.text(x0 + pw / 2, base + 30, "ось от 0" if not cut else f"ось от {lo} до {hi}",
+                 "f-pen-t" if cut else "f-hd", 11.5, anchor="middle")
+    svg.note(0, top + ph + 62, ["столбец кодирует величину длиной —", "его ось начинается с нуля"], 15)
+    return svg.render()
+
+
 FIGS_M2 = {
+    "axis-cut": fig_axis_cut,
     "clean-order": fig_clean_order,
     "groupby-sac": fig_groupby_sac,
     "iqr-box": fig_iqr_box,
