@@ -2056,7 +2056,36 @@ def fig_streak_key():
     return svg.render()
 
 
+AT_ROWS = [("A", 10), ("A", 30), ("B", 20)]           # игрушечная таблица к уроку 6.4
+
+
+def fig_agg_transform():
+    sums = {}
+    for k, v in AT_ROWS:
+        sums[k] = sums.get(k, 0) + v
+    rh = 24
+    svg = Svg("agg-transform", 222,
+              "agg и transform у groupby",
+              "Исходная таблица из трёх строк: A 10, A 30, B 20. agg со суммой схлопывает группы в две "
+              "строки: A 40, B 20. transform со суммой возвращает столбец той же длины, что исходный: "
+              "40, 40, 20 — его можно приписать к таблице как новый столбец.")
+    svg.text(0, 14, "df.groupby(\"k\")[\"v\"]", "f-hd", 12.5)
+    m0 = table(svg, 0, 44, 96, "исходная", [("k", 12, "start"), ("v", 84, "end")],
+               [(k, str(v)) for k, v in AT_ROWS], rh)
+    m1 = table(svg, 124, 44, 80, ".agg(\"sum\")", [("k", 12, "start"), ("v", 68, "end")],
+               [(k, str(v)) for k, v in sums.items()], rh)
+    m2 = table(svg, 232, 44, 98, ".transform(\"sum\")", [("k", 12, "start"), ("v", 86, "end")],
+               [(k, str(sums[k])) for k, _ in AT_ROWS], rh)
+    svg.rect(232, 42, 98, 22 + rh * len(AT_ROWS) + 4, "f-pen", 5)
+    y = m0[-1] + rh / 2 + 22
+    svg.text(164, y, f"{len(sums)} строки", "f-sub", 10.5, anchor="middle")
+    svg.text(330, y, f"{len(AT_ROWS)} строки, как было", "f-pen-t", 11, anchor="end")
+    svg.note(0, y + 34, ["agg — сводка по группам, transform —", "новый столбец к исходной таблице"], 15)
+    return svg.render()
+
+
 FIGS_M6 = {
+    "agg-transform": fig_agg_transform,
     "streak-key": fig_streak_key,
     "notebook-scan": fig_notebook_scan,
     "cv-gates": fig_cv_gates,
