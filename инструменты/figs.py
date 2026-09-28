@@ -709,7 +709,150 @@ def fig_rolling_ma():
     return svg.render()
 
 
+# Игрушечные написания города к уроку 2.2. Порядок strip/capitalize — ровно
+# тот, о котором абзац «Порядок важен». Без СПб: capitalize() делает из
+# «Санкт-Петербург» «Санкт-петербург», это отвлекло бы от главного.
+CITY_RAW = [" Москва ", "москва", "МОСКВА ", "Казань"]
+
+
+def city_orders():
+    good = [c.strip().capitalize() for c in CITY_RAW]
+    bad = [c.capitalize().strip() for c in CITY_RAW]
+    return good, bad
+
+
+def fig_clean_order():
+    good, bad = city_orders()
+    q = lambda v: "«" + v.replace(" ", "·") + "»"   # пробелы видимыми точками
+    cols = [("как в выгрузке", 6, "start"), ("strip → capitalize", 118, "start"),
+            ("capitalize → strip", 232, "start")]
+    svg = Svg("clean-order", 262,
+              "Порядок чистки справочника",
+              "Четыре написания: пробел вокруг «Москва», «москва», «МОСКВА» с пробелом, «Казань». "
+              "Если сначала убрать пробелы, а потом привести регистр, получится два города: Москва и Казань. "
+              "Если наоборот, capitalize видит пробел первым символом и делает «москва» строчными, "
+              f"пробел потом убирается, и городов становится {len(set(bad))}.")
+    mids = table(svg, 0, 30, 330, "city: пробелы показаны точками", cols,
+                 [(q(r), q(g), q(b)) for r, g, b in zip(CITY_RAW, good, bad)], 26)
+    for m, g, b in zip(mids, good, bad):
+        if b not in good:
+            svg.rect(228, m - 11, 98, 22, "f-pen", 4)
+    y = mids[-1] + 13
+    svg.line(0, y + 26, 330, y + 26, "f-row")
+    svg.text(118, y + 44, f"уникальных: {len(set(good))}", "f-hd", 11.5)
+    svg.text(232, y + 44, f"уникальных: {len(set(bad))}", "f-pen-t", 11.5)
+    svg.note(0, y + 76, ["сначала пробелы, потом регистр —", "иначе один город станет двумя"], 15)
+    return svg.render()
+
+
+# Пример из урока 2.5: столбцы 98 и 100 при оси от 0 и от 97 до 101.
+AXIS_BARS, AXIS_CUT = (98, 100), (97, 101)
+
+
+def fig_axis_cut():
+    pw, gap, top, ph = 150, 30, 50, 150
+    svg = Svg("axis-cut", 284,
+              "Обрезанная ось на столбцах",
+              f"Одни и те же числа, {AXIS_BARS[0]} и {AXIS_BARS[1]}, на двух графиках. Слева ось с нуля: "
+              "столбцы почти равны, разница два процента. Справа ось от 97 до 101: столбцы "
+              "выглядят как 1 и 3, то есть разница кажется трёхкратной.")
+    svg.text(0, 14, "те же числа, другая ось", "f-hd", 12.5)
+    for j, (lo, hi) in enumerate(((0, 105), AXIS_CUT)):
+        x0 = j * (pw + gap)
+        base = top + ph
+        cut = j == 1
+        svg.line(x0, base, x0 + pw, base, "f-row")
+        svg.line(x0, top, x0, base, "f-row")
+        svg.text(x0 + 3, base + 13, str(lo), "f-sub", 10)   # подписи оси: низ и верх
+        if cut:                                     # у оси с нуля верх не подписываем
+            svg.text(x0 + 3, top - 3, str(hi), "f-sub", 10)
+        for k, v in enumerate(AXIS_BARS):
+            h = ph * (v - lo) / (hi - lo)
+            bx = x0 + 34 + k * 56
+            svg.rect(bx, base - h, 36, h, "f-pen" if cut else "f-box", 2)
+            svg.text(bx + 18, base - h - 6, str(v), "f-pen-t" if cut else "f-sub",
+                     11.5 if cut else 10.5, anchor="middle")
+        svg.text(x0 + pw / 2, base + 30, "ось от 0" if not cut else f"ось от {lo} до {hi}",
+                 "f-pen-t" if cut else "f-hd", 11.5, anchor="middle")
+    svg.note(0, top + ph + 62, ["столбец кодирует величину длиной —", "его ось начинается с нуля"], 15)
+    return svg.render()
+
+
+def fig_return_vs_print():
+    svg = Svg("return-vs-print", 330,
+              "Функция возвращает или печатает",
+              "Сверху: channel_report принимает таблицы и статус и возвращает DataFrame. Его можно "
+              "напечатать, сохранить в файл, нарисовать графиком или передать в следующий расчёт. "
+              "Снизу: функция, которая печатает внутри себя, выводит таблицу на экран и возвращает None — "
+              "дальше с результатом ничего сделать нельзя.")
+    svg.text(0, 14, "функция возвращает", "f-hd", 12.5)
+    for i, a in enumerate(("users_df", "orders_df", 'status="paid"')):
+        svg.text(0, 44 + i * 16, a, "f-sub", 10.5)
+    svg.path("M86 60 H104", "f-soft")
+    svg.rect(108, 44, 116, 30, "f-pen", 5)
+    svg.text(166, 63, "channel_report()", "f-pen-t", 11, anchor="middle")
+    svg.path("M166 74 V96", "f-soft")
+    svg.rect(120, 98, 92, 24, "f-box", 4)
+    svg.text(166, 114, "DataFrame", "f-hd", 11, anchor="middle")
+    uses = [("print(rep)", "показать"), ("rep.to_csv", "сохранить"),
+            ("rep.plot", "нарисовать"), ("rep.merge", "считать дальше")]
+    for i, (code, what) in enumerate(uses):
+        x = 4 + i * 82
+        svg.path(f"M166 122 L{x + 36} 148", "f-soft")
+        svg.text(x + 36, 162, code, "f-pen-t", 10, anchor="middle")
+        svg.text(x + 36, 176, what, "f-sub", 10, anchor="middle")
+    y = 214
+    svg.text(0, y, "функция печатает", "f-hd", 12.5)
+    svg.rect(0, y + 14, 150, 30, "f-box", 5)
+    svg.text(75, y + 33, "channel_report_print()", "f-sub", 10.5, anchor="middle")
+    svg.path(f"M150 {y + 29} H176", "f-soft")
+    svg.text(182, y + 26, "таблица на экране", "f-sub", 10.5)
+    svg.text(182, y + 41, "вернула None", "f-pen-t", 11.5)
+    svg.note(0, y + 82, ["результат увидели глазами —", "и больше ничего с ним не сделать"], 15)
+    return svg.render()
+
+
+# Пример из ловушки урока 2.7: «Казань, 40 процентов при 47 наблюдениях,
+# сдвиньте трёх человек». Для сравнения — город вдесятеро больше.
+SMALL_GROUPS = [("Казань", 19, 47), ("город вдесятеро больше", 190, 470)]
+SHIFT = 3
+
+
+def fig_small_group():
+    lo, hi, x0, x1 = .30, .45, 20, 320
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    p1 = lambda v: f"{100 * v:.1f}".replace(".", ",") + "%"
+    rows = [(name, k / n, (k - SHIFT) / n, k, n) for name, k, n in SMALL_GROUPS]
+    svg = Svg("small-group", 248,
+              "Три человека и маленькая группа",
+              "Две группы с одинаковой конверсией 40,4 процента. В Казани 19 покупателей из 47: "
+              f"если трое не купили бы, конверсия упадёт до {p1(rows[0][2])}. В городе на 470 человек "
+              f"те же трое сдвигают её только до {p1(rows[1][2])}.")
+    svg.text(0, 14, "минус три покупателя", "f-hd", 12.5)
+    for i, (name, a, b, k, n) in enumerate(rows):
+        y = 58 + i * 70
+        svg.text(0, y - 20, f"{name}: {k} из {n}", "f-hd", 11.5)
+        svg.line(x0, y, x1, y, "f-row")
+        svg.circle(X(a), y, 3.2, "f-sub")
+        svg.circle(X(b), y, 3.2)
+        svg.path(f"M{X(a) - 5:.1f} {y} L{X(b) + 6:.1f} {y}", "f-pen")
+        svg.text(X(a) + 2, y + 18, p1(a), "f-sub", 10.5)            # было — справа от точки
+        svg.text(X(b) - 2, y + 18, p1(b), "f-pen-t", 11.5, anchor="end")  # стало — слева
+        d = f"{100 * (a - b):.1f}".replace(".", ",")
+        svg.text(x1, y - 20, f"−{d} п.п.", "f-pen-t", 11.5, anchor="end")
+    for v in (.30, .35, .40, .45):
+        svg.text(X(v), 188, f"{v * 100:.0f}%", "f-sub", 10, anchor="middle")
+        svg.line(X(v), 174, X(v), 178, "f-row")
+    svg.line(x0, 176, x1, 176, "f-row")
+    svg.note(0, 218, ["маленькую группу три человека двигают", "в десять раз сильнее"], 15)
+    return svg.render()
+
+
 FIGS_M2 = {
+    "small-group": fig_small_group,
+    "return-vs-print": fig_return_vs_print,
+    "axis-cut": fig_axis_cut,
+    "clean-order": fig_clean_order,
     "groupby-sac": fig_groupby_sac,
     "iqr-box": fig_iqr_box,
     "rolling-ma": fig_rolling_ma,
@@ -718,6 +861,12 @@ FIGS_M2 = {
 
 def check_m2():
     errs = []
+    got = [f"{100 * k / n:.1f}/{100 * (k - SHIFT) / n:.1f}" for _, k, n in SMALL_GROUPS]
+    if got != ["40.4/34.0", "40.4/39.8"]:
+        errs.append(f"small-group: {got}")
+    good, bad = city_orders()
+    if (len(set(good)), len(set(bad))) != (2, 3):
+        errs.append(f"clean-order: {good} / {bad} — ждали 2 города против 3")
     src, sums = groupby_data()
     if [(o, ch, num(r)) for o, ch, r in src] != [
             (1, "organic", "2997.2"), (2, "organic", "4968.24"), (8, "social", "5096.46"),
