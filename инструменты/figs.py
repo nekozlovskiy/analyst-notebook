@@ -1432,7 +1432,64 @@ def fig_simpson_mix():
     return svg.render()
 
 
+LTV_CH = ("referral", "organic", "paid_search", "social")   # как в таблице урока 4.4
+
+
+def ltv_curves(days=260):
+    """Накопленная выручка на установившего по дням жизни (age <= d),
+    как в уроке 4.4: знаменатель — все пользователи канала."""
+    con = db()
+    size = dict(con.execute("SELECT channel, COUNT(*) FROM app_users GROUP BY channel"))
+    per = {ch: [0.0] * (days + 1) for ch in LTV_CH}
+    for ch, age, rev in con.execute(
+            "SELECT u.channel, julianday(o.order_date) - julianday(u.signup_date), o.revenue "
+            "FROM app_orders o JOIN app_users u USING (user_id)"):
+        if ch in per:
+            per[ch][min(days, max(0, int(-(-age // 1))))] += rev
+    out = {}
+    for ch in LTV_CH:
+        acc, cur = [], 0.0
+        for v in per[ch]:
+            cur += v
+            acc.append(cur / size[ch])
+        out[ch] = acc
+    return out
+
+
+def fig_ltv_horizon():
+    cur = ltv_curves()
+    days = len(cur[LTV_CH[0]]) - 1
+    x0, x1, yt, yb = 40, 238, 34, 214        # справа место под подписи каналов
+    X = lambda d: x0 + (x1 - x0) * d / days
+    Y = lambda v: yb - (yb - yt) * v / 4000
+    svg = Svg("ltv-horizon", 298,
+              "LTV по каналам растёт по-разному",
+              "Накопленная выручка на привлечённого пользователя по дням жизни. Referral растёт до конца "
+              f"наблюдения, до {cur['referral'][-1]:.0f} рублей, organic — до {cur['organic'][-1]:.0f}. "
+              f"Paid_search и social выходят на плато к шестидесятому дню: {cur['paid_search'][-1]:.0f} и "
+              f"{cur['social'][-1]:.0f}. На седьмом дне referral лучше paid_search вдвое, в итоге — в пять раз.")
+    svg.text(0, 14, "накопленный LTV, ₽ на пользователя", "f-hd", 12.5)
+    for v in (0, 2000, 4000):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v:,}".replace(",", " "), "f-sub", 10, anchor="end")
+    for d in (7, 60):
+        svg.path(f"M{X(d):.1f} {yt} V{yb}", "f-soft")
+        svg.text(X(d), yb + 16, f"{d} дн", "f-sub", 10.5, anchor="middle")
+    svg.text(x1, yb + 16, f"{days} дн", "f-sub", 10.5, anchor="end")
+    ends = {"referral": 0, "organic": 0, "paid_search": -7, "social": 7}   # разнести близкие подписи
+    for ch in LTV_CH:
+        v = cur[ch]
+        hot = ch == "referral"
+        svg.path("M" + " L".join(f"{X(d):.1f} {Y(v[d]):.1f}" for d in range(0, days + 1, 2)),
+                 "f-pen" if hot else "f-raw")
+        svg.text(x1 + 4, Y(v[-1]) + 4 + ends[ch], f"{ch} {v[-1]:.0f}",
+                 "f-pen-t" if hot else "f-sub", 10.5 if hot else 10)
+    svg.note(0, yb + 46, ["платные каналы после 60 дней не приносят", "ничего — горизонт решает, кто лучше"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "ltv-horizon": fig_ltv_horizon,
     "simpson-mix": fig_simpson_mix,
     "funnel-steps": fig_funnel_steps,
     "retention-defs": fig_retention_defs,
@@ -1441,6 +1498,11 @@ FIGS_M4 = {
 
 def check_m4():
     errs = []
+    cur = ltv_curves()
+    got = {ch: [round(cur[ch][h]) for h in (7, 30, 60, 90)] + [round(cur[ch][-1])] for ch in LTV_CH}
+    if got != {"referral": [575, 1991, 2871, 3386, 3803], "organic": [607, 1763, 2456, 2722, 2829],
+               "paid_search": [287, 674, 731, 754, 754], "social": [374, 684, 728, 728, 728]}:
+        errs.append(f"ltv-horizon: {got} — не совпало с таблицей урока 4.4")
     if funnel_data() != [220, 206, 175, 121, 64]:
         errs.append(f"funnel-steps: {funnel_data()} вместо 220 → 206 → 175 → 121 → 64 из урока 4.2")
     c, r = retention_data()
