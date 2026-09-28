@@ -709,7 +709,44 @@ def fig_rolling_ma():
     return svg.render()
 
 
+# Игрушечные написания города к уроку 2.2. Порядок strip/capitalize — ровно
+# тот, о котором абзац «Порядок важен». Без СПб: capitalize() делает из
+# «Санкт-Петербург» «Санкт-петербург», это отвлекло бы от главного.
+CITY_RAW = [" Москва ", "москва", "МОСКВА ", "Казань"]
+
+
+def city_orders():
+    good = [c.strip().capitalize() for c in CITY_RAW]
+    bad = [c.capitalize().strip() for c in CITY_RAW]
+    return good, bad
+
+
+def fig_clean_order():
+    good, bad = city_orders()
+    q = lambda v: "«" + v.replace(" ", "·") + "»"   # пробелы видимыми точками
+    cols = [("как в выгрузке", 6, "start"), ("strip → capitalize", 118, "start"),
+            ("capitalize → strip", 232, "start")]
+    svg = Svg("clean-order", 262,
+              "Порядок чистки справочника",
+              "Четыре написания: пробел вокруг «Москва», «москва», «МОСКВА» с пробелом, «Казань». "
+              "Если сначала убрать пробелы, а потом привести регистр, получится два города: Москва и Казань. "
+              "Если наоборот, capitalize видит пробел первым символом и делает «москва» строчными, "
+              f"пробел потом убирается, и городов становится {len(set(bad))}.")
+    mids = table(svg, 0, 30, 330, "city: пробелы показаны точками", cols,
+                 [(q(r), q(g), q(b)) for r, g, b in zip(CITY_RAW, good, bad)], 26)
+    for m, g, b in zip(mids, good, bad):
+        if b not in good:
+            svg.rect(228, m - 11, 98, 22, "f-pen", 4)
+    y = mids[-1] + 13
+    svg.line(0, y + 26, 330, y + 26, "f-row")
+    svg.text(118, y + 44, f"уникальных: {len(set(good))}", "f-hd", 11.5)
+    svg.text(232, y + 44, f"уникальных: {len(set(bad))}", "f-pen-t", 11.5)
+    svg.note(0, y + 76, ["сначала пробелы, потом регистр —", "иначе один город станет двумя"], 15)
+    return svg.render()
+
+
 FIGS_M2 = {
+    "clean-order": fig_clean_order,
     "groupby-sac": fig_groupby_sac,
     "iqr-box": fig_iqr_box,
     "rolling-ma": fig_rolling_ma,
@@ -718,6 +755,9 @@ FIGS_M2 = {
 
 def check_m2():
     errs = []
+    good, bad = city_orders()
+    if (len(set(good)), len(set(bad))) != (2, 3):
+        errs.append(f"clean-order: {good} / {bad} — ждали 2 города против 3")
     src, sums = groupby_data()
     if [(o, ch, num(r)) for o, ch, r in src] != [
             (1, "organic", "2997.2"), (2, "organic", "4968.24"), (8, "social", "5096.46"),
