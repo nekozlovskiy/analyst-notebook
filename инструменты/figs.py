@@ -700,10 +700,48 @@ def fig_power_bells():
     return svg.render()
 
 
+def fwer(k, alpha=.05):
+    """Вероятность хотя бы одной ложной находки из k независимых сравнений."""
+    return 1 - (1 - alpha) ** k
+
+
+def fig_fwer_curve():
+    x0, x1, yt, yb = 34, 316, 34, 214               # поле графика
+    X = lambda k: x0 + (x1 - x0) * (k - 1) / 19
+    Y = lambda v: yb - (yb - yt) * v
+    svg = Svg("fwer-curve", 290,
+              "Риск ложной находки растёт с числом метрик",
+              "Вероятность хотя бы одной ложной находки при уровне 0,05 на каждое сравнение: "
+              f"одна метрика — {fwer(1) * 100:.1f} процента, три — {fwer(3) * 100:.1f}, "
+              f"пять — {fwer(5) * 100:.1f}, десять — {fwer(10) * 100:.1f}, "
+              f"двадцать — {fwer(20) * 100:.1f}. С поправкой Бонферрони риск остаётся "
+              "около 5 процентов при любом числе метрик.")
+    svg.text(0, 14, "шанс хотя бы одной ложной находки", "f-hd", 12.5)
+    for v in (0, .25, .5, .75, 1):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="end")
+    bonf = [1 - (1 - .05 / k) ** k for k in range(1, 21)]
+    svg.path("M" + " L".join(f"{X(k):.1f} {Y(b):.1f}" for k, b in zip(range(1, 21), bonf)), "f-raw")
+    svg.text(x1, Y(bonf[-1]) - 6, "с поправкой Бонферрони", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(k):.1f} {Y(fwer(k)):.1f}" for k in range(1, 21)), "f-pen")
+    for k in (1, 5, 10, 20):
+        svg.circle(X(k), Y(fwer(k)), 2.6)
+        s = f"{fwer(k) * 100:.1f}%".replace(".", ",")
+        svg.text(X(k) + (-4 if k == 20 else 0), Y(fwer(k)) - 8, s, "f-pen-t", 11.5,
+                 anchor="end" if k == 20 else "middle")
+    for k in (1, 5, 10, 20):
+        svg.line(X(k), yb, X(k), yb + 4, "f-row")
+        svg.text(X(k), yb + 16, str(k), "f-sub", 10.5, anchor="middle")
+    svg.text(x1, yb + 32, "метрик в тесте", "f-sub", 10.5, anchor="end")
+    svg.note(0, yb + 54, ["двадцать метрик — «находка»", "почти наверняка"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
     "clt-means": fig_clt_means,
     "ci-100": fig_ci_100,
     "power-bells": fig_power_bells,
+    "fwer-curve": fig_fwer_curve,
 }
 
 
@@ -721,6 +759,9 @@ def check_m3():
     got = [(n, f"{c * 100:.3f}", f"{pw * 100:.1f}") for n, _, _, c, pw in power_data()[1]]
     if got != [(31234, "0.350", "80.0"), (6125, "0.790", "23.6")]:
         errs.append(f"power-bells: {got} — 31 234 из теории урока 3.4 должны давать мощность 80%")
+    got = [f"{fwer(k) * 100:.1f}" for k in (1, 3, 5, 10, 20)]
+    if got != ["5.0", "14.3", "22.6", "40.1", "64.2"]:
+        errs.append(f"fwer-curve: {got} — не совпало с таблицей урока 3.5")
     return errs
 
 
