@@ -2009,14 +2009,66 @@ def fig_notebook_scan():
     return svg.render()
 
 
+STREAK_DAYS = [1, 2, 3, 7, 8]                        # пример из таблицы урока 6.3, март 2024
+
+
+def streak_keys():
+    import datetime as dt
+    out = []
+    for n, d in enumerate(STREAK_DAYS, 1):
+        day = dt.date(2024, 3, d)
+        out.append((day, n, day - dt.timedelta(days=n)))
+    return out
+
+
+def fig_streak_key():
+    rows = streak_keys()
+    cw, x0, y0 = 36, 42, 36                         # слева место под подписи строк
+    X = lambda d: x0 + (d - 1) * cw
+    svg = Svg("streak-key", 222,
+              "Ключ серии: дата минус номер",
+              "Полоса календаря с 1 по 8 марта, активные дни 1, 2, 3, 7 и 8. Под активными днями — номер по "
+              "порядку и разность «дата минус номер»: 29 февраля у первых трёх дней и 3 марта у двух последних. "
+              "Одинаковый ключ собирает дни в серию: три дня и два дня.")
+    svg.text(0, 14, "март: дни с заходом обведены", "f-hd", 12.5)
+    act = {r[0].day: r for r in rows}
+    for d in range(1, 9):
+        hot = d in act
+        svg.rect(X(d) + 2, y0, cw - 4, 30, "f-pen" if hot else "f-box", 4)
+        svg.text(X(d) + cw / 2, y0 + 20, str(d), "f-pen-t" if hot else "f-sub",
+                 12 if hot else 10.5, anchor="middle")
+    svg.text(0, y0 + 56, "№", "f-sub", 10.5)
+    svg.text(0, y0 + 82, "ключ", "f-sub", 10)
+    for d, (day, n, key) in act.items():
+        svg.text(X(d) + cw / 2, y0 + 56, str(n), "f-hd", 11.5, anchor="middle")
+        svg.text(X(d) + cw / 2, y0 + 82, key.strftime("%d.%m"), "f-pen-t", 10.5, anchor="middle")
+    # скобки серий
+    groups = {}
+    for d, (_, _, key) in act.items():
+        groups.setdefault(key, []).append(d)
+    by = y0 + 96
+    for key, ds in groups.items():
+        a, b = X(min(ds)) + 4, X(max(ds)) + cw - 4
+        svg.path(f"M{a} {by} V{by + 6} H{b} V{by}", "f-raw")
+        svg.text((a + b) / 2, by + 22, f"серия: {len(ds)} " + ("дня" if len(ds) < 5 else "дней"),
+                 "f-hd", 11, anchor="middle")
+    svg.note(0, by + 58, ["пропуск в датах — и ключ", "сразу меняется"], 15)
+    return svg.render()
+
+
 FIGS_M6 = {
+    "streak-key": fig_streak_key,
     "notebook-scan": fig_notebook_scan,
     "cv-gates": fig_cv_gates,
 }
 
 
 def check_m6():
-    return []                                       # чисел из базы на схемах m6 нет
+    """Чисел из базы на схемах m6 нет; сверяем только пример из урока 6.3."""
+    keys = [k.isoformat() for _, _, k in streak_keys()]
+    if keys != ["2024-02-29"] * 3 + ["2024-03-03"] * 2:
+        return [f"streak-key: ключи {keys} не совпали с таблицей урока 6.3"]
+    return []
 
 
 MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
