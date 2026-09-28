@@ -13,6 +13,7 @@
 """
 import html
 import json
+import math
 import pathlib
 import re
 import sqlite3
@@ -629,9 +630,80 @@ def fig_ci_100():
     return svg.render()
 
 
+def Phi(x):
+    return .5 * (1 + math.erf(x / 2 ** .5))
+
+
+def power_data():
+    """База 5%, лифт 10% (5,00 -> 5,50), alpha 0,05 двусторонний — как в
+    уроке 3.4. Для n на группу: стандартные ошибки разницы при H0 и H1,
+    порог значимости и мощность. n: из теории (31 234) и неделя трафика
+    задачи (1750 * 7 / 2 = 6125)."""
+    p0, p1, za = .05, .055, 1.959963984540054
+    pb = (p0 + p1) / 2
+    out = []
+    for n in (31234, 6125):
+        se0 = (2 * pb * (1 - pb) / n) ** .5
+        se1 = ((p0 * (1 - p0) + p1 * (1 - p1)) / n) ** .5
+        c = za * se0
+        out.append((n, se0, se1, c, 1 - Phi((c - (p1 - p0)) / se1)))
+    return p1 - p0, out
+
+
+def fig_power_bells():
+    d, panels = power_data()
+    lo, hi = -.012, .018                            # ось: наблюдаемая разница, доли
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    pdf = lambda v, m, s: math.exp(-((v - m) / s) ** 2 / 2)
+    svg = Svg("power-bells", 334,
+              "Два колокола: ошибка первого рода, ошибка второго рода и мощность",
+              "Где окажется наблюдаемая разница конверсий, если эффекта нет (колокол вокруг нуля) "
+              "и если он есть, плюс 10 процентов, с 5,00 до 5,50 (колокол вокруг 0,5 пункта). "
+              "Вертикальная черта — порог значимости: правее неё тест объявляет победу. "
+              "Штриховка слева от порога под вторым колоколом — пропущенный эффект, бета. "
+              f"При {panels[0][0]} на группу колокола узкие и мощность {panels[0][4] * 100:.0f} процентов; "
+              f"при {panels[1][0]} (неделя трафика) колокола широкие, слиплись, и мощность "
+              f"{panels[1][4] * 100:.0f} процентов.")
+    svg.text(0, 14, "разница конверсий B − A, п.п.", "f-hd", 12.5)
+    ph, y = 104, 30
+    for k, (n, se0, se1, c, pw) in enumerate(panels):
+        base = y + ph
+        H = lambda v, m, s: base - (ph - 30) * pdf(v, m, s)
+        step = (hi - lo) / 220
+        xs = [lo + i * step for i in range(221)]
+        svg.path("M" + " L".join(f"{X(v):.1f} {H(v, 0, se0):.1f}" for v in xs), "f-raw")
+        svg.path("M" + " L".join(f"{X(v):.1f} {H(v, d, se1):.1f}" for v in xs), "f-pen")
+        # бета: штриховка под колоколом «эффект есть» левее порога
+        v = lo
+        while v < c:
+            if pdf(v, d, se1) > .03:
+                svg.line(round(X(v), 1), base, round(X(v), 1), round(H(v, d, se1), 1), "f-soft")
+            v += 4 * (hi - lo) / (x1 - x0)
+        svg.line(0, base, x1, base, "f-row")
+        svg.path(f"M{X(c):.1f} {y + 18} V{base}", "f-box")
+        svg.text(X(c) + 3, y + 26, "порог", "f-sub", 10.5)
+        svg.text(0, y + 10, f"n = {n:,} на группу".replace(",", " "), "f-hd", 12.5)
+        svg.text(x1, y + 10, f"мощность {pw * 100:.0f}%", "f-pen-t", 11.5, anchor="end")
+        if k == 0:
+            svg.text(X(0) - 20, y + 52, "эффекта нет", "f-sub", 10.5, anchor="end")
+            svg.text(X(d) + 20, y + 52, "эффект +10%", "f-pen-t", 11.5)
+            svg.text(X(c) + 3, base - 6, "α", "f-sub", 10.5)
+        y = base + 24
+    axis = y - 24
+    for v in (-.01, 0, .01):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v * 100:+.0f}".replace("+0", "0").replace("-", "−"),
+                 "f-sub", 10.5, anchor="middle")
+    svg.text(x1, axis + 16, "штриховка — β", "f-sub", 10.5, anchor="end")
+    svg.note(0, axis + 44, ["мало данных — колокола слиплись,", "и настоящий эффект чаще пропускают"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
     "clt-means": fig_clt_means,
     "ci-100": fig_ci_100,
+    "power-bells": fig_power_bells,
 }
 
 
@@ -646,6 +718,9 @@ def check_m3():
     miss = [i for i, (a, b) in enumerate(ci_data()) if not a <= .05 <= b]
     if miss != [4, 16, 52, 54, 76, 90]:
         errs.append(f"ci-100: промахи {miss} вместо [4, 16, 52, 54, 76, 90]")
+    got = [(n, f"{c * 100:.3f}", f"{pw * 100:.1f}") for n, _, _, c, pw in power_data()[1]]
+    if got != [(31234, "0.350", "80.0"), (6125, "0.790", "23.6")]:
+        errs.append(f"power-bells: {got} — 31 234 из теории урока 3.4 должны давать мощность 80%")
     return errs
 
 
