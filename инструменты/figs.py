@@ -865,7 +865,51 @@ def fig_retention_defs():
     return svg.render()
 
 
+# Учебный пример к теории урока 4.1 — числа свои, не из тренажёров
+# (там десктоп/мобильные в 4.1 и каналы базы в 4.3): визиты и покупки.
+SIMPSON = {"поиск": ((7500, 300), (3000, 126)), "реклама": ((2500, 30), (7000, 91))}
+
+
+def simpson_data():
+    tot = [tuple(sum(v[t][i] for v in SIMPSON.values()) for i in (0, 1)) for t in (0, 1)]
+    return {**SIMPSON, "итого": tuple(tot)}
+
+
+def fig_simpson_mix():
+    data = simpson_data()
+    xa, xb, yt, yb = 96, 236, 44, 204
+    Y = lambda v: yb - (yb - yt) * v / 5
+    cr = lambda vp: 100 * vp[1] / vp[0]
+    share = [100 * SIMPSON["реклама"][t][0] / data["итого"][t][0] for t in (0, 1)]
+    svg = Svg("simpson-mix", 300,
+              "Парадокс Симпсона: конверсия выросла в каждом канале и упала в целом",
+              "Два канала, было и стало, по 10 000 визитов. Поиск: "
+              f"{pct(cr(data['поиск'][0]))} → {pct(cr(data['поиск'][1]))} процента. Реклама: "
+              f"{pct(cr(data['реклама'][0]))} → {pct(cr(data['реклама'][1]))}. В целом: "
+              f"{pct(cr(data['итого'][0]), 2)} → {pct(cr(data['итого'][1]), 2)}. "
+              f"Причина — доля рекламы выросла с {share[0]:.0f} до {share[1]:.0f} процентов.")
+    svg.text(0, 14, "конверсия в покупку", "f-hd", 12.5)
+    for x, t in ((xa, "было"), (xb, "стало")):
+        svg.line(x, yt - 8, x, yb, "f-row")
+        svg.text(x, yb + 16, t, "f-sub", 10.5, anchor="middle")
+    svg.line(xa - 10, yb, xb + 10, yb, "f-row")
+    for name, (a, b) in data.items():
+        tot = name == "итого"
+        d = 2 if tot else 1
+        cls, tcls, size = ("f-pen", "f-pen-t", 11.5) if tot else ("f-raw", "f-sub", 10.5)
+        svg.path(f"M{xa} {Y(cr(a)):.1f} L{xb} {Y(cr(b)):.1f}", cls)
+        svg.circle(xa, Y(cr(a)), 2.6 if tot else 2.2, "f-pen-fill" if tot else "f-sub")
+        svg.circle(xb, Y(cr(b)), 2.6 if tot else 2.2, "f-pen-fill" if tot else "f-sub")
+        svg.text(xa - 8, Y(cr(a)) + 4, f"{pct(cr(a), d)}%", tcls, size, anchor="end")
+        svg.text(xb + 8, Y(cr(b)) + 4, f"{pct(cr(b), d)}%", tcls, size)
+        svg.text(0, Y(cr(a)) + 4, name, "f-hd" if tot else "f-sub", 11.5 if tot else 10.5)
+    svg.text(330, yb + 40, f"доля рекламы: {share[0]:.0f}% → {share[1]:.0f}%", "f-pen-t", 11.5, anchor="end")
+    svg.note(0, yb + 64, ["каждый канал вырос —", "а сумма упала: сдвинулся микс"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "simpson-mix": fig_simpson_mix,
     "funnel-steps": fig_funnel_steps,
     "retention-defs": fig_retention_defs,
 }
@@ -879,6 +923,10 @@ def check_m4():
     got = [(n, pct(c[n]), pct(r[n])) for n in (1, 7, 14, 30)]
     if got != [(1, "40,1", "56,8"), (7, "18,8", "41,1"), (14, "12,2", "30,4"), (30, "6,5", "15,9")]:
         errs.append(f"retention-defs: {got} — не совпало с теорией урока 4.3")
+    d = simpson_data()
+    got = [f"{100 * p / v:.2f}" for a, b in d.values() for v, p in (a, b)]
+    if got != ["4.00", "4.20", "1.20", "1.30", "3.30", "2.17"]:
+        errs.append(f"simpson-mix: {got} — пример должен расти в каналах и падать в целом")
     return errs
 
 
