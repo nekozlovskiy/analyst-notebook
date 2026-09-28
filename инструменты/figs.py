@@ -1591,7 +1591,39 @@ def fig_dash_pyramid():
     return svg.render()
 
 
+def fig_answer_first():
+    """Урок 4.7: вывод первым. Доли дочитавших условные — иллюстрация
+    фразы урока «до последнего абзаца доходит меньшинство»."""
+    reach = [100, 60, 35, 15]
+    acad = ["метод", "расчёты", "оговорки", "вывод"]
+    memo = ["вывод и деньги", "обоснование", "оговорки", "детали"]
+    bh, gap, y0 = 34, 8, 52
+    ca, cm, cw = 78, 206, 122                       # левые края столбцов и ширина
+    svg = Svg("answer-first", 290,
+              "Вывод первым: где его прочтут",
+              "Слева условные доли читателей, дошедших до каждой части текста: 100, 60, 35 и 15 процентов. "
+              "В академическом тексте вывод стоит последним, и его увидят немногие. В деловой записке вывод "
+              "и деньги стоят первыми и доходят до всех, а детали внизу нужны тем, кто хочет проверить.")
+    svg.text(0, 14, "сколько читателей дошло до строки", "f-hd", 12.5)
+    svg.text(0, y0 - 10, "дочитали", "f-sub", 10)
+    svg.text(ca, y0 - 10, "академический текст", "f-sub", 10)
+    svg.text(cm, y0 - 10, "деловая записка", "f-hd", 10.5)
+    for i, (r, a, m) in enumerate(zip(reach, acad, memo)):
+        y = y0 + i * (bh + gap)
+        svg.rect(0, y + 8, 64 * r / 100, bh - 16, "f-box", 2)
+        svg.text(0, y + bh + 2, f"{r}%", "f-sub", 9.5)
+        for x, t, hot in ((ca, a, a == "вывод"), (cm, m, i == 0)):
+            svg.rect(x, y, cw, bh, "f-pen" if hot else "f-box", 4)
+            svg.text(x + cw / 2, y + bh / 2 + 4, t, "f-pen-t" if hot else "f-sub",
+                     11 if hot else 10.5, anchor="middle")
+    y = y0 + 4 * (bh + gap)
+    svg.text(0, y + 6, "доли условные", "f-sub", 9.5)
+    svg.note(0, y + 34, ["первые три предложения: что происходит,", "сколько стоит и что предлагаете"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "answer-first": fig_answer_first,
     "dash-pyramid": fig_dash_pyramid,
     "rfm-map": fig_rfm_map,
     "ltv-horizon": fig_ltv_horizon,
