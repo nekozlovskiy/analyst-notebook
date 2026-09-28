@@ -1934,8 +1934,51 @@ def check_m5():
     return errs
 
 
+# ---------------------------------------------------------------- схемы m6
+# Уроки про поиск работы: схемы без данных базы, только структура.
+
+def fig_cv_gates():
+    svg = Svg("cv-gates", 262,
+              "Три фильтра на пути отклика",
+              "Слева миниатюра резюме, верхняя треть выделена: её видят все фильтры. Справа три шага: "
+              "автоматический фильтр по ключевым словам, тридцать секунд рекрутера на первый экран и пять "
+              "минут нанимающего менеджера на проекты.")
+    svg.text(0, 14, "что видит каждый фильтр", "f-hd", 12.5)
+    px, py, pw, ph = 0, 32, 104, 150                # миниатюра страницы
+    svg.rect(px, py, pw, ph, "f-box", 3)
+    for i, w in enumerate((70, 50, 84, 80, 60)):     # строки первого экрана
+        svg.line(px + 10, py + 14 + i * 8, px + 10 + w, py + 14 + i * 8, "f-raw")
+    for i in range(9):                              # остальное резюме
+        svg.line(px + 10, py + 64 + i * 9, px + 10 + (84 if i % 3 else 60), py + 64 + i * 9, "f-row")
+    svg.rect(px + 3, py + 4, pw - 6, ph / 3, "f-pen", 3)
+    svg.text(px + pw / 2, py + ph + 16, "первый экран", "f-pen-t", 11, anchor="middle")
+    steps = [("ключевые слова", "часто автомат", "SQL, Python — дословно"),
+             ("30 секунд", "рекрутер", "первый экран: опыт, конкретика"),
+             ("5 минут", "нанимающий менеджер", "проекты: задача, метод, вывод")]
+    x, y = 122, 32
+    for i, (t, who, what) in enumerate(steps):
+        svg.rect(x, y, 208, 42, "f-pen" if i == 1 else "f-box", 4)
+        svg.text(x + 8, y + 17, t, "f-hd", 11.5)
+        svg.text(x + 200, y + 17, who, "f-sub", 10, anchor="end")
+        svg.text(x + 8, y + 33, what, "f-sub", 10)
+        if i < 2:
+            arrow(svg, x + 104, y + 43, x + 104, y + 55, "f-raw", 4)
+        y += 56
+    svg.note(0, py + ph + 50, ["в верхней трети нет конкретики —", "до проектов не дочитают"], 15)
+    return svg.render()
+
+
+FIGS_M6 = {
+    "cv-gates": fig_cv_gates,
+}
+
+
+def check_m6():
+    return []                                       # чисел из базы на схемах m6 нет
+
+
 MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
-           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5)}
+           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5), "m6": (FIGS_M6, check_m6)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
