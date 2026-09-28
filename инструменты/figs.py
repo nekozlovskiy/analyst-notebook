@@ -930,8 +930,230 @@ def check_m4():
     return errs
 
 
+# ---------------------------------------------------------------- схемы m5
+# Учебные точки: схемы объясняют идею и не повторяют числа задач.
+
+OLS_PTS = [(1, 2.0), (2, 3.4), (3, 2.9), (4, 5.2), (5, 4.1), (6, 6.4), (7, 5.6), (8, 9.4)]
+
+
+def ols_line(pts):
+    n = len(pts)
+    mx = sum(x for x, _ in pts) / n
+    my = sum(y for _, y in pts) / n
+    b1 = sum((x - mx) * (y - my) for x, y in pts) / sum((x - mx) ** 2 for x, _ in pts)
+    return my - b1 * mx, b1
+
+
+def fig_ols_squares():
+    b0, b1 = ols_line(OLS_PTS)
+    x0, yb, k = 20, 222, 22                         # начало осей и px на единицу по обеим осям
+    X = lambda v: x0 + k * v
+    Y = lambda v: yb - k * (v - 1.2)                # ось y начинается не с нуля
+    big = max(OLS_PTS, key=lambda p: abs(p[1] - b0 - b1 * p[0]))
+    svg = Svg("ols-squares", 290,
+              "Метод наименьших квадратов: квадраты остатков",
+              "Восемь точек и прямая, подобранная методом наименьших квадратов. От каждой точки "
+              "до прямой — вертикальный отрезок, остаток, и на нём построен квадрат. Прямая "
+              "выбрана так, чтобы суммарная площадь квадратов была наименьшей. Самый крупный "
+              "промах даёт самый большой квадрат и сильнее всего тянет прямую к себе.")
+    svg.text(0, 14, "факт, прогноз и квадраты остатков", "f-hd", 12.5)
+    svg.line(x0, yb, 330, yb, "f-row")
+    svg.line(x0, yb, x0, 26, "f-row")
+    svg.text(330, yb + 16, "признак x", "f-sub", 10.5, anchor="end")
+    svg.text(x0 + 4, 34, "y", "f-sub", 10.5)
+    for x, y in OLS_PTS:
+        f = b0 + b1 * x
+        e = abs(y - f) * k
+        top = min(Y(y), Y(f))
+        # квадрат справа от отрезка; у самой правой точки — слева, чтобы не вылезти за край
+        left = X(x) if X(x) + e < 330 else X(x) - e
+        svg.rect(round(left, 1), round(top, 1), round(e, 1), round(e, 1),
+                 "f-pen" if (x, y) == big else "f-soft", 0)
+        svg.line(X(x), round(Y(y), 1), X(x), round(Y(f), 1), "f-raw")
+        svg.circle(X(x), round(Y(y), 1), 2.6, "f-sub")
+    svg.path(f"M{X(0.3):.1f} {Y(b0 + b1 * 0.3):.1f} L{X(10):.1f} {Y(b0 + b1 * 10):.1f}", "f-pen")
+    svg.text(X(10) + 4, Y(b0 + b1 * 10) + 4, "прогноз ŷ", "f-pen-t", 11.5)
+    svg.note(0, yb + 40, ["крупный промах — большой квадрат,", "его штрафуют сильнее всего"], 15)
+    return svg.render()
+
+
+def resid_samples():
+    """Три учебных облака остатков по 70 точек: шум, изогнутое среднее, воронка.
+    x — прогноз от 0 до 1."""
+    import random
+    rnd = random.Random(7)
+    out = {"ok": [], "curve": [], "fan": []}
+    for i in range(70):
+        x = (i + rnd.random()) / 70
+        g = rnd.gauss(0, 1)
+        out["ok"].append((x, .28 * g))
+        out["curve"].append((x, 1.1 * (x - .5) ** 2 * 4 - .37 + .16 * g))
+        out["fan"].append((x, (.05 + .5 * x) * g))
+    return out
+
+
+def fig_resid_patterns():
+    data = resid_samples()
+    pw, gap, top, ph = 102, 12, 34, 120
+    svg = Svg("resid-patterns", 262,
+              "Три картины остатков",
+              "Три облака остатков против прогноза. Первое — ровная полоса вокруг нуля: остатки "
+              "похожи на шум, модель в порядке. Второе — облако изогнуто дугой: среднее остатков "
+              "меняется по диапазону, связь не линейна. Третье — облако расширяется вправо, как "
+              "воронка: разброс растёт с прогнозом, это гетероскедастичность.")
+    svg.text(0, 14, "остаток против прогноза", "f-hd", 12.5)
+    titles = {"ok": ["шум —", "всё в порядке"], "curve": ["дуга —", "связь не линейна"],
+              "fan": ["воронка — разброс", "растёт с прогнозом"]}
+    for j, key in enumerate(("ok", "curve", "fan")):
+        x0 = j * (pw + gap)
+        mid = top + ph / 2
+        svg.rect(x0, top, pw, ph, "f-box", 4)
+        svg.line(x0, mid, x0 + pw, mid, "f-soft")
+        for x, e in data[key]:
+            e = max(-1, min(1, e))
+            svg.circle(round(x0 + 6 + (pw - 12) * x, 1), round(mid - (ph / 2 - 6) * e, 1), 1.5,
+                       "f-pen-fill" if key != "ok" else "f-sub")
+        for i, t in enumerate(titles[key]):
+            svg.text(x0 + pw / 2, top + ph + 18 + 14 * i, t, "f-hd" if i == 0 else "f-sub",
+                     11.5 if i == 0 else 10.5, anchor="middle")
+    svg.text(330, top + ph + 56, "по горизонтали — прогноз, по вертикали — остаток", "f-sub", 10.5, anchor="end")
+    svg.note(0, top + ph + 84, ["ищут не число, а форму облака"], 15)
+    return svg.render()
+
+
+# Учебные оценки модели: 1 — купил, 0 — нет. Не из задачи (там AUC 0,8617)
+# и не из тренажёра на восьми наблюдениях.
+ROC_PTS = [(.92, 1), (.81, 1), (.74, 0), (.66, 1), (.52, 1),
+           (.45, 0), (.38, 0), (.30, 1), (.21, 0), (.12, 0)]
+
+
+def roc_auc(pts):
+    pos = [s for s, y in pts if y]
+    neg = [s for s, y in pts if not y]
+    return sum((p > n) + .5 * (p == n) for p in pos for n in neg) / (len(pos) * len(neg))
+
+
+def fig_roc_steps():
+    pts = sorted(ROC_PTS, reverse=True)
+    npos = sum(y for _, y in pts)
+    nneg = len(pts) - npos
+    x0, yb, side = 44, 236, 190
+    X = lambda f: x0 + side * f
+    Y = lambda t: yb - side * t
+    auc = roc_auc(pts)
+    svg = Svg("roc-steps", 312,
+              "ROC-кривая строится ступеньками по отсортированным оценкам",
+              f"Десять человек, {npos} покупателей и {nneg} непокупателей, отсортированы по оценке модели. "
+              "Идём сверху вниз: покупатель — шаг вверх, непокупатель — шаг вправо. Получается ступенчатая "
+              f"ROC-кривая, площадь под ней AUC = {pct(auc, 2)}. Диагональ — случайное угадывание, AUC 0,5. "
+              "Порог 0,5 — одна точка на кривой: поймано 4 покупателя из 5, ложная тревога 1 из 5.")
+    svg.text(0, 14, "доля пойманных покупателей", "f-hd", 12.5)
+    svg.rect(x0, Y(1), side, side, "f-box", 0)
+    svg.line(X(0), Y(0), X(1), Y(1), "f-soft")
+    svg.text(X(.62), Y(.5) + 8, "угадывание", "f-sub", 10.5)
+    for v in (0, .5, 1):
+        svg.text(x0 - 6, Y(v) + 4, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="end")
+        svg.text(X(v), yb + 16, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    svg.text(X(1), yb + 32, "доля ложных тревог", "f-sub", 10.5, anchor="end")
+    tp = fp = 0
+    d = f"M{X(0):.1f} {Y(0):.1f}"
+    cut = None
+    for sc, y in pts:
+        if sc < .5 and cut is None:
+            cut = (fp / nneg, tp / npos)
+        if y:
+            tp += 1
+        else:
+            fp += 1
+        d += f" L{X(fp / nneg):.1f} {Y(tp / npos):.1f}"
+    svg.path(d, "f-pen")
+    svg.circle(X(cut[0]), Y(cut[1]), 3.2)
+    svg.text(X(cut[0]) + 8, Y(cut[1]) + 16, "порог 0,5", "f-pen-t", 11.5)
+    svg.text(X(.5), Y(.12), f"AUC = {pct(auc, 2)}", "f-hd", 12.5, anchor="middle")
+    # столбик оценок: как из него получается каждая ступенька
+    cx, ry = 300, (side - 10) / len(pts)
+    svg.text(cx, Y(1) - 8, "оценки", "f-sub", 10.5, anchor="middle")
+    for i, (sc, y) in enumerate(pts):
+        yy = Y(1) + 10 + i * ry
+        svg.text(cx - 6, yy + 4, f"{sc:.2f}".replace(".", ","), "f-pen-t" if y else "f-sub",
+                 11.5 if y else 10.5, anchor="end")
+        svg.text(cx + 6, yy + 4, "↑" if y else "→", "f-pen-t" if y else "f-sub", 11.5)
+        if i < len(pts) - 1 and sc >= .5 > pts[i + 1][0]:
+            svg.line(cx - 34, yy + ry / 2, cx + 22, yy + ry / 2, "f-pen")
+    svg.note(0, yb + 60, ["покупатель — шаг вверх, непокупатель —", "вправо; порог — точка на ступеньках"], 15)
+    return svg.render()
+
+
+# Учебная чаша L(b) = b²: вторая производная 2, граница шага 2/2 = 1.
+# Шаги свои, не 0,5 и 1,1 из задачи урока 5.5.
+GD_STEPS = [(.1, -1.0, "шаг 0,1 — мал", "ползёт к минимуму"),
+            (.35, -1.0, "шаг 0,35 — в самый раз", "доходит за пару шагов"),
+            (1.05, -.8, "шаг 1,05 — велик", "перепрыгивает и уходит")]
+
+
+def gd_path(lr, b, n=6):
+    out = [b]
+    for _ in range(n - 1):
+        b = b - lr * 2 * b                          # градиент b² равен 2b
+        out.append(b)
+    return out
+
+
+def fig_gd_steps():
+    lim, w, ph, gap, y = 1.3, 200, 74, 22, 30
+    X = lambda b: w * (b + lim) / (2 * lim)
+    svg = Svg("gd-steps", 360,
+              "Градиентный спуск по параболе при трёх длинах шага",
+              "Три копии одной чаши, потеря равна b в квадрате, минимум в нуле. Шаг 0,1: точки медленно "
+              "ползут по одному склону. Шаг 0,35: за два шага почти в минимуме. Шаг 1,05: каждая точка "
+              "перепрыгивает на другой склон и оказывается выше предыдущей — спуск расходится. "
+              "Для этой чаши граница шага равна 1.")
+    svg.text(0, 14, "шесть шагов спуска по чаше L = b²", "f-hd", 12.5)
+    for lr, b0, title, sub in GD_STEPS:
+        base = y + ph
+        Y = lambda b: base - (ph - 6) * b * b / lim ** 2
+        k = 60
+        svg.path("M" + " L".join(f"{X(-lim + 2 * lim * i / k):.1f} {Y(-lim + 2 * lim * i / k):.1f}"
+                                 for i in range(k + 1)), "f-soft")
+        svg.line(0, base, w, base, "f-row")
+        svg.line(X(0), base, X(0), base + 4, "f-row")
+        pts = gd_path(lr, b0)
+        svg.path("M" + " L".join(f"{X(b):.1f} {Y(b):.1f}" for b in pts), "f-pen")
+        for i, b in enumerate(pts):
+            svg.circle(round(X(b), 1), round(Y(b), 1), 3 if i == 0 else 2.2,
+                       "f-sub" if i == 0 else "f-pen-fill")
+        svg.text(330, y + ph / 2 - 2, title, "f-hd", 11.5, anchor="end")
+        svg.text(330, y + ph / 2 + 14, sub, "f-pen-t" if lr > 1 else "f-sub",
+                 11.5 if lr > 1 else 10.5, anchor="end")
+        y = base + gap
+    svg.text(X(0), y - gap + 16, "минимум", "f-sub", 10.5, anchor="middle")
+    svg.note(0, y + 20, ["граница η < 2/λ: здесь λ = 2,", "значит, шаг больше 1 уже расходится"], 15)
+    return svg.render()
+
+
+FIGS_M5 = {
+    "ols-squares": fig_ols_squares,
+    "resid-patterns": fig_resid_patterns,
+    "roc-steps": fig_roc_steps,
+    "gd-steps": fig_gd_steps,
+}
+
+
+def check_m5():
+    errs = []
+    b0, b1 = ols_line(OLS_PTS)
+    if f"{b0:.3f} {b1:.3f}" != "1.007 0.860":
+        errs.append(f"ols-squares: прямая {b0:.3f} + {b1:.3f}x — поменялись учебные точки?")
+    if roc_auc(ROC_PTS) != .8:
+        errs.append(f"roc-steps: AUC {roc_auc(ROC_PTS)} вместо 0,80")
+    ends = [abs(gd_path(lr, b)[-1]) < abs(b) for lr, b, _, _ in GD_STEPS]
+    if ends != [True, True, False]:
+        errs.append(f"gd-steps: сходимость {ends} — два первых шага должны сходиться, третий расходиться")
+    return errs
+
+
 MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
-           "m4": (FIGS_M4, check_m4)}
+           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
