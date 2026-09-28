@@ -1201,7 +1201,56 @@ def fig_peeking():
     return svg.render()
 
 
+# Учебное разложение ARPU к проекту 3.7 (в тексте урока +32/−26 — ответ проекта).
+ARPU_A, ARPU_B = (.04, 5000), (.05, 4500)            # (конверсия, средний чек)
+
+
+def arpu_parts():
+    (c0, a0), (c1, a1) = ARPU_A, ARPU_B
+    return c0 * a0, c1 * a1, (c1 - c0) * a0, c0 * (a1 - a0), (c1 - c0) * (a1 - a0)
+
+
+def fig_arpu_split():
+    arpu0, arpu1, d_cr, d_aov, d_joint = arpu_parts()
+    (c0, a0), (c1, a1) = ARPU_A, ARPU_B
+    x0, yb, sx, sy = 40, 200, 52 / .01, 160 / 5000     # px на процентный пункт и на рубль
+    X = lambda c: x0 + sx * c
+    Y = lambda a: yb - sy * a
+    r = lambda v: f"{v:+.0f}".replace("-", "−")
+    svg = Svg("arpu-split", 312,
+              "Разложение выручки на пользователя на конверсию и чек",
+              f"Выручка на пользователя — площадь прямоугольника: конверсия по горизонтали, средний чек по "
+              f"вертикали. Контроль: 4 процента на 5 000, ARPU {arpu0:.0f}. Тест: 5 процентов на 4 500, "
+              f"ARPU {arpu1:.0f}. Полоса справа — вклад конверсии, {r(d_cr)} рублей. Полоса сверху — "
+              f"потеря от чека, {r(d_aov)}. Угол — совместный вклад, {r(d_joint)}. Итого {r(arpu1 - arpu0)}.")
+    svg.text(0, 14, "ARPU = конверсия × чек = площадь", "f-hd", 12.5)
+    svg.rect(X(0), Y(a0), sx * c0, sy * a0, "f-box", 0)            # контроль
+    svg.rect(X(0), Y(a1), sx * c1, sy * a1, "f-pen", 0)            # тест
+    k = 0                                                         # штриховка полосы «конверсия»
+    while X(c0) + 4 * k < X(c1):
+        xx = X(c0) + 4 * k
+        svg.line(round(xx, 1), Y(a1), round(xx, 1), yb, "f-soft")
+        k += 1
+    svg.text((X(c0) + X(c1)) / 2, Y(a1 / 2), r(d_cr), "f-pen-t", 12, anchor="middle")
+    svg.text(X(c0 / 2), (Y(a0) + Y(a1)) / 2 + 4, f"{r(d_aov)} чек", "f-sub", 10.5, anchor="middle")
+    # вклад конверсии — вся полоса до старого чека; угол над новым чеком из неё срезан
+    svg.rect(X(c0), Y(a0), sx * (c1 - c0), sy * a0, "f-soft", 0)
+    svg.text(X(c1), Y(a0) - 6, f"угол {r(d_joint)}", "f-sub", 10, anchor="end")
+    svg.text(X(c0 / 2), Y(a1 / 2), f"контроль {arpu0:.0f}", "f-sub", 10.5, anchor="middle")
+    for c in (0, c0, c1):
+        svg.text(X(c), yb + 16, f"{c * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    for a in (a1, a0):
+        svg.text(x0 - 6, Y(a) + (10 if a == a1 else 0), f"{a:,}".replace(",", " "), "f-sub", 10, anchor="end")
+    svg.text(X(c1) + 70, yb + 16, "конверсия →", "f-sub", 10.5, anchor="middle")
+    y = yb + 44
+    svg.text(0, y, f"ARPU: {arpu0:.0f} → {arpu1:.0f}, то есть {r(arpu1 - arpu0)} ₽ =", "f-hd", 11.5)
+    svg.text(0, y + 18, f"{r(d_cr)} конверсия  {r(d_aov)} чек  {r(d_joint)} совместный", "f-pen-t", 11.5)
+    svg.note(0, y + 48, ["рост ARPU складывается из плюса", "и минуса — важно, за счёт чего"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
+    "arpu-split": fig_arpu_split,
     "peeking": fig_peeking,
     "mw-ranks": fig_mw_ranks,
     "clt-means": fig_clt_means,
@@ -1213,6 +1262,9 @@ FIGS_M3 = {
 
 def check_m3():
     errs = []
+    got = [round(v, 6) for v in arpu_parts()]
+    if got != [200, 225, 50, -20, -5] or abs(got[2] + got[3] + got[4] - (got[1] - got[0])) > 1e-9:
+        errs.append(f"arpu-split: {got}")
     pv = peek_data()
     if [f"{v:.3f}" for v in (pv[3], pv[-1])] != ["0.043", "0.595"] or sum(v < .05 for v in pv) != 1:
         errs.append(f"peeking: {[round(v, 3) for v in pv]}")
