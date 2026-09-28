@@ -353,9 +353,47 @@ def fig_cte_chain():
     return svg.render()
 
 
+CORR_USERS = (16, 20)                               # не 3, 13, 103, 215 — они в тренажёре 1.5
+
+
+def corr_data():
+    q = ",".join("?" * len(CORR_USERS))
+    rows = db().execute(f"SELECT user_id, order_id, order_date FROM orders WHERE user_id IN ({q}) "
+                        "ORDER BY user_id, order_date", CORR_USERS).fetchall()
+    last = {u: max(d for uu, _, d in rows if uu == u) for u in CORR_USERS}
+    return rows, last
+
+
+def fig_corr_subquery():
+    rows, last = corr_data()
+    w, rh, ax = 150, 26, 166
+    svg = Svg("corr-subquery", 270,
+              "Коррелированный подзапрос выполняется для каждой строки",
+              f"Пять заказов двух пользователей, {CORR_USERS[0]} и {CORR_USERS[1]}. Для каждой строки внешнего "
+              "запроса подзапрос запускается заново и ищет последнюю дату заказов этого пользователя. "
+              "Строка остаётся, если её дата совпала с найденной: по одной на пользователя. "
+              "Пять строк снаружи — пять запусков внутри.")
+    mids = table(svg, 0, 30, w, "FROM orders o",
+                 [("user_id", 12, "start"), ("order_date", w - 10, "end")],
+                 [(str(u), d) for u, _, d in rows], rh)
+    svg.text(ax, 23, "подзапрос для строки", "f-hd", 12.5)
+    for i, ((u, _, d), m) in enumerate(zip(rows, mids)):
+        ok = d == last[u]
+        svg.text(ax, m + 4, f"{i + 1}) MAX у {u} = {last[u][5:]}", "f-pen-t" if ok else "f-sub",
+                 11.5 if ok else 10.5)
+        svg.text(330, m + 4, "✓" if ok else "✗", "f-pen-t" if ok else "f-sub", 12.5, anchor="end")
+        if ok:
+            svg.rect(1, m - rh / 2 + 2, w - 2, rh - 4, "f-pen", 4)
+    y = mids[-1] + rh / 2 + 26
+    svg.text(330, y, f"{len(rows)} строк снаружи — {len(rows)} запусков внутри", "f-sub", 10.5, anchor="end")
+    svg.note(0, y + 30, ["на миллионе строк — миллион запусков;", "окно справится за один проход"], 15)
+    return svg.render()
+
+
 FIGS_M1 = {
     "where-having": fig_where_having,
     "cte-chain": fig_cte_chain,
+    "corr-subquery": fig_corr_subquery,
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
     "window-frame": fig_window_frame,
@@ -372,6 +410,9 @@ def check_m1():
         errs.append(f"where-having: суммы {where_having_data()}")
     if num(cte_avg()) != "6282.97":
         errs.append(f"cte-chain: среднее {cte_avg()} вместо 6282.97 из урока 1.1")
+    rows, last = corr_data()
+    if [d for _, _, d in rows] != ["2024-04-17", "2024-05-17", "2024-04-06", "2024-04-25", "2024-04-29"]:
+        errs.append(f"corr-subquery: даты {rows}")
     users, orders = join_data()
     if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
         errs.append(f"join-rows: пользователи {users}")
