@@ -13,6 +13,7 @@
 """
 import html
 import json
+import math
 import pathlib
 import re
 import sqlite3
@@ -519,7 +520,252 @@ def check_m2():
     return errs
 
 
-MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2)}
+# ---------------------------------------------------------------- схемы m3
+
+def clt_data():
+    """Средние 2000 выборок с возвращением из оплаченных чеков — ровно
+    как в задаче урока 3.1: Random(42) заново для каждого n, choice
+    n раз. Строки в порядке order_id, как их читает pandas из data.js.
+    Возвращает {n: список средних} и среднее совокупности."""
+    import random
+    rev = [r for (r,) in db().execute(
+        "SELECT revenue FROM orders WHERE status = 'paid' ORDER BY order_id")]
+    out = {}
+    for n in (1, 5, 30):
+        rnd = random.Random(42)
+        out[n] = [sum(rnd.choice(rev) for _ in range(n)) / n for _ in range(2000)]
+    return out, sum(rev) / len(rev)
+
+
+def sd(v):
+    m = sum(v) / len(v)
+    return (sum((x - m) ** 2 for x in v) / (len(v) - 1)) ** .5
+
+
+def fig_clt_means():
+    means, mu = clt_data()
+    top, step = 11000, 250                          # ось и ширина корзины, руб.
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * v / top
+    svg = Svg("clt-means", 372,
+              "Центральная предельная теорема на оплаченных чеках",
+              "Три гистограммы на одной оси: средние 2000 случайных выборок из оплаченных чеков. "
+              f"При n=1 это сами чеки — скошенная форма с хвостом вправо, разброс {sd(means[1]):.0f} руб. "
+              f"При n=5 форма ближе к симметричной, разброс {sd(means[5]):.0f}. "
+              f"При n=30 — узкий симметричный колокол вокруг {mu:.0f}, разброс {sd(means[30]):.0f}: "
+              "падает как корень из n, а центр остаётся на месте.")
+    svg.text(0, 14, "средние 2000 выборок, руб.", "f-hd", 12.5)
+    ph, gap, y = 70, 26, 34                         # высота панели, зазор, верх первой
+    for n in (1, 5, 30):
+        v = means[n]
+        cnt = [0] * (top // step)
+        for m in v:
+            cnt[int(m // step)] += 1
+        base, hi = y + ph, max(cnt)
+        cls = "f-pen" if n == 30 else "f-raw"
+        d = f"M{X(0):.1f} {base}"
+        for i, c in enumerate(cnt):
+            h = base - (ph - 8) * c / hi
+            d += f" L{X(i * step):.1f} {h:.1f} L{X((i + 1) * step):.1f} {h:.1f}"
+        svg.path(d + f" L{X(top):.1f} {base}", cls)
+        svg.line(x0, base, x1, base, "f-row")
+        svg.text(x1, y + 10, f"n = {n}", "f-hd", 12.5, anchor="end")
+        svg.text(x1, y + 26, f"разброс {sd(v):.0f}", "f-pen-t" if n == 30 else "f-sub",
+                 11.5 if n == 30 else 10.5, anchor="end")
+        y = base + gap
+    svg.path(f"M{X(mu):.1f} 26 V{y - gap + 4}", "f-soft")
+    svg.text(X(mu) + 4, 30, f"среднее {mu:.0f}", "f-sub", 10.5)
+    axis = y - gap + 4
+    for v in (0, 5000, 10000):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v:,}".replace(",", " "), "f-sub", 10.5,
+                 anchor="start" if v == 0 else "middle")
+    svg.note(0, axis + 46, ["чеки остаются скошенными —", "колоколом становится среднее"], 15)
+    return svg.render()
+
+
+def ci_data():
+    """100 повторов группы A из задачи урока 3.2: истинная конверсия 5%,
+    n=4820. Random(42), по одному random() на визит. Возвращает
+    список (низ, верх) 95%-интервалов в долях."""
+    import random
+    p, n = .05, 4820
+    rnd = random.Random(42)
+    out = []
+    for _ in range(100):
+        q = sum(rnd.random() < p for _ in range(n)) / n
+        se = (q * (1 - q) / n) ** .5
+        out.append((q - 1.96 * se, q + 1.96 * se))
+    return out
+
+
+def fig_ci_100():
+    ci, p = ci_data(), .05
+    miss = [i for i, (a, b) in enumerate(ci) if not a <= p <= b]
+    lo, hi = .035, .065                             # ось, доли
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    top, dy = 40, 2.6
+    svg = Svg("ci-100", 382,
+              "Сто доверительных интервалов для одной и той же конверсии",
+              "Сто раз набрали по 4820 визитов при истинной конверсии 5 процентов и каждый раз "
+              "построили 95-процентный интервал. Интервалы скачут вокруг 5 процентов; "
+              f"{100 - len(miss)} из них накрывают истинное значение, {len(miss)} промахиваются "
+              "и выделены ручкой. По одному интервалу нельзя сказать, промах он или нет.")
+    svg.text(0, 14, "100 повторов теста, n = 4820", "f-hd", 12.5)
+    bottom = top + dy * 99
+    svg.path(f"M{X(p):.1f} {top - 8} V{bottom + 6}", "f-soft")
+    svg.text(X(p) + 4, top - 10, "истина 5%", "f-sub", 10.5)
+    for i, (a, b) in enumerate(ci):
+        y = top + i * dy
+        svg.line(round(X(a), 1), round(y, 1), round(X(b), 1), round(y, 1),
+                 "f-pen" if i in miss else "f-raw")
+    axis = bottom + 8
+    for v in (.04, .05, .06):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    svg.text(x1, axis + 40, f"накрыли: {100 - len(miss)}", "f-sub", 10.5, anchor="end")
+    svg.text(x1, axis + 54, f"промахнулись: {len(miss)}", "f-pen-t", 11.5, anchor="end")
+    svg.note(0, axis + 42, ["какой из них ваш,", "заранее не узнать"], 15)
+    return svg.render()
+
+
+def Phi(x):
+    return .5 * (1 + math.erf(x / 2 ** .5))
+
+
+def power_data():
+    """База 5%, лифт 10% (5,00 -> 5,50), alpha 0,05 двусторонний — как в
+    уроке 3.4. Для n на группу: стандартные ошибки разницы при H0 и H1,
+    порог значимости и мощность. n: из теории (31 234) и неделя трафика
+    задачи (1750 * 7 / 2 = 6125)."""
+    p0, p1, za = .05, .055, 1.959963984540054
+    pb = (p0 + p1) / 2
+    out = []
+    for n in (31234, 6125):
+        se0 = (2 * pb * (1 - pb) / n) ** .5
+        se1 = ((p0 * (1 - p0) + p1 * (1 - p1)) / n) ** .5
+        c = za * se0
+        out.append((n, se0, se1, c, 1 - Phi((c - (p1 - p0)) / se1)))
+    return p1 - p0, out
+
+
+def fig_power_bells():
+    d, panels = power_data()
+    lo, hi = -.012, .018                            # ось: наблюдаемая разница, доли
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    pdf = lambda v, m, s: math.exp(-((v - m) / s) ** 2 / 2)
+    svg = Svg("power-bells", 334,
+              "Два колокола: ошибка первого рода, ошибка второго рода и мощность",
+              "Где окажется наблюдаемая разница конверсий, если эффекта нет (колокол вокруг нуля) "
+              "и если он есть, плюс 10 процентов, с 5,00 до 5,50 (колокол вокруг 0,5 пункта). "
+              "Вертикальная черта — порог значимости: правее неё тест объявляет победу. "
+              "Штриховка слева от порога под вторым колоколом — пропущенный эффект, бета. "
+              f"При {panels[0][0]} на группу колокола узкие и мощность {panels[0][4] * 100:.0f} процентов; "
+              f"при {panels[1][0]} (неделя трафика) колокола широкие, слиплись, и мощность "
+              f"{panels[1][4] * 100:.0f} процентов.")
+    svg.text(0, 14, "разница конверсий B − A, п.п.", "f-hd", 12.5)
+    ph, y = 104, 30
+    for k, (n, se0, se1, c, pw) in enumerate(panels):
+        base = y + ph
+        H = lambda v, m, s: base - (ph - 30) * pdf(v, m, s)
+        step = (hi - lo) / 220
+        xs = [lo + i * step for i in range(221)]
+        svg.path("M" + " L".join(f"{X(v):.1f} {H(v, 0, se0):.1f}" for v in xs), "f-raw")
+        svg.path("M" + " L".join(f"{X(v):.1f} {H(v, d, se1):.1f}" for v in xs), "f-pen")
+        # бета: штриховка под колоколом «эффект есть» левее порога
+        v = lo
+        while v < c:
+            if pdf(v, d, se1) > .03:
+                svg.line(round(X(v), 1), base, round(X(v), 1), round(H(v, d, se1), 1), "f-soft")
+            v += 4 * (hi - lo) / (x1 - x0)
+        svg.line(0, base, x1, base, "f-row")
+        svg.path(f"M{X(c):.1f} {y + 18} V{base}", "f-box")
+        svg.text(X(c) + 3, y + 26, "порог", "f-sub", 10.5)
+        svg.text(0, y + 10, f"n = {n:,} на группу".replace(",", " "), "f-hd", 12.5)
+        svg.text(x1, y + 10, f"мощность {pw * 100:.0f}%", "f-pen-t", 11.5, anchor="end")
+        if k == 0:
+            svg.text(X(0) - 20, y + 52, "эффекта нет", "f-sub", 10.5, anchor="end")
+            svg.text(X(d) + 20, y + 52, "эффект +10%", "f-pen-t", 11.5)
+            svg.text(X(c) + 3, base - 6, "α", "f-sub", 10.5)
+        y = base + 24
+    axis = y - 24
+    for v in (-.01, 0, .01):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v * 100:+.0f}".replace("+0", "0").replace("-", "−"),
+                 "f-sub", 10.5, anchor="middle")
+    svg.text(x1, axis + 16, "штриховка — β", "f-sub", 10.5, anchor="end")
+    svg.note(0, axis + 44, ["мало данных — колокола слиплись,", "и настоящий эффект чаще пропускают"], 15)
+    return svg.render()
+
+
+def fwer(k, alpha=.05):
+    """Вероятность хотя бы одной ложной находки из k независимых сравнений."""
+    return 1 - (1 - alpha) ** k
+
+
+def fig_fwer_curve():
+    x0, x1, yt, yb = 34, 316, 34, 214               # поле графика
+    X = lambda k: x0 + (x1 - x0) * (k - 1) / 19
+    Y = lambda v: yb - (yb - yt) * v
+    svg = Svg("fwer-curve", 290,
+              "Риск ложной находки растёт с числом метрик",
+              "Вероятность хотя бы одной ложной находки при уровне 0,05 на каждое сравнение: "
+              f"одна метрика — {fwer(1) * 100:.1f} процента, три — {fwer(3) * 100:.1f}, "
+              f"пять — {fwer(5) * 100:.1f}, десять — {fwer(10) * 100:.1f}, "
+              f"двадцать — {fwer(20) * 100:.1f}. С поправкой Бонферрони риск остаётся "
+              "около 5 процентов при любом числе метрик.")
+    svg.text(0, 14, "шанс хотя бы одной ложной находки", "f-hd", 12.5)
+    for v in (0, .25, .5, .75, 1):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="end")
+    bonf = [1 - (1 - .05 / k) ** k for k in range(1, 21)]
+    svg.path("M" + " L".join(f"{X(k):.1f} {Y(b):.1f}" for k, b in zip(range(1, 21), bonf)), "f-raw")
+    svg.text(x1, Y(bonf[-1]) - 6, "с поправкой Бонферрони", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(k):.1f} {Y(fwer(k)):.1f}" for k in range(1, 21)), "f-pen")
+    for k in (1, 5, 10, 20):
+        svg.circle(X(k), Y(fwer(k)), 2.6)
+        s = f"{fwer(k) * 100:.1f}%".replace(".", ",")
+        svg.text(X(k) + (-4 if k == 20 else 0), Y(fwer(k)) - 8, s, "f-pen-t", 11.5,
+                 anchor="end" if k == 20 else "middle")
+    for k in (1, 5, 10, 20):
+        svg.line(X(k), yb, X(k), yb + 4, "f-row")
+        svg.text(X(k), yb + 16, str(k), "f-sub", 10.5, anchor="middle")
+    svg.text(x1, yb + 32, "метрик в тесте", "f-sub", 10.5, anchor="end")
+    svg.note(0, yb + 54, ["двадцать метрик — «находка»", "почти наверняка"], 15)
+    return svg.render()
+
+
+FIGS_M3 = {
+    "clt-means": fig_clt_means,
+    "ci-100": fig_ci_100,
+    "power-bells": fig_power_bells,
+    "fwer-curve": fig_fwer_curve,
+}
+
+
+def check_m3():
+    errs = []
+    means, mu = clt_data()
+    got = [(n, f"{sum(v) / len(v):.2f}", f"{sd(v):.2f}") for n, v in means.items()]
+    if got != [(1, "3505.93", "1777.50"), (5, "3459.17", "778.80"), (30, "3454.78", "323.06")]:
+        errs.append(f"clt-means: {got} — не совпало с эталоном задачи урока 3.1")
+    if f"{mu:.2f}" != "3457.30":
+        errs.append(f"clt-means: среднее совокупности {mu:.2f}")
+    miss = [i for i, (a, b) in enumerate(ci_data()) if not a <= .05 <= b]
+    if miss != [4, 16, 52, 54, 76, 90]:
+        errs.append(f"ci-100: промахи {miss} вместо [4, 16, 52, 54, 76, 90]")
+    got = [(n, f"{c * 100:.3f}", f"{pw * 100:.1f}") for n, _, _, c, pw in power_data()[1]]
+    if got != [(31234, "0.350", "80.0"), (6125, "0.790", "23.6")]:
+        errs.append(f"power-bells: {got} — 31 234 из теории урока 3.4 должны давать мощность 80%")
+    got = [f"{fwer(k) * 100:.1f}" for k in (1, 3, 5, 10, 20)]
+    if got != ["5.0", "14.3", "22.6", "40.1", "64.2"]:
+        errs.append(f"fwer-curve: {got} — не совпало с таблицей урока 3.5")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
