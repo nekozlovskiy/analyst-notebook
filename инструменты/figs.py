@@ -1854,7 +1854,66 @@ def fig_gd_steps():
     return svg.render()
 
 
+def arrow(svg, x1, y1, x2, y2, cls="f-pen", head=6):
+    """Стрелка от (x1, y1) к (x2, y2) с двумя усиками на конце."""
+    import math
+    a = math.atan2(y2 - y1, x2 - x1)
+    h = [(x2 - head * math.cos(a - s), y2 - head * math.sin(a - s)) for s in (.45, -.45)]
+    svg.path(f"M{x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f} M{h[0][0]:.1f} {h[0][1]:.1f} "
+             f"L{x2:.1f} {y2:.1f} L{h[1][0]:.1f} {h[1][1]:.1f}", cls)
+
+
+def fig_four_causes():
+    pw, ph, gx, gy, top = 160, 104, 10, 16, 30
+    svg = Svg("four-causes", 318,
+              "Четыре объяснения корреляции",
+              "Четыре маленькие схемы. Причинность: скидка вызывает продажи. Обратная причинность: уход "
+              "вызывает обращения в поддержку, а не наоборот. Общая причина: жара вызывает и продажи "
+              "мороженого, и утопления, между которыми прямой связи нет. Артефакт отбора: балл и спорт "
+              "оба ведут к поступлению, и среди поступивших между ними появляется связь. Пунктир — "
+              "наблюдаемая корреляция, стрелка — причина.")
+    svg.text(0, 14, "стрелка — причина, пунктир — видимая связь", "f-hd", 12.5)
+
+    def node(x, y, t, cls="f-box"):
+        w = 9 + 6.2 * len(t)
+        svg.rect(x - w / 2, y - 11, w, 22, cls, 4)
+        svg.text(x, y + 4, t, "f-sub" if cls == "f-box" else "f-hd", 10, anchor="middle")
+        return w / 2
+
+    panels = ["причинность", "обратная причинность", "общая причина", "артефакт отбора"]
+    for k, title in enumerate(panels):
+        x0 = (k % 2) * (pw + gx)
+        y0 = top + (k // 2) * (ph + gy)
+        svg.rect(x0, y0, pw, ph, "f-soft", 5)             # у f-row нет fill: none
+        svg.text(x0 + 8, y0 + 16, title, "f-hd", 11)
+        cx, l, r, yy = x0 + pw / 2, x0 + 40, x0 + pw - 40, y0 + 66
+        if k == 0:
+            a = node(l, yy, "скидка"); b = node(r, yy, "продажи")
+            arrow(svg, l + a + 2, yy, r - b - 4, yy)
+        elif k == 1:
+            a = node(l, yy, "поддержка"); b = node(r, yy, "уход")
+            arrow(svg, r - b - 2, yy + 6, l + a + 4, yy + 6)
+            svg.path(f"M{l + a + 2:.1f} {yy - 6} L{r - b - 2:.1f} {yy - 6}", "f-dash")
+        elif k == 2:
+            node(cx, y0 + 40, "жара", "f-pen")
+            l, r = x0 + 36, x0 + pw - 36                 # раздвинуть: иначе пунктир не виден
+            a = node(l, y0 + 84, "мороженое"); b = node(r, y0 + 84, "утопления")
+            arrow(svg, cx - 10, y0 + 51, l + 6, y0 + 72)
+            arrow(svg, cx + 10, y0 + 51, r - 6, y0 + 72)
+            svg.path(f"M{l + a + 2:.1f} {y0 + 84} L{r - b - 2:.1f} {y0 + 84}", "f-dash")
+        else:
+            a = node(l, y0 + 40, "балл"); b = node(r, y0 + 40, "спорт")
+            node(cx, y0 + 84, "поступили", "f-pen")
+            arrow(svg, l + 6, y0 + 51, cx - 14, y0 + 72)
+            arrow(svg, r - 6, y0 + 51, cx + 14, y0 + 72)
+            svg.path(f"M{l + a + 2:.1f} {y0 + 40} L{r - b - 2:.1f} {y0 + 40}", "f-dash")
+    y = top + 2 * ph + gy
+    svg.note(0, y + 34, ["причинность — только одна", "из четырёх версий"], 15)
+    return svg.render()
+
+
 FIGS_M5 = {
+    "four-causes": fig_four_causes,
     "ols-squares": fig_ols_squares,
     "resid-patterns": fig_resid_patterns,
     "roc-steps": fig_roc_steps,
@@ -1875,8 +1934,252 @@ def check_m5():
     return errs
 
 
+# ---------------------------------------------------------------- схемы m6
+# Уроки про поиск работы: схемы без данных базы, только структура.
+
+def fig_cv_gates():
+    svg = Svg("cv-gates", 262,
+              "Три фильтра на пути отклика",
+              "Слева миниатюра резюме, верхняя треть выделена: её видят все фильтры. Справа три шага: "
+              "автоматический фильтр по ключевым словам, тридцать секунд рекрутера на первый экран и пять "
+              "минут нанимающего менеджера на проекты.")
+    svg.text(0, 14, "что видит каждый фильтр", "f-hd", 12.5)
+    px, py, pw, ph = 0, 32, 104, 150                # миниатюра страницы
+    svg.rect(px, py, pw, ph, "f-box", 3)
+    for i, w in enumerate((70, 50, 84, 80, 60)):     # строки первого экрана
+        svg.line(px + 10, py + 14 + i * 8, px + 10 + w, py + 14 + i * 8, "f-raw")
+    for i in range(9):                              # остальное резюме
+        svg.line(px + 10, py + 64 + i * 9, px + 10 + (84 if i % 3 else 60), py + 64 + i * 9, "f-row")
+    svg.rect(px + 3, py + 4, pw - 6, ph / 3, "f-pen", 3)
+    svg.text(px + pw / 2, py + ph + 16, "первый экран", "f-pen-t", 11, anchor="middle")
+    steps = [("ключевые слова", "часто автомат", "SQL, Python — дословно"),
+             ("30 секунд", "рекрутер", "первый экран: опыт, конкретика"),
+             ("5 минут", "нанимающий менеджер", "проекты: задача, метод, вывод")]
+    x, y = 122, 32
+    for i, (t, who, what) in enumerate(steps):
+        svg.rect(x, y, 208, 42, "f-pen" if i == 1 else "f-box", 4)
+        svg.text(x + 8, y + 17, t, "f-hd", 11.5)
+        svg.text(x + 200, y + 17, who, "f-sub", 10, anchor="end")
+        svg.text(x + 8, y + 33, what, "f-sub", 10)
+        if i < 2:
+            arrow(svg, x + 104, y + 43, x + 104, y + 55, "f-raw", 4)
+        y += 56
+    svg.note(0, py + ph + 50, ["в верхней трети нет конкретики —", "до проектов не дочитают"], 15)
+    return svg.render()
+
+
+def fig_notebook_scan():
+    pw, ph, top = 150, 220, 34
+    svg = Svg("notebook-scan", 318,
+              "Ноутбук глазами проверяющего",
+              "Два ноутбука при беглом пролистывании. Слева только ячейки кода и длинные полотна вывода — "
+              "взгляду не за что зацепиться, такой закрывают. Справа заголовок, короткий код, график и "
+              "вывод текстом с числом — вывод виден без чтения кода, такой досматривают.")
+    svg.text(0, 14, "минута пролистывания", "f-hd", 12.5)
+    for k, x0 in enumerate((0, pw + 30)):
+        svg.rect(x0, top, pw, ph, "f-box", 4)
+        y = top + 10
+        if k == 0:
+            for blk in range(4):                        # код + полотно вывода
+                svg.rect(x0 + 8, y, pw - 16, 22, "f-soft", 2)
+                for j in range(2):
+                    svg.line(x0 + 14, y + 7 + j * 8, x0 + 14 + (90 if j else 110), y + 7 + j * 8, "f-raw")
+                y += 28
+                for j in range(4):                      # полотно вывода: густо и заметно
+                    svg.line(x0 + 10, y + j * 5, x0 + pw - 12 - (j % 2) * 20, y + j * 5, "f-soft")
+                y += 22
+        else:
+            svg.text(x0 + 10, y + 10, "Отток по каналам", "f-hd", 11)
+            svg.rect(x0 + 8, y + 18, pw - 16, 16, "f-soft", 2)
+            svg.line(x0 + 14, y + 26, x0 + 100, y + 26, "f-raw")
+            y += 44
+            svg.rect(x0 + 10, y, pw - 20, 78, "f-soft", 2)   # график
+            for i, v in enumerate((.8, .55, .4, .25)):
+                svg.rect(x0 + 18, y + 8 + i * 17, (pw - 40) * v, 10, "f-box", 2)
+            y += 90
+            svg.rect(x0 + 6, y - 4, pw - 12, 42, "f-pen", 4)
+            svg.text(x0 + 12, y + 12, "Вывод: social теряет", "f-pen-t", 10)
+            svg.text(x0 + 12, y + 28, "вдвое больше, 41%", "f-pen-t", 10)
+            y += 50
+            svg.line(x0 + 10, y, x0 + pw - 30, y, "f-row")
+            svg.line(x0 + 10, y + 8, x0 + pw - 60, y + 8, "f-row")
+        svg.text(x0 + pw / 2, top + ph + 18, "закрывают" if k == 0 else "досмотрят",
+                 "f-sub" if k == 0 else "f-pen-t", 11 if k == 0 else 11.5, anchor="middle")
+    svg.note(0, top + ph + 50, ["выводы видны без чтения кода"], 15)
+    return svg.render()
+
+
+STREAK_DAYS = [1, 2, 3, 7, 8]                        # пример из таблицы урока 6.3, март 2024
+
+
+def streak_keys():
+    import datetime as dt
+    out = []
+    for n, d in enumerate(STREAK_DAYS, 1):
+        day = dt.date(2024, 3, d)
+        out.append((day, n, day - dt.timedelta(days=n)))
+    return out
+
+
+def fig_streak_key():
+    rows = streak_keys()
+    cw, x0, y0 = 36, 42, 36                         # слева место под подписи строк
+    X = lambda d: x0 + (d - 1) * cw
+    svg = Svg("streak-key", 222,
+              "Ключ серии: дата минус номер",
+              "Полоса календаря с 1 по 8 марта, активные дни 1, 2, 3, 7 и 8. Под активными днями — номер по "
+              "порядку и разность «дата минус номер»: 29 февраля у первых трёх дней и 3 марта у двух последних. "
+              "Одинаковый ключ собирает дни в серию: три дня и два дня.")
+    svg.text(0, 14, "март: дни с заходом обведены", "f-hd", 12.5)
+    act = {r[0].day: r for r in rows}
+    for d in range(1, 9):
+        hot = d in act
+        svg.rect(X(d) + 2, y0, cw - 4, 30, "f-pen" if hot else "f-box", 4)
+        svg.text(X(d) + cw / 2, y0 + 20, str(d), "f-pen-t" if hot else "f-sub",
+                 12 if hot else 10.5, anchor="middle")
+    svg.text(0, y0 + 56, "№", "f-sub", 10.5)
+    svg.text(0, y0 + 82, "ключ", "f-sub", 10)
+    for d, (day, n, key) in act.items():
+        svg.text(X(d) + cw / 2, y0 + 56, str(n), "f-hd", 11.5, anchor="middle")
+        svg.text(X(d) + cw / 2, y0 + 82, key.strftime("%d.%m"), "f-pen-t", 10.5, anchor="middle")
+    # скобки серий
+    groups = {}
+    for d, (_, _, key) in act.items():
+        groups.setdefault(key, []).append(d)
+    by = y0 + 96
+    for key, ds in groups.items():
+        a, b = X(min(ds)) + 4, X(max(ds)) + cw - 4
+        svg.path(f"M{a} {by} V{by + 6} H{b} V{by}", "f-raw")
+        svg.text((a + b) / 2, by + 22, f"серия: {len(ds)} " + ("дня" if len(ds) < 5 else "дней"),
+                 "f-hd", 11, anchor="middle")
+    svg.note(0, by + 58, ["пропуск в датах — и ключ", "сразу меняется"], 15)
+    return svg.render()
+
+
+AT_ROWS = [("A", 10), ("A", 30), ("B", 20)]           # игрушечная таблица к уроку 6.4
+
+
+def fig_agg_transform():
+    sums = {}
+    for k, v in AT_ROWS:
+        sums[k] = sums.get(k, 0) + v
+    rh = 24
+    svg = Svg("agg-transform", 222,
+              "agg и transform у groupby",
+              "Исходная таблица из трёх строк: A 10, A 30, B 20. agg со суммой схлопывает группы в две "
+              "строки: A 40, B 20. transform со суммой возвращает столбец той же длины, что исходный: "
+              "40, 40, 20 — его можно приписать к таблице как новый столбец.")
+    svg.text(0, 14, "df.groupby(\"k\")[\"v\"]", "f-hd", 12.5)
+    m0 = table(svg, 0, 44, 96, "исходная", [("k", 12, "start"), ("v", 84, "end")],
+               [(k, str(v)) for k, v in AT_ROWS], rh)
+    m1 = table(svg, 124, 44, 80, ".agg(\"sum\")", [("k", 12, "start"), ("v", 68, "end")],
+               [(k, str(v)) for k, v in sums.items()], rh)
+    m2 = table(svg, 232, 44, 98, ".transform(\"sum\")", [("k", 12, "start"), ("v", 86, "end")],
+               [(k, str(sums[k])) for k, _ in AT_ROWS], rh)
+    svg.rect(232, 42, 98, 22 + rh * len(AT_ROWS) + 4, "f-pen", 5)
+    y = m0[-1] + rh / 2 + 22
+    svg.text(164, y, f"{len(sums)} строки", "f-sub", 10.5, anchor="middle")
+    svg.text(330, y, f"{len(AT_ROWS)} строки, как было", "f-pen-t", 11, anchor="end")
+    svg.note(0, y + 34, ["agg — сводка по группам, transform —", "новый столбец к исходной таблице"], 15)
+    return svg.render()
+
+
+def fig_metric_levels():
+    """Урок 6.5, свой пример: видео в карточке товара (не фичи задачи и тренажёра)."""
+    levels = [("ключевая — одна", "решение по ней", ["конверсия карточки в покупку"]),
+              ("вспомогательные", "за счёт чего", ["смотрели видео, %", "в корзину после видео"]),
+              ("предохранители", "что не сломать", ["загрузка карточки", "доля возвратов"])]
+    bh, y = 30, 50
+    svg = Svg("metric-levels", 326,
+              "Три уровня метрик на примере",
+              "Фича: видео в карточке товара. Ключевая метрика одна — конверсия карточки в покупку. "
+              "Вспомогательные объясняют механизм: доля посмотревших видео и переход в корзину после видео. "
+              "Предохранители не должны ухудшиться: скорость загрузки карточки и доля возвратов.")
+    svg.text(0, 14, "фича: видео в карточке товара", "f-hd", 12.5)
+    prev = None
+    for i, (lvl, why, boxes) in enumerate(levels):
+        svg.text(0, y - 8, lvl, "f-hd" if i == 0 else "f-sub", 11 if i == 0 else 10.5)
+        svg.text(330, y - 8, why, "f-sub", 10, anchor="end")
+        n = len(boxes)
+        bw = (330 - 10 * (n - 1)) / n
+        cur = []
+        for k, t in enumerate(boxes):
+            x = k * (bw + 10)
+            svg.rect(x, y, bw, bh, "f-pen" if i == 0 else "f-box", 5)
+            svg.text(x + bw / 2, y + bh / 2 + 4, t, "f-pen-t" if i == 0 else "f-sub",
+                     11 if i == 0 else 10.5, anchor="middle")
+            cur.append(x + bw / 2)
+        if prev is not None and i == 1:
+            for cx in cur:
+                svg.path(f"M{prev[0]:.1f} {y - 50} L{cx:.1f} {y}", "f-soft")   # от низа ключевой
+        prev = cur
+        y += bh + 50
+    svg.text(0, y - 26, "предохранители смотрят, даже если ключевая выросла", "f-sub", 10)
+    svg.note(0, y + 6, ["«будем смотреть на конверсию» —", "слабо; сильно — все три этажа"], 15)
+    return svg.render()
+
+
+# Воронка найма из таблицы урока 6.6: середины диапазонов конверсий.
+HIRE_STEPS = [("отклики", None), ("ответ рекрутера", (.05, .15)), ("скрининг", (.6, .8)),
+              ("тестовое", (.4, .6)), ("техсекция", (.5, .7)), ("финал", (.3, .5)), ("оффер", (.3, .5))]
+HIRE_START = 300
+
+
+def hire_funnel():
+    n, out = HIRE_START, []
+    for name, rng in HIRE_STEPS:
+        if rng:
+            n *= sum(rng) / 2
+        out.append((name, n))
+    return out
+
+
+def fig_hire_funnel():
+    rows = hire_funnel()
+    lx, bx, bw, rh, y0 = 0, 112, 176, 26, 36
+    svg = Svg("hire-funnel", 272,
+              "Воронка найма от трёхсот откликов",
+              "Триста откликов, конверсии шагов — середины диапазонов из таблицы урока. Ответ рекрутера "
+              "получают около 30, скрининг проходят 21, тестовое делают около 10, до техсекции доходят 6, "
+              "до финала 2–3, оффер один. Самый узкий — первый шаг: из трёхсот остаются тридцать.")
+    svg.text(0, 14, f"{HIRE_START} откликов, середины диапазонов", "f-hd", 12.5)
+    for i, (name, v) in enumerate(rows):
+        y = y0 + i * rh
+        hot = i == 1
+        svg.text(lx, y + 13, name, "f-hd" if i in (0, len(rows) - 1) else "f-sub", 10.5)
+        svg.rect(bx, y + 2, max(3, bw * v / HIRE_START), 14, "f-pen" if hot else "f-box", 2)
+        lab = f"≈ {v:.0f}" if v >= 3.5 else ("2–3" if v >= 2 else f"≈ {v:.0f}")
+        svg.text(bx + max(3, bw * v / HIRE_START) + 6, y + 13, lab, "f-pen-t" if hot else "f-sub",
+                 11 if hot else 10.5)
+    svg.text(330, y0 + rh + 13, "−90%: резюме", "f-pen-t", 11, anchor="end")
+    y = y0 + len(rows) * rh
+    svg.note(0, y + 26, ["первый шаг самый узкий — резюме", "окупается сильнее подготовки к финалу"], 15)
+    return svg.render()
+
+
+FIGS_M6 = {
+    "hire-funnel": fig_hire_funnel,
+    "metric-levels": fig_metric_levels,
+    "agg-transform": fig_agg_transform,
+    "streak-key": fig_streak_key,
+    "notebook-scan": fig_notebook_scan,
+    "cv-gates": fig_cv_gates,
+}
+
+
+def check_m6():
+    """Чисел из базы на схемах m6 нет; сверяем только пример из урока 6.3."""
+    rows = hire_funnel()
+    if round(rows[-1][1], 2) != 1.01 or round(rows[1][1]) != 30:
+        return [f"hire-funnel: {rows} — середины таблицы урока 6.6 должны давать ≈1 оффер на 300"]
+    keys = [k.isoformat() for _, _, k in streak_keys()]
+    if keys != ["2024-02-29"] * 3 + ["2024-03-03"] * 2:
+        return [f"streak-key: ключи {keys} не совпали с таблицей урока 6.3"]
+    return []
+
+
 MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
-           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5)}
+           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5), "m6": (FIGS_M6, check_m6)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
