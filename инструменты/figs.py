@@ -528,9 +528,9 @@ def write_block(module, figs, sandboxes=None):
     s = p.read_text(encoding="utf8")
     body = "window.FIGS = window.FIGS || {};\n" + "".join(
         f"window.FIGS[{json.dumps(k)}] = {json.dumps(v, ensure_ascii=False)};\n" for k, v in figs.items())
-    if sandboxes:                                   # данные песочниц «покрути», см. sandbox.js
-        body += "window.SANDBOX = window.SANDBOX || {};\n" + "".join(
-            f"window.SANDBOX[{json.dumps(k)}] = {json.dumps(v, ensure_ascii=False, separators=(',', ':'))};\n"
+    if sandboxes:                                   # данные песочниц «покрути», см. tinker.js
+        body += "window.TINKER = window.TINKER || {};\n" + "".join(
+            f"window.TINKER[{json.dumps(k)}] = {json.dumps(v, ensure_ascii=False, separators=(',', ':'))};\n"
             for k, v in sandboxes.items())
     block = ("/* FIGS:BEGIN — схемы генерирует инструменты/figs.py, руками не править */\n"
              + body + "/* FIGS:END */")

@@ -41,7 +41,7 @@ const SHELL = [
   "./lessons.js",
   "./content-core.js",
   "./glossary.js",
-  "./sandbox.js",
+  "./tinker.js",
   "./app.js",
   "./favicon.svg",
   "./apple-touch-icon.png",
