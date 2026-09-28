@@ -1107,7 +1107,50 @@ def fig_fwer_curve():
     return svg.render()
 
 
+# Игрушечные чеки к уроку 3.3: у A один гигантский заказ.
+MW_A, MW_B, MW_BIG, MW_SMALL = [1200, 2500, 3100, 100000], [900, 1500, 2000, 2800], 100000, 10000
+
+
+def mw_data(a=MW_A):
+    allv = sorted([(v, "A") for v in a] + [(v, "B") for v in MW_B])
+    ranks = [(v, g, i + 1) for i, (v, g) in enumerate(allv)]
+    ra = sum(r for _, g, r in ranks if g == "A")
+    return ranks, ra, ra - len(a) * (len(a) + 1) // 2
+
+
+def fig_mw_ranks():
+    ranks, ra, u = mw_data()
+    small = [MW_SMALL if v == MW_BIG else v for v in MW_A]
+    _, ra2, _ = mw_data(small)
+    rub = lambda v: f"{v:,}".replace(",", " ")
+    mean = lambda v: sum(v) / len(v)
+    cw, y = 330 / len(ranks), 40
+    svg = Svg("mw-ranks", 250,
+              "Ранги в критерии Манна-Уитни",
+              "Восемь чеков двух групп в общем ряду по возрастанию с рангами от 1 до 8. У группы A ранги "
+              f"{', '.join(str(r) for _, g, r in ranks if g == 'A')}, сумма {ra}, U = {u}. Самый большой чек A, "
+              f"{rub(MW_BIG)}, получает ранг 8. Если бы он был {rub(MW_SMALL)}, среднее A упало бы с "
+              f"{rub(round(mean(MW_A)))} до {rub(round(mean(small)))}, а ранг и сумма рангов не изменились бы.")
+    svg.text(0, 14, "общий ряд двух групп по возрастанию", "f-hd", 12.5)
+    for i, (v, g, r) in enumerate(ranks):
+        x = i * cw
+        a = g == "A"
+        svg.rect(x + 1, y, cw - 2, 26, "f-pen" if a else "f-box", 3)
+        svg.text(x + cw / 2, y + 17, rub(v), "f-sub", 9.5, anchor="middle")  # моноширинный не влезает
+        svg.text(x + cw / 2, y + 42, g, "f-pen-t" if a else "f-sub", 11, anchor="middle")
+        svg.text(x + cw / 2, y + 60, str(r), "f-hd", 11.5, anchor="middle")
+    svg.text(330, y + 84, f"ранги A: {' + '.join(str(r) for _, g, r in ranks if g == 'A')} = {ra};  U = {ra} − 10 = {u}",
+             "f-sub", 10.5, anchor="end")
+    t = y + 118
+    svg.text(0, t, f"если {rub(MW_BIG)} заменить на {rub(MW_SMALL)}:", "f-hd", 11.5)
+    svg.text(0, t + 20, f"среднее A: {rub(round(mean(MW_A)))} → {rub(round(mean(small)))}", "f-pen-t", 11.5)
+    svg.text(0, t + 38, f"сумма рангов A: {ra} → {ra2}", "f-sub", 10.5)
+    svg.note(0, t + 72, ["выброс важен только тем, кого обогнал"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
+    "mw-ranks": fig_mw_ranks,
     "clt-means": fig_clt_means,
     "ci-100": fig_ci_100,
     "power-bells": fig_power_bells,
@@ -1117,6 +1160,9 @@ FIGS_M3 = {
 
 def check_m3():
     errs = []
+    ranks, ra, u = mw_data()
+    if (ra, u, mw_data([MW_SMALL if v == MW_BIG else v for v in MW_A])[1]) != (22, 12, 22):
+        errs.append(f"mw-ranks: сумма рангов {ra}, U {u}")
     means, mu = clt_data()
     got = [(n, f"{sum(v) / len(v):.2f}", f"{sd(v):.2f}") for n, v in means.items()]
     if got != [(1, "3505.93", "1777.50"), (5, "3459.17", "778.80"), (30, "3454.78", "323.06")]:
