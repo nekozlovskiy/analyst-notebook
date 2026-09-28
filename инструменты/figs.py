@@ -1488,7 +1488,64 @@ def fig_ltv_horizon():
     return svg.render()
 
 
+def rfm_segment(r, f):
+    """Правила из условия задачи урока 4.5, в том же порядке."""
+    if r >= 4 and f >= 4:
+        return "чемпионы"
+    if r >= 3 and f >= 3:
+        return "лояльные"
+    if r >= 4 and f <= 2:
+        return "перспективные"
+    if r <= 2 and f >= 4:
+        return "уходят ценные"
+    if r <= 2 and f <= 2:
+        return "спящие"
+    return "прочие"
+
+
+def fig_rfm_map():
+    c, x0, y0 = 50, 44, 34                          # клетка и левый верхний угол сетки
+    X = lambda r: x0 + (r - 1) * c                  # левый край столбца R
+    Y = lambda f: y0 + (5 - f) * c                  # верх строки F (F = 5 сверху)
+    svg = Svg("rfm-map", 364,
+              "Карта сегментов RFM по оценкам давности и частоты",
+              "Сетка пять на пять: по горизонтали оценка давности R, справа недавние, по вертикали оценка "
+              "частоты F, сверху частые. Правый верхний угол — чемпионы, правый нижний — перспективные, "
+              "левый верхний — уходят ценные, левый нижний — спящие. Лояльные — уголок вокруг чемпионов, "
+              "остальное — прочие. Перспективные и уходящие ценные выделены: с ними основная работа.")
+    svg.text(0, 14, "сегменты по оценкам R и F", "f-hd", 12.5)
+    for k in range(1, 5):                           # сетка линиями: у f-row нет fill: none
+        svg.line(X(k + 1), Y(5), X(k + 1), Y(1) + c, "f-row")
+        svg.line(X(1), Y(k), X(5) + c, Y(k), "f-row")
+    # границы между разными сегментами — толще
+    for r in range(1, 6):
+        for f in range(1, 6):
+            seg = rfm_segment(r, f)
+            if r < 5 and rfm_segment(r + 1, f) != seg:
+                svg.line(X(r + 1), Y(f), X(r + 1), Y(f) + c, "f-raw")
+            if f < 5 and rfm_segment(r, f + 1) != seg:
+                svg.line(X(r), Y(f), X(r) + c, Y(f), "f-raw")
+    svg.rect(X(1), Y(5), 5 * c, 5 * c, "f-box", 0)
+    for r0, f0 in ((4, 2), (1, 5)):                 # перспективные и уходят ценные: блоки 2×2
+        svg.rect(X(r0) + 2, Y(f0) + 2, 2 * c - 4, 2 * c - 4, "f-pen", 4)
+    lab = [("чемпионы", 4.5, 4.5, "f-hd"), ("перспективные", 4.5, 1.5, "f-pen-t"),
+           ("спящие", 1.5, 1.5, "f-sub"), ("лояльные", 3, 4.5, "f-sub"), ("лояльные", 4.5, 3, "f-sub"), ("прочие", 3, 1.5, "f-sub"),
+           ("прочие", 1.5, 3, "f-sub")]
+    for t, r, f, cls in lab:
+        svg.text(X(r) + c / 2, Y(f) + c / 2 + 4, t, cls, 10 if cls != "f-pen-t" else 9.5, anchor="middle")
+    svg.text(X(1.5) + c / 2, Y(4.5) + c / 2 - 3, "уходят", "f-pen-t", 10.5, anchor="middle")
+    svg.text(X(1.5) + c / 2, Y(4.5) + c / 2 + 11, "ценные", "f-pen-t", 10.5, anchor="middle")
+    for k in range(1, 6):
+        svg.text(X(k) + c / 2, Y(1) + c + 14, str(k), "f-sub", 10.5, anchor="middle")
+        svg.text(x0 - 8, Y(k) + c / 2 + 4, str(k), "f-sub", 10.5, anchor="end")
+    svg.text(X(1), Y(1) + c + 32, "R: давно ←  → недавно", "f-sub", 10.5)
+    svg.text(0, y0 - 8, "F", "f-sub", 10.5)
+    svg.note(0, Y(1) + c + 62, ["основная работа — с двумя", "выделенными углами"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "rfm-map": fig_rfm_map,
     "ltv-horizon": fig_ltv_horizon,
     "simpson-mix": fig_simpson_mix,
     "funnel-steps": fig_funnel_steps,
