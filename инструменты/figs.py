@@ -813,8 +813,61 @@ def fig_funnel_steps():
     return svg.render()
 
 
+def retention_data():
+    """Удержание дня N для N = 0..30 по двум определениям из урока 4.3:
+    классическое (активен ровно в день N) и скользящее (в день N или позже).
+    Знаменатель — все пользователи приложения. Доли, в процентах."""
+    con = db()
+    days = {}
+    for u, d in con.execute(
+            "SELECT u.user_id, CAST(julianday(a.activity_date) - julianday(u.signup_date) AS INTEGER) "
+            "FROM app_users u JOIN app_activity a USING (user_id)"):
+        days.setdefault(u, set()).add(d)
+    total = con.execute("SELECT COUNT(*) FROM app_users").fetchone()[0]
+    last = {u: max(v) for u, v in days.items()}
+    classic = [100 * sum(n in v for v in days.values()) / total for n in range(31)]
+    rolling = [100 * sum(m >= n for m in last.values()) / total for n in range(31)]
+    return classic, rolling
+
+
+def fig_retention_defs():
+    classic, rolling = retention_data()
+    x0, x1, yt, yb = 34, 322, 40, 220
+    X = lambda n: x0 + (x1 - x0) * n / 30
+    Y = lambda v: yb - (yb - yt) * v / 100
+    marks = (1, 7, 14, 30)
+    svg = Svg("retention-defs", 300,
+              "Удержание по двум определениям на одних и тех же пользователях",
+              "Две кривые удержания с нулевого по тридцатый день. Скользящее (активен в день N или позже): "
+              + ", ".join(f"D{n} {pct(rolling[n])}" for n in marks)
+              + " процента. Классическое (активен ровно в день N): "
+              + ", ".join(f"D{n} {pct(classic[n])}" for n in marks)
+              + ". На тридцатом дне разница в два с половиной раза.")
+    svg.text(0, 14, "удержание дня N, 4000 пользователей", "f-hd", 12.5)
+    for v in (0, 25, 50, 75, 100):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v}%", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(n):.1f} {Y(v):.1f}" for n, v in enumerate(classic)), "f-raw")
+    svg.path("M" + " L".join(f"{X(n):.1f} {Y(v):.1f}" for n, v in enumerate(rolling)), "f-pen")
+    for n in marks:
+        svg.circle(X(n), Y(rolling[n]), 2.6)
+        svg.text(X(n) + (3 if n == 1 else 0), Y(rolling[n]) - 8, pct(rolling[n]), "f-pen-t", 11.5,
+                 anchor="end" if n == 30 else "start" if n == 1 else "middle")
+        svg.circle(X(n), Y(classic[n]), 2.2, "f-sub")
+        svg.text(X(n) + (6 if n == 1 else 0), Y(classic[n]) + (-4 if n == 1 else 15), pct(classic[n]), "f-sub", 10.5,
+                 anchor="end" if n == 30 else "start" if n == 1 else "middle")
+    for n in marks:
+        svg.line(X(n), yb, X(n), yb + 4, "f-row")
+        svg.text(X(n), yb + 16, f"D{n}", "f-sub", 10.5, anchor="middle")
+    svg.text(X(21), Y(rolling[21]) - 22, "скользящее", "f-pen-t", 11.5, anchor="middle")
+    svg.text(X(21), Y(classic[21]) + 26, "классическое", "f-sub", 10.5, anchor="middle")
+    svg.note(0, yb + 44, ["одни и те же люди — а числа", "расходятся в два с половиной раза"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
     "funnel-steps": fig_funnel_steps,
+    "retention-defs": fig_retention_defs,
 }
 
 
@@ -822,6 +875,10 @@ def check_m4():
     errs = []
     if funnel_data() != [220, 206, 175, 121, 64]:
         errs.append(f"funnel-steps: {funnel_data()} вместо 220 → 206 → 175 → 121 → 64 из урока 4.2")
+    c, r = retention_data()
+    got = [(n, pct(c[n]), pct(r[n])) for n in (1, 7, 14, 30)]
+    if got != [(1, "40,1", "56,8"), (7, "18,8", "41,1"), (14, "12,2", "30,4"), (30, "6,5", "15,9")]:
+        errs.append(f"retention-defs: {got} — не совпало с теорией урока 4.3")
     return errs
 
 
