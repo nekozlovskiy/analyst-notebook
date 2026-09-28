@@ -2119,7 +2119,46 @@ def fig_metric_levels():
     return svg.render()
 
 
+# Воронка найма из таблицы урока 6.6: середины диапазонов конверсий.
+HIRE_STEPS = [("отклики", None), ("ответ рекрутера", (.05, .15)), ("скрининг", (.6, .8)),
+              ("тестовое", (.4, .6)), ("техсекция", (.5, .7)), ("финал", (.3, .5)), ("оффер", (.3, .5))]
+HIRE_START = 300
+
+
+def hire_funnel():
+    n, out = HIRE_START, []
+    for name, rng in HIRE_STEPS:
+        if rng:
+            n *= sum(rng) / 2
+        out.append((name, n))
+    return out
+
+
+def fig_hire_funnel():
+    rows = hire_funnel()
+    lx, bx, bw, rh, y0 = 0, 112, 176, 26, 36
+    svg = Svg("hire-funnel", 272,
+              "Воронка найма от трёхсот откликов",
+              "Триста откликов, конверсии шагов — середины диапазонов из таблицы урока. Ответ рекрутера "
+              "получают около 30, скрининг проходят 21, тестовое делают около 10, до техсекции доходят 6, "
+              "до финала 2–3, оффер один. Самый узкий — первый шаг: из трёхсот остаются тридцать.")
+    svg.text(0, 14, f"{HIRE_START} откликов, середины диапазонов", "f-hd", 12.5)
+    for i, (name, v) in enumerate(rows):
+        y = y0 + i * rh
+        hot = i == 1
+        svg.text(lx, y + 13, name, "f-hd" if i in (0, len(rows) - 1) else "f-sub", 10.5)
+        svg.rect(bx, y + 2, max(3, bw * v / HIRE_START), 14, "f-pen" if hot else "f-box", 2)
+        lab = f"≈ {v:.0f}" if v >= 3.5 else ("2–3" if v >= 2 else f"≈ {v:.0f}")
+        svg.text(bx + max(3, bw * v / HIRE_START) + 6, y + 13, lab, "f-pen-t" if hot else "f-sub",
+                 11 if hot else 10.5)
+    svg.text(330, y0 + rh + 13, "−90%: резюме", "f-pen-t", 11, anchor="end")
+    y = y0 + len(rows) * rh
+    svg.note(0, y + 26, ["первый шаг самый узкий — резюме", "окупается сильнее подготовки к финалу"], 15)
+    return svg.render()
+
+
 FIGS_M6 = {
+    "hire-funnel": fig_hire_funnel,
     "metric-levels": fig_metric_levels,
     "agg-transform": fig_agg_transform,
     "streak-key": fig_streak_key,
@@ -2130,6 +2169,9 @@ FIGS_M6 = {
 
 def check_m6():
     """Чисел из базы на схемах m6 нет; сверяем только пример из урока 6.3."""
+    rows = hire_funnel()
+    if round(rows[-1][1], 2) != 1.01 or round(rows[1][1]) != 30:
+        return [f"hire-funnel: {rows} — середины таблицы урока 6.6 должны давать ≈1 оффер на 300"]
     keys = [k.isoformat() for _, _, k in streak_keys()]
     if keys != ["2024-02-29"] * 3 + ["2024-03-03"] * 2:
         return [f"streak-key: ключи {keys} не совпали с таблицей урока 6.3"]
