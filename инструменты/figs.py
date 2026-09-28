@@ -1107,7 +1107,152 @@ def fig_fwer_curve():
     return svg.render()
 
 
+# Игрушечные чеки к уроку 3.3: у A один гигантский заказ.
+MW_A, MW_B, MW_BIG, MW_SMALL = [1200, 2500, 3100, 100000], [900, 1500, 2000, 2800], 100000, 10000
+
+
+def mw_data(a=MW_A):
+    allv = sorted([(v, "A") for v in a] + [(v, "B") for v in MW_B])
+    ranks = [(v, g, i + 1) for i, (v, g) in enumerate(allv)]
+    ra = sum(r for _, g, r in ranks if g == "A")
+    return ranks, ra, ra - len(a) * (len(a) + 1) // 2
+
+
+def fig_mw_ranks():
+    ranks, ra, u = mw_data()
+    small = [MW_SMALL if v == MW_BIG else v for v in MW_A]
+    _, ra2, _ = mw_data(small)
+    rub = lambda v: f"{v:,}".replace(",", " ")
+    mean = lambda v: sum(v) / len(v)
+    cw, y = 330 / len(ranks), 40
+    svg = Svg("mw-ranks", 250,
+              "Ранги в критерии Манна-Уитни",
+              "Восемь чеков двух групп в общем ряду по возрастанию с рангами от 1 до 8. У группы A ранги "
+              f"{', '.join(str(r) for _, g, r in ranks if g == 'A')}, сумма {ra}, U = {u}. Самый большой чек A, "
+              f"{rub(MW_BIG)}, получает ранг 8. Если бы он был {rub(MW_SMALL)}, среднее A упало бы с "
+              f"{rub(round(mean(MW_A)))} до {rub(round(mean(small)))}, а ранг и сумма рангов не изменились бы.")
+    svg.text(0, 14, "общий ряд двух групп по возрастанию", "f-hd", 12.5)
+    for i, (v, g, r) in enumerate(ranks):
+        x = i * cw
+        a = g == "A"
+        svg.rect(x + 1, y, cw - 2, 26, "f-pen" if a else "f-box", 3)
+        svg.text(x + cw / 2, y + 17, rub(v), "f-sub", 9.5, anchor="middle")  # моноширинный не влезает
+        svg.text(x + cw / 2, y + 42, g, "f-pen-t" if a else "f-sub", 11, anchor="middle")
+        svg.text(x + cw / 2, y + 60, str(r), "f-hd", 11.5, anchor="middle")
+    svg.text(330, y + 84, f"ранги A: {' + '.join(str(r) for _, g, r in ranks if g == 'A')} = {ra};  U = {ra} − 10 = {u}",
+             "f-sub", 10.5, anchor="end")
+    t = y + 118
+    svg.text(0, t, f"если {rub(MW_BIG)} заменить на {rub(MW_SMALL)}:", "f-hd", 11.5)
+    svg.text(0, t + 20, f"среднее A: {rub(round(mean(MW_A)))} → {rub(round(mean(small)))}", "f-pen-t", 11.5)
+    svg.text(0, t + 38, f"сумма рангов A: {ra} → {ra2}", "f-sub", 10.5)
+    svg.note(0, t + 72, ["выброс важен только тем, кого обогнал"], 15)
+    return svg.render()
+
+
+def peek_data(seed=33, per_day=500, p=.05, days=14):
+    """Один A/A-тест: обе группы с конверсией 5%, по 500 человек в день.
+    p-value z-теста по накопленным данным после каждого дня. Seed подобран
+    как наглядный пример: один раз ныряет ниже 0,05 и возвращается."""
+    import random
+    rnd = random.Random(seed)
+    ca = cb = n = 0
+    out = []
+    for _ in range(days):
+        ca += sum(rnd.random() < p for _ in range(per_day))
+        cb += sum(rnd.random() < p for _ in range(per_day))
+        n += per_day
+        pb = (ca + cb) / (2 * n)
+        z = (cb - ca) / n / (pb * (1 - pb) * 2 / n) ** .5
+        out.append(2 * (1 - Phi(abs(z))))
+    return out
+
+
+def fig_peeking():
+    pv = peek_data()
+    x0, x1, yt, yb = 34, 322, 36, 206
+    X = lambda d: x0 + (x1 - x0) * (d - 1) / (len(pv) - 1)
+    Y = lambda v: yb - (yb - yt) * v
+    stop = next(i for i, v in enumerate(pv) if v < .05)
+    f = lambda v: f"{v:.3f}".replace(".", ",")
+    svg = Svg("peeking", 302,
+              "Подглядывание в A/A-тесте",
+              "Один A/A-тест, где эффекта нет по построению. p-value по накопленным данным после каждого из "
+              f"14 дней бродит от {f(min(pv))} до {f(max(pv))}. На {stop + 1}-й день оно опускается до {f(pv[stop])}, "
+              "ниже порога 0,05: если остановить тест в этот момент, шум будет записан как победа. "
+              f"К концу теста p-value {f(pv[-1])}.")
+    svg.text(0, 14, "p-value после каждого дня, эффекта нет", "f-hd", 12.5)
+    for v in (0, .5, 1):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v:g}".replace(".", ","), "f-sub", 10.5, anchor="end")
+    svg.line(x0, Y(.05), x1, Y(.05), "f-soft")
+    svg.text(x1, Y(.05) - 4, "порог 0,05", "f-sub", 10, anchor="end")
+    svg.path("M" + " L".join(f"{X(i + 1):.1f} {Y(v):.1f}" for i, v in enumerate(pv)), "f-raw")
+    for i, v in enumerate(pv):
+        svg.circle(round(X(i + 1), 1), round(Y(v), 1), 3 if i == stop else 1.8,
+                   "f-pen-fill" if i == stop else "f-sub")
+    svg.text(X(len(pv)), Y(pv[-1]) - 8, f"день 14: {f(pv[-1])}", "f-sub", 10.5, anchor="end")
+    for d, anc in ((1, "start"), (7, "middle"), (14, "end")):
+        svg.text(X(d), yb + 16, f"день {d}", "f-sub", 10.5, anchor=anc)
+    # выноска вниз, под ось: внутри графика подписи некуда встать
+    svg.line(X(stop + 1), Y(pv[stop]) + 4, X(stop + 1), yb + 26, "f-pen")
+    svg.text(X(stop + 1) - 4, yb + 40, f"день {stop + 1}: p = {f(pv[stop])} — «победа», стоп",
+             "f-pen-t", 11.5)
+    svg.note(0, yb + 72, ["чем чаще смотрите, тем вернее", "поймаете шум ниже порога"], 15)
+    return svg.render()
+
+
+# Учебное разложение ARPU к проекту 3.7 (в тексте урока +32/−26 — ответ проекта).
+ARPU_A, ARPU_B = (.04, 5000), (.05, 4500)            # (конверсия, средний чек)
+
+
+def arpu_parts():
+    (c0, a0), (c1, a1) = ARPU_A, ARPU_B
+    return c0 * a0, c1 * a1, (c1 - c0) * a0, c0 * (a1 - a0), (c1 - c0) * (a1 - a0)
+
+
+def fig_arpu_split():
+    arpu0, arpu1, d_cr, d_aov, d_joint = arpu_parts()
+    (c0, a0), (c1, a1) = ARPU_A, ARPU_B
+    x0, yb, sx, sy = 40, 200, 52 / .01, 160 / 5000     # px на процентный пункт и на рубль
+    X = lambda c: x0 + sx * c
+    Y = lambda a: yb - sy * a
+    r = lambda v: f"{v:+.0f}".replace("-", "−")
+    svg = Svg("arpu-split", 312,
+              "Разложение выручки на пользователя на конверсию и чек",
+              f"Выручка на пользователя — площадь прямоугольника: конверсия по горизонтали, средний чек по "
+              f"вертикали. Контроль: 4 процента на 5 000, ARPU {arpu0:.0f}. Тест: 5 процентов на 4 500, "
+              f"ARPU {arpu1:.0f}. Полоса справа — вклад конверсии, {r(d_cr)} рублей. Полоса сверху — "
+              f"потеря от чека, {r(d_aov)}. Угол — совместный вклад, {r(d_joint)}. Итого {r(arpu1 - arpu0)}.")
+    svg.text(0, 14, "ARPU = конверсия × чек = площадь", "f-hd", 12.5)
+    svg.rect(X(0), Y(a0), sx * c0, sy * a0, "f-box", 0)            # контроль
+    svg.rect(X(0), Y(a1), sx * c1, sy * a1, "f-pen", 0)            # тест
+    k = 0                                                         # штриховка полосы «конверсия»
+    while X(c0) + 4 * k < X(c1):
+        xx = X(c0) + 4 * k
+        svg.line(round(xx, 1), Y(a1), round(xx, 1), yb, "f-soft")
+        k += 1
+    svg.text((X(c0) + X(c1)) / 2, Y(a1 / 2), r(d_cr), "f-pen-t", 12, anchor="middle")
+    svg.text(X(c0 / 2), (Y(a0) + Y(a1)) / 2 + 4, f"{r(d_aov)} чек", "f-sub", 10.5, anchor="middle")
+    # вклад конверсии — вся полоса до старого чека; угол над новым чеком из неё срезан
+    svg.rect(X(c0), Y(a0), sx * (c1 - c0), sy * a0, "f-soft", 0)
+    svg.text(X(c1), Y(a0) - 6, f"угол {r(d_joint)}", "f-sub", 10, anchor="end")
+    svg.text(X(c0 / 2), Y(a1 / 2), f"контроль {arpu0:.0f}", "f-sub", 10.5, anchor="middle")
+    for c in (0, c0, c1):
+        svg.text(X(c), yb + 16, f"{c * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    for a in (a1, a0):
+        svg.text(x0 - 6, Y(a) + (10 if a == a1 else 0), f"{a:,}".replace(",", " "), "f-sub", 10, anchor="end")
+    svg.text(X(c1) + 70, yb + 16, "конверсия →", "f-sub", 10.5, anchor="middle")
+    y = yb + 44
+    svg.text(0, y, f"ARPU: {arpu0:.0f} → {arpu1:.0f}, то есть {r(arpu1 - arpu0)} ₽ =", "f-hd", 11.5)
+    svg.text(0, y + 18, f"{r(d_cr)} конверсия  {r(d_aov)} чек  {r(d_joint)} совместный", "f-pen-t", 11.5)
+    svg.note(0, y + 48, ["рост ARPU складывается из плюса", "и минуса — важно, за счёт чего"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
+    "arpu-split": fig_arpu_split,
+    "peeking": fig_peeking,
+    "mw-ranks": fig_mw_ranks,
     "clt-means": fig_clt_means,
     "ci-100": fig_ci_100,
     "power-bells": fig_power_bells,
@@ -1117,6 +1262,15 @@ FIGS_M3 = {
 
 def check_m3():
     errs = []
+    got = [round(v, 6) for v in arpu_parts()]
+    if got != [200, 225, 50, -20, -5] or abs(got[2] + got[3] + got[4] - (got[1] - got[0])) > 1e-9:
+        errs.append(f"arpu-split: {got}")
+    pv = peek_data()
+    if [f"{v:.3f}" for v in (pv[3], pv[-1])] != ["0.043", "0.595"] or sum(v < .05 for v in pv) != 1:
+        errs.append(f"peeking: {[round(v, 3) for v in pv]}")
+    ranks, ra, u = mw_data()
+    if (ra, u, mw_data([MW_SMALL if v == MW_BIG else v for v in MW_A])[1]) != (22, 12, 22):
+        errs.append(f"mw-ranks: сумма рангов {ra}, U {u}")
     means, mu = clt_data()
     got = [(n, f"{sum(v) / len(v):.2f}", f"{sd(v):.2f}") for n, v in means.items()]
     if got != [(1, "3505.93", "1777.50"), (5, "3459.17", "778.80"), (30, "3454.78", "323.06")]:
