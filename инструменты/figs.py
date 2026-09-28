@@ -1149,7 +1149,60 @@ def fig_mw_ranks():
     return svg.render()
 
 
+def peek_data(seed=33, per_day=500, p=.05, days=14):
+    """Один A/A-тест: обе группы с конверсией 5%, по 500 человек в день.
+    p-value z-теста по накопленным данным после каждого дня. Seed подобран
+    как наглядный пример: один раз ныряет ниже 0,05 и возвращается."""
+    import random
+    rnd = random.Random(seed)
+    ca = cb = n = 0
+    out = []
+    for _ in range(days):
+        ca += sum(rnd.random() < p for _ in range(per_day))
+        cb += sum(rnd.random() < p for _ in range(per_day))
+        n += per_day
+        pb = (ca + cb) / (2 * n)
+        z = (cb - ca) / n / (pb * (1 - pb) * 2 / n) ** .5
+        out.append(2 * (1 - Phi(abs(z))))
+    return out
+
+
+def fig_peeking():
+    pv = peek_data()
+    x0, x1, yt, yb = 34, 322, 36, 206
+    X = lambda d: x0 + (x1 - x0) * (d - 1) / (len(pv) - 1)
+    Y = lambda v: yb - (yb - yt) * v
+    stop = next(i for i, v in enumerate(pv) if v < .05)
+    f = lambda v: f"{v:.3f}".replace(".", ",")
+    svg = Svg("peeking", 302,
+              "Подглядывание в A/A-тесте",
+              "Один A/A-тест, где эффекта нет по построению. p-value по накопленным данным после каждого из "
+              f"14 дней бродит от {f(min(pv))} до {f(max(pv))}. На {stop + 1}-й день оно опускается до {f(pv[stop])}, "
+              "ниже порога 0,05: если остановить тест в этот момент, шум будет записан как победа. "
+              f"К концу теста p-value {f(pv[-1])}.")
+    svg.text(0, 14, "p-value после каждого дня, эффекта нет", "f-hd", 12.5)
+    for v in (0, .5, 1):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v:g}".replace(".", ","), "f-sub", 10.5, anchor="end")
+    svg.line(x0, Y(.05), x1, Y(.05), "f-soft")
+    svg.text(x1, Y(.05) - 4, "порог 0,05", "f-sub", 10, anchor="end")
+    svg.path("M" + " L".join(f"{X(i + 1):.1f} {Y(v):.1f}" for i, v in enumerate(pv)), "f-raw")
+    for i, v in enumerate(pv):
+        svg.circle(round(X(i + 1), 1), round(Y(v), 1), 3 if i == stop else 1.8,
+                   "f-pen-fill" if i == stop else "f-sub")
+    svg.text(X(len(pv)), Y(pv[-1]) - 8, f"день 14: {f(pv[-1])}", "f-sub", 10.5, anchor="end")
+    for d, anc in ((1, "start"), (7, "middle"), (14, "end")):
+        svg.text(X(d), yb + 16, f"день {d}", "f-sub", 10.5, anchor=anc)
+    # выноска вниз, под ось: внутри графика подписи некуда встать
+    svg.line(X(stop + 1), Y(pv[stop]) + 4, X(stop + 1), yb + 26, "f-pen")
+    svg.text(X(stop + 1) - 4, yb + 40, f"день {stop + 1}: p = {f(pv[stop])} — «победа», стоп",
+             "f-pen-t", 11.5)
+    svg.note(0, yb + 72, ["чем чаще смотрите, тем вернее", "поймаете шум ниже порога"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
+    "peeking": fig_peeking,
     "mw-ranks": fig_mw_ranks,
     "clt-means": fig_clt_means,
     "ci-100": fig_ci_100,
@@ -1160,6 +1213,9 @@ FIGS_M3 = {
 
 def check_m3():
     errs = []
+    pv = peek_data()
+    if [f"{v:.3f}" for v in (pv[3], pv[-1])] != ["0.043", "0.595"] or sum(v < .05 for v in pv) != 1:
+        errs.append(f"peeking: {[round(v, 3) for v in pv]}")
     ranks, ra, u = mw_data()
     if (ra, u, mw_data([MW_SMALL if v == MW_BIG else v for v in MW_A])[1]) != (22, 12, 22):
         errs.append(f"mw-ranks: сумма рангов {ra}, U {u}")
