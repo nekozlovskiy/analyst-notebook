@@ -1968,7 +1968,49 @@ def fig_cv_gates():
     return svg.render()
 
 
+def fig_notebook_scan():
+    pw, ph, top = 150, 220, 34
+    svg = Svg("notebook-scan", 318,
+              "Ноутбук глазами проверяющего",
+              "Два ноутбука при беглом пролистывании. Слева только ячейки кода и длинные полотна вывода — "
+              "взгляду не за что зацепиться, такой закрывают. Справа заголовок, короткий код, график и "
+              "вывод текстом с числом — вывод виден без чтения кода, такой досматривают.")
+    svg.text(0, 14, "минута пролистывания", "f-hd", 12.5)
+    for k, x0 in enumerate((0, pw + 30)):
+        svg.rect(x0, top, pw, ph, "f-box", 4)
+        y = top + 10
+        if k == 0:
+            for blk in range(4):                        # код + полотно вывода
+                svg.rect(x0 + 8, y, pw - 16, 22, "f-soft", 2)
+                for j in range(2):
+                    svg.line(x0 + 14, y + 7 + j * 8, x0 + 14 + (90 if j else 110), y + 7 + j * 8, "f-raw")
+                y += 28
+                for j in range(4):                      # полотно вывода: густо и заметно
+                    svg.line(x0 + 10, y + j * 5, x0 + pw - 12 - (j % 2) * 20, y + j * 5, "f-soft")
+                y += 22
+        else:
+            svg.text(x0 + 10, y + 10, "Отток по каналам", "f-hd", 11)
+            svg.rect(x0 + 8, y + 18, pw - 16, 16, "f-soft", 2)
+            svg.line(x0 + 14, y + 26, x0 + 100, y + 26, "f-raw")
+            y += 44
+            svg.rect(x0 + 10, y, pw - 20, 78, "f-soft", 2)   # график
+            for i, v in enumerate((.8, .55, .4, .25)):
+                svg.rect(x0 + 18, y + 8 + i * 17, (pw - 40) * v, 10, "f-box", 2)
+            y += 90
+            svg.rect(x0 + 6, y - 4, pw - 12, 42, "f-pen", 4)
+            svg.text(x0 + 12, y + 12, "Вывод: social теряет", "f-pen-t", 10)
+            svg.text(x0 + 12, y + 28, "вдвое больше, 41%", "f-pen-t", 10)
+            y += 50
+            svg.line(x0 + 10, y, x0 + pw - 30, y, "f-row")
+            svg.line(x0 + 10, y + 8, x0 + pw - 60, y + 8, "f-row")
+        svg.text(x0 + pw / 2, top + ph + 18, "закрывают" if k == 0 else "досмотрят",
+                 "f-sub" if k == 0 else "f-pen-t", 11 if k == 0 else 11.5, anchor="middle")
+    svg.note(0, top + ph + 50, ["выводы видны без чтения кода"], 15)
+    return svg.render()
+
+
 FIGS_M6 = {
+    "notebook-scan": fig_notebook_scan,
     "cv-gates": fig_cv_gates,
 }
 
