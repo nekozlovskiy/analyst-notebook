@@ -2084,7 +2084,43 @@ def fig_agg_transform():
     return svg.render()
 
 
+def fig_metric_levels():
+    """Урок 6.5, свой пример: видео в карточке товара (не фичи задачи и тренажёра)."""
+    levels = [("ключевая — одна", "решение по ней", ["конверсия карточки в покупку"]),
+              ("вспомогательные", "за счёт чего", ["смотрели видео, %", "в корзину после видео"]),
+              ("предохранители", "что не сломать", ["загрузка карточки", "доля возвратов"])]
+    bh, y = 30, 50
+    svg = Svg("metric-levels", 326,
+              "Три уровня метрик на примере",
+              "Фича: видео в карточке товара. Ключевая метрика одна — конверсия карточки в покупку. "
+              "Вспомогательные объясняют механизм: доля посмотревших видео и переход в корзину после видео. "
+              "Предохранители не должны ухудшиться: скорость загрузки карточки и доля возвратов.")
+    svg.text(0, 14, "фича: видео в карточке товара", "f-hd", 12.5)
+    prev = None
+    for i, (lvl, why, boxes) in enumerate(levels):
+        svg.text(0, y - 8, lvl, "f-hd" if i == 0 else "f-sub", 11 if i == 0 else 10.5)
+        svg.text(330, y - 8, why, "f-sub", 10, anchor="end")
+        n = len(boxes)
+        bw = (330 - 10 * (n - 1)) / n
+        cur = []
+        for k, t in enumerate(boxes):
+            x = k * (bw + 10)
+            svg.rect(x, y, bw, bh, "f-pen" if i == 0 else "f-box", 5)
+            svg.text(x + bw / 2, y + bh / 2 + 4, t, "f-pen-t" if i == 0 else "f-sub",
+                     11 if i == 0 else 10.5, anchor="middle")
+            cur.append(x + bw / 2)
+        if prev is not None and i == 1:
+            for cx in cur:
+                svg.path(f"M{prev[0]:.1f} {y - 50} L{cx:.1f} {y}", "f-soft")   # от низа ключевой
+        prev = cur
+        y += bh + 50
+    svg.text(0, y - 26, "предохранители смотрят, даже если ключевая выросла", "f-sub", 10)
+    svg.note(0, y + 6, ["«будем смотреть на конверсию» —", "слабо; сильно — все три этажа"], 15)
+    return svg.render()
+
+
 FIGS_M6 = {
+    "metric-levels": fig_metric_levels,
     "agg-transform": fig_agg_transform,
     "streak-key": fig_streak_key,
     "notebook-scan": fig_notebook_scan,
