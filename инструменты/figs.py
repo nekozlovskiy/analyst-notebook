@@ -778,7 +778,42 @@ def fig_axis_cut():
     return svg.render()
 
 
+def fig_return_vs_print():
+    svg = Svg("return-vs-print", 330,
+              "Функция возвращает или печатает",
+              "Сверху: channel_report принимает таблицы и статус и возвращает DataFrame. Его можно "
+              "напечатать, сохранить в файл, нарисовать графиком или передать в следующий расчёт. "
+              "Снизу: функция, которая печатает внутри себя, выводит таблицу на экран и возвращает None — "
+              "дальше с результатом ничего сделать нельзя.")
+    svg.text(0, 14, "функция возвращает", "f-hd", 12.5)
+    for i, a in enumerate(("users_df", "orders_df", 'status="paid"')):
+        svg.text(0, 44 + i * 16, a, "f-sub", 10.5)
+    svg.path("M86 60 H104", "f-soft")
+    svg.rect(108, 44, 116, 30, "f-pen", 5)
+    svg.text(166, 63, "channel_report()", "f-pen-t", 11, anchor="middle")
+    svg.path("M166 74 V96", "f-soft")
+    svg.rect(120, 98, 92, 24, "f-box", 4)
+    svg.text(166, 114, "DataFrame", "f-hd", 11, anchor="middle")
+    uses = [("print(rep)", "показать"), ("rep.to_csv", "сохранить"),
+            ("rep.plot", "нарисовать"), ("rep.merge", "считать дальше")]
+    for i, (code, what) in enumerate(uses):
+        x = 4 + i * 82
+        svg.path(f"M166 122 L{x + 36} 148", "f-soft")
+        svg.text(x + 36, 162, code, "f-pen-t", 10, anchor="middle")
+        svg.text(x + 36, 176, what, "f-sub", 10, anchor="middle")
+    y = 214
+    svg.text(0, y, "функция печатает", "f-hd", 12.5)
+    svg.rect(0, y + 14, 150, 30, "f-box", 5)
+    svg.text(75, y + 33, "channel_report_print()", "f-sub", 10.5, anchor="middle")
+    svg.path(f"M150 {y + 29} H176", "f-soft")
+    svg.text(182, y + 26, "таблица на экране", "f-sub", 10.5)
+    svg.text(182, y + 41, "вернула None", "f-pen-t", 11.5)
+    svg.note(0, y + 82, ["результат увидели глазами —", "и больше ничего с ним не сделать"], 15)
+    return svg.render()
+
+
 FIGS_M2 = {
+    "return-vs-print": fig_return_vs_print,
     "axis-cut": fig_axis_cut,
     "clean-order": fig_clean_order,
     "groupby-sac": fig_groupby_sac,
