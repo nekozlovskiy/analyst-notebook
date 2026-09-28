@@ -812,7 +812,44 @@ def fig_return_vs_print():
     return svg.render()
 
 
+# Пример из ловушки урока 2.7: «Казань, 40 процентов при 47 наблюдениях,
+# сдвиньте трёх человек». Для сравнения — город вдесятеро больше.
+SMALL_GROUPS = [("Казань", 19, 47), ("город вдесятеро больше", 190, 470)]
+SHIFT = 3
+
+
+def fig_small_group():
+    lo, hi, x0, x1 = .30, .45, 20, 320
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    p1 = lambda v: f"{100 * v:.1f}".replace(".", ",") + "%"
+    rows = [(name, k / n, (k - SHIFT) / n, k, n) for name, k, n in SMALL_GROUPS]
+    svg = Svg("small-group", 248,
+              "Три человека и маленькая группа",
+              "Две группы с одинаковой конверсией 40,4 процента. В Казани 19 покупателей из 47: "
+              f"если трое не купили бы, конверсия упадёт до {p1(rows[0][2])}. В городе на 470 человек "
+              f"те же трое сдвигают её только до {p1(rows[1][2])}.")
+    svg.text(0, 14, "минус три покупателя", "f-hd", 12.5)
+    for i, (name, a, b, k, n) in enumerate(rows):
+        y = 58 + i * 70
+        svg.text(0, y - 20, f"{name}: {k} из {n}", "f-hd", 11.5)
+        svg.line(x0, y, x1, y, "f-row")
+        svg.circle(X(a), y, 3.2, "f-sub")
+        svg.circle(X(b), y, 3.2)
+        svg.path(f"M{X(a) - 5:.1f} {y} L{X(b) + 6:.1f} {y}", "f-pen")
+        svg.text(X(a) + 2, y + 18, p1(a), "f-sub", 10.5)            # было — справа от точки
+        svg.text(X(b) - 2, y + 18, p1(b), "f-pen-t", 11.5, anchor="end")  # стало — слева
+        d = f"{100 * (a - b):.1f}".replace(".", ",")
+        svg.text(x1, y - 20, f"−{d} п.п.", "f-pen-t", 11.5, anchor="end")
+    for v in (.30, .35, .40, .45):
+        svg.text(X(v), 188, f"{v * 100:.0f}%", "f-sub", 10, anchor="middle")
+        svg.line(X(v), 174, X(v), 178, "f-row")
+    svg.line(x0, 176, x1, 176, "f-row")
+    svg.note(0, 218, ["маленькую группу три человека двигают", "в десять раз сильнее"], 15)
+    return svg.render()
+
+
 FIGS_M2 = {
+    "small-group": fig_small_group,
     "return-vs-print": fig_return_vs_print,
     "axis-cut": fig_axis_cut,
     "clean-order": fig_clean_order,
@@ -824,6 +861,9 @@ FIGS_M2 = {
 
 def check_m2():
     errs = []
+    got = [f"{100 * k / n:.1f}/{100 * (k - SHIFT) / n:.1f}" for _, k, n in SMALL_GROUPS]
+    if got != ["40.4/34.0", "40.4/39.8"]:
+        errs.append(f"small-group: {got}")
     good, bad = city_orders()
     if (len(set(good)), len(set(bad))) != (2, 3):
         errs.append(f"clean-order: {good} / {bad} — ждали 2 города против 3")
