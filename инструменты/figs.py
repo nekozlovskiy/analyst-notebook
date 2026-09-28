@@ -519,7 +519,87 @@ def check_m2():
     return errs
 
 
-MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2)}
+# ---------------------------------------------------------------- схемы m3
+
+def clt_data():
+    """Средние 2000 выборок с возвращением из оплаченных чеков — ровно
+    как в задаче урока 3.1: Random(42) заново для каждого n, choice
+    n раз. Строки в порядке order_id, как их читает pandas из data.js.
+    Возвращает {n: список средних} и среднее совокупности."""
+    import random
+    rev = [r for (r,) in db().execute(
+        "SELECT revenue FROM orders WHERE status = 'paid' ORDER BY order_id")]
+    out = {}
+    for n in (1, 5, 30):
+        rnd = random.Random(42)
+        out[n] = [sum(rnd.choice(rev) for _ in range(n)) / n for _ in range(2000)]
+    return out, sum(rev) / len(rev)
+
+
+def sd(v):
+    m = sum(v) / len(v)
+    return (sum((x - m) ** 2 for x in v) / (len(v) - 1)) ** .5
+
+
+def fig_clt_means():
+    means, mu = clt_data()
+    top, step = 11000, 250                          # ось и ширина корзины, руб.
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * v / top
+    svg = Svg("clt-means", 372,
+              "Центральная предельная теорема на оплаченных чеках",
+              "Три гистограммы на одной оси: средние 2000 случайных выборок из оплаченных чеков. "
+              f"При n=1 это сами чеки — скошенная форма с хвостом вправо, разброс {sd(means[1]):.0f} руб. "
+              f"При n=5 форма ближе к симметричной, разброс {sd(means[5]):.0f}. "
+              f"При n=30 — узкий симметричный колокол вокруг {mu:.0f}, разброс {sd(means[30]):.0f}: "
+              "падает как корень из n, а центр остаётся на месте.")
+    svg.text(0, 14, "средние 2000 выборок, руб.", "f-hd", 12.5)
+    ph, gap, y = 70, 26, 34                         # высота панели, зазор, верх первой
+    for n in (1, 5, 30):
+        v = means[n]
+        cnt = [0] * (top // step)
+        for m in v:
+            cnt[int(m // step)] += 1
+        base, hi = y + ph, max(cnt)
+        cls = "f-pen" if n == 30 else "f-raw"
+        d = f"M{X(0):.1f} {base}"
+        for i, c in enumerate(cnt):
+            h = base - (ph - 8) * c / hi
+            d += f" L{X(i * step):.1f} {h:.1f} L{X((i + 1) * step):.1f} {h:.1f}"
+        svg.path(d + f" L{X(top):.1f} {base}", cls)
+        svg.line(x0, base, x1, base, "f-row")
+        svg.text(x1, y + 10, f"n = {n}", "f-hd", 12.5, anchor="end")
+        svg.text(x1, y + 26, f"разброс {sd(v):.0f}", "f-pen-t" if n == 30 else "f-sub",
+                 11.5 if n == 30 else 10.5, anchor="end")
+        y = base + gap
+    svg.path(f"M{X(mu):.1f} 26 V{y - gap + 4}", "f-soft")
+    svg.text(X(mu) + 4, 30, f"среднее {mu:.0f}", "f-sub", 10.5)
+    axis = y - gap + 4
+    for v in (0, 5000, 10000):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v:,}".replace(",", " "), "f-sub", 10.5,
+                 anchor="start" if v == 0 else "middle")
+    svg.note(0, axis + 46, ["чеки остаются скошенными —", "колоколом становится среднее"], 15)
+    return svg.render()
+
+
+FIGS_M3 = {
+    "clt-means": fig_clt_means,
+}
+
+
+def check_m3():
+    errs = []
+    means, mu = clt_data()
+    got = [(n, f"{sum(v) / len(v):.2f}", f"{sd(v):.2f}") for n, v in means.items()]
+    if got != [(1, "3505.93", "1777.50"), (5, "3459.17", "778.80"), (30, "3454.78", "323.06")]:
+        errs.append(f"clt-means: {got} — не совпало с эталоном задачи урока 3.1")
+    if f"{mu:.2f}" != "3457.30":
+        errs.append(f"clt-means: среднее совокупности {mu:.2f}")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
