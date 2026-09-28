@@ -432,8 +432,43 @@ def fig_row_vs_column():
     return svg.render()
 
 
+# Учебная воронка к проекту 1.7: реальная (220 -> ... -> 64) — ответ проекта.
+TWO_CONV = [("визит", 1000), ("карточка", 600), ("корзина", 300), ("оплата", 240)]
+
+
+def fig_two_conversions():
+    n = [v for _, v in TWO_CONV]
+    step = [None] + [100 * n[i] / n[i - 1] for i in range(1, len(n))]
+    worst = min(range(1, len(n)), key=lambda i: step[i])
+    bx, bw, bh, gap, y0 = 96, 100, 22, 16, 50         # полосы правее подписей
+    cs, cp = 250, 324                               # правые края колонок
+    svg = Svg("two-conversions", 250,
+              "Сквозная и пошаговая конверсия",
+              "Учебная воронка: " + " → ".join(f"{t} {v}" for t, v in TWO_CONV) + ". Сквозная конверсия — "
+              "доля от первого шага: " + ", ".join(f"{100 * v / n[0]:.0f}" for v in n) + " процентов. "
+              "Пошаговая — доля от предыдущего: " + ", ".join(f"{v:.0f}" for v in step[1:]) + ". "
+              f"Хуже всего переход на шаг «{TWO_CONV[worst][0]}»: {step[worst]:.0f} процентов.")
+    svg.text(0, 14, "учебная воронка, 1000 человек", "f-hd", 12.5)
+    svg.text(cs, 38, "сквозная", "f-sub", 10.5, anchor="end")
+    svg.text(cp, 38, "пошаговая", "f-sub", 10.5, anchor="end")
+    for i, (t, v) in enumerate(TWO_CONV):
+        y = y0 + i * (bh + gap)
+        svg.rect(bx, y, bw * v / n[0], bh, "f-box", 3)
+        svg.text(0, y + 15, f"{t} · {v}", "f-hd", 11)
+        svg.text(cs, y + 15, f"{100 * v / n[0]:.0f}%", "f-sub", 10.5, anchor="end")
+        hot = i == worst
+        svg.text(cp, y + 15, "—" if step[i] is None else f"{step[i]:.0f}%",
+                 "f-pen-t" if hot else "f-sub", 11.5 if hot else 10.5, anchor="end")
+        if hot:
+            svg.rect(cp - 40, y + 1, 44, bh - 2, "f-pen", 4)
+    y = y0 + len(n) * (bh + gap) + 14
+    svg.note(0, y, ["сквозная — сколько потеряли всего,", "пошаговая — где именно чинить"], 15)
+    return svg.render()
+
+
 FIGS_M1 = {
     "where-having": fig_where_having,
+    "two-conversions": fig_two_conversions,
     "row-vs-column": fig_row_vs_column,
     "cte-chain": fig_cte_chain,
     "corr-subquery": fig_corr_subquery,
@@ -449,6 +484,8 @@ FIGS_M1 = {
 def check_m1():
     """Числа, которые стоят на схемах, — ровно те, что даёт база."""
     errs = []
+    if [v for _, v in TWO_CONV] != [1000, 600, 300, 240]:
+        errs.append("two-conversions: поменялась учебная воронка — проверьте подпись схемы")
     if where_having_data() != {"A": 4000, "B": 2000, "C": 6000}:
         errs.append(f"where-having: суммы {where_having_data()}")
     if num(cte_avg()) != "6282.97":
