@@ -765,7 +765,173 @@ def check_m3():
     return errs
 
 
-MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3)}
+# ---------------------------------------------------------------- схемы m4
+
+FUNNEL = [("visit", "визит"), ("view_product", "карточка"), ("add_to_cart", "корзина"),
+          ("checkout", "оформление"), ("purchase", "оплата")]
+
+
+def funnel_data():
+    """Уникальные пользователи на каждом шаге — как в задаче урока 4.2,
+    без временного окна."""
+    con = db()
+    return [con.execute("SELECT COUNT(DISTINCT user_id) FROM events WHERE event_name = ?",
+                        (e,)).fetchone()[0] for e, _ in FUNNEL]
+
+
+def pct(v, digits=1):
+    return f"{v:.{digits}f}".replace(".", ",")
+
+
+def fig_funnel_steps():
+    users = funnel_data()
+    worst = min(range(1, 5), key=lambda i: users[i] / users[i - 1])
+    cx, wmax, bh, gap, y = 165, 300, 24, 26, 30
+    svg = Svg("funnel-steps", 318,
+              "Воронка «Дельта Маркет» по шагам",
+              "Пять шагов, ширина полосы — число людей: "
+              + ", ".join(f"{n} {u}" for (_, n), u in zip(FUNNEL, users))
+              + ". Конверсии шагов: "
+              + ", ".join(pct(100 * users[i] / users[i - 1]) for i in range(1, 5))
+              + f" процента. Хуже всего переход в оплату: там теряем {users[worst - 1] - users[worst]} человек. "
+              f"Сквозная конверсия {pct(100 * users[-1] / users[0])} процента.")
+    svg.text(0, 14, "уникальные пользователи, без окна", "f-hd", 12.5)
+    for i, ((_, name), u) in enumerate(zip(FUNNEL, users)):
+        w = wmax * u / users[0]
+        svg.rect(cx - w / 2, y, w, bh, "f-box", 4)
+        svg.text(cx, y + 16, f"{name} · {u}", "f-hd", 11.5, anchor="middle")
+        if i < 4:
+            c = 100 * users[i + 1] / u
+            hot = i + 1 == worst
+            s = f"↓ {pct(c)}%" + (f"   −{u - users[i + 1]} человек" if hot else "")
+            svg.text(cx, y + bh + 17, s, "f-pen-t" if hot else "f-sub", 11.5 if hot else 10.5,
+                     anchor="middle")
+        y += bh + gap
+    y -= gap
+    svg.text(330, y + 22, f"сквозная {pct(100 * users[-1] / users[0])}%", "f-sub", 10.5, anchor="end")
+    svg.note(0, y + 44, ["здесь теряем больше всего —", "и в процентах, и в людях"], 15)
+    return svg.render()
+
+
+def retention_data():
+    """Удержание дня N для N = 0..30 по двум определениям из урока 4.3:
+    классическое (активен ровно в день N) и скользящее (в день N или позже).
+    Знаменатель — все пользователи приложения. Доли, в процентах."""
+    con = db()
+    days = {}
+    for u, d in con.execute(
+            "SELECT u.user_id, CAST(julianday(a.activity_date) - julianday(u.signup_date) AS INTEGER) "
+            "FROM app_users u JOIN app_activity a USING (user_id)"):
+        days.setdefault(u, set()).add(d)
+    total = con.execute("SELECT COUNT(*) FROM app_users").fetchone()[0]
+    last = {u: max(v) for u, v in days.items()}
+    classic = [100 * sum(n in v for v in days.values()) / total for n in range(31)]
+    rolling = [100 * sum(m >= n for m in last.values()) / total for n in range(31)]
+    return classic, rolling
+
+
+def fig_retention_defs():
+    classic, rolling = retention_data()
+    x0, x1, yt, yb = 34, 322, 40, 220
+    X = lambda n: x0 + (x1 - x0) * n / 30
+    Y = lambda v: yb - (yb - yt) * v / 100
+    marks = (1, 7, 14, 30)
+    svg = Svg("retention-defs", 300,
+              "Удержание по двум определениям на одних и тех же пользователях",
+              "Две кривые удержания с нулевого по тридцатый день. Скользящее (активен в день N или позже): "
+              + ", ".join(f"D{n} {pct(rolling[n])}" for n in marks)
+              + " процента. Классическое (активен ровно в день N): "
+              + ", ".join(f"D{n} {pct(classic[n])}" for n in marks)
+              + ". На тридцатом дне разница в два с половиной раза.")
+    svg.text(0, 14, "удержание дня N, 4000 пользователей", "f-hd", 12.5)
+    for v in (0, 25, 50, 75, 100):
+        svg.line(x0, Y(v), x1, Y(v), "f-row")
+        svg.text(x0 - 6, Y(v) + 4, f"{v}%", "f-sub", 10.5, anchor="end")
+    svg.path("M" + " L".join(f"{X(n):.1f} {Y(v):.1f}" for n, v in enumerate(classic)), "f-raw")
+    svg.path("M" + " L".join(f"{X(n):.1f} {Y(v):.1f}" for n, v in enumerate(rolling)), "f-pen")
+    for n in marks:
+        svg.circle(X(n), Y(rolling[n]), 2.6)
+        svg.text(X(n) + (3 if n == 1 else 0), Y(rolling[n]) - 8, pct(rolling[n]), "f-pen-t", 11.5,
+                 anchor="end" if n == 30 else "start" if n == 1 else "middle")
+        svg.circle(X(n), Y(classic[n]), 2.2, "f-sub")
+        svg.text(X(n) + (6 if n == 1 else 0), Y(classic[n]) + (-4 if n == 1 else 15), pct(classic[n]), "f-sub", 10.5,
+                 anchor="end" if n == 30 else "start" if n == 1 else "middle")
+    for n in marks:
+        svg.line(X(n), yb, X(n), yb + 4, "f-row")
+        svg.text(X(n), yb + 16, f"D{n}", "f-sub", 10.5, anchor="middle")
+    svg.text(X(21), Y(rolling[21]) - 22, "скользящее", "f-pen-t", 11.5, anchor="middle")
+    svg.text(X(21), Y(classic[21]) + 26, "классическое", "f-sub", 10.5, anchor="middle")
+    svg.note(0, yb + 44, ["одни и те же люди — а числа", "расходятся в два с половиной раза"], 15)
+    return svg.render()
+
+
+# Учебный пример к теории урока 4.1 — числа свои, не из тренажёров
+# (там десктоп/мобильные в 4.1 и каналы базы в 4.3): визиты и покупки.
+SIMPSON = {"поиск": ((7500, 300), (3000, 126)), "реклама": ((2500, 30), (7000, 91))}
+
+
+def simpson_data():
+    tot = [tuple(sum(v[t][i] for v in SIMPSON.values()) for i in (0, 1)) for t in (0, 1)]
+    return {**SIMPSON, "итого": tuple(tot)}
+
+
+def fig_simpson_mix():
+    data = simpson_data()
+    xa, xb, yt, yb = 96, 236, 44, 204
+    Y = lambda v: yb - (yb - yt) * v / 5
+    cr = lambda vp: 100 * vp[1] / vp[0]
+    share = [100 * SIMPSON["реклама"][t][0] / data["итого"][t][0] for t in (0, 1)]
+    svg = Svg("simpson-mix", 300,
+              "Парадокс Симпсона: конверсия выросла в каждом канале и упала в целом",
+              "Два канала, было и стало, по 10 000 визитов. Поиск: "
+              f"{pct(cr(data['поиск'][0]))} → {pct(cr(data['поиск'][1]))} процента. Реклама: "
+              f"{pct(cr(data['реклама'][0]))} → {pct(cr(data['реклама'][1]))}. В целом: "
+              f"{pct(cr(data['итого'][0]), 2)} → {pct(cr(data['итого'][1]), 2)}. "
+              f"Причина — доля рекламы выросла с {share[0]:.0f} до {share[1]:.0f} процентов.")
+    svg.text(0, 14, "конверсия в покупку", "f-hd", 12.5)
+    for x, t in ((xa, "было"), (xb, "стало")):
+        svg.line(x, yt - 8, x, yb, "f-row")
+        svg.text(x, yb + 16, t, "f-sub", 10.5, anchor="middle")
+    svg.line(xa - 10, yb, xb + 10, yb, "f-row")
+    for name, (a, b) in data.items():
+        tot = name == "итого"
+        d = 2 if tot else 1
+        cls, tcls, size = ("f-pen", "f-pen-t", 11.5) if tot else ("f-raw", "f-sub", 10.5)
+        svg.path(f"M{xa} {Y(cr(a)):.1f} L{xb} {Y(cr(b)):.1f}", cls)
+        svg.circle(xa, Y(cr(a)), 2.6 if tot else 2.2, "f-pen-fill" if tot else "f-sub")
+        svg.circle(xb, Y(cr(b)), 2.6 if tot else 2.2, "f-pen-fill" if tot else "f-sub")
+        svg.text(xa - 8, Y(cr(a)) + 4, f"{pct(cr(a), d)}%", tcls, size, anchor="end")
+        svg.text(xb + 8, Y(cr(b)) + 4, f"{pct(cr(b), d)}%", tcls, size)
+        svg.text(0, Y(cr(a)) + 4, name, "f-hd" if tot else "f-sub", 11.5 if tot else 10.5)
+    svg.text(330, yb + 40, f"доля рекламы: {share[0]:.0f}% → {share[1]:.0f}%", "f-pen-t", 11.5, anchor="end")
+    svg.note(0, yb + 64, ["каждый канал вырос —", "а сумма упала: сдвинулся микс"], 15)
+    return svg.render()
+
+
+FIGS_M4 = {
+    "simpson-mix": fig_simpson_mix,
+    "funnel-steps": fig_funnel_steps,
+    "retention-defs": fig_retention_defs,
+}
+
+
+def check_m4():
+    errs = []
+    if funnel_data() != [220, 206, 175, 121, 64]:
+        errs.append(f"funnel-steps: {funnel_data()} вместо 220 → 206 → 175 → 121 → 64 из урока 4.2")
+    c, r = retention_data()
+    got = [(n, pct(c[n]), pct(r[n])) for n in (1, 7, 14, 30)]
+    if got != [(1, "40,1", "56,8"), (7, "18,8", "41,1"), (14, "12,2", "30,4"), (30, "6,5", "15,9")]:
+        errs.append(f"retention-defs: {got} — не совпало с теорией урока 4.3")
+    d = simpson_data()
+    got = [f"{100 * p / v:.2f}" for a, b in d.values() for v, p in (a, b)]
+    if got != ["4.00", "4.20", "1.20", "1.30", "3.30", "2.17"]:
+        errs.append(f"simpson-mix: {got} — пример должен расти в каналах и падать в целом")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
+           "m4": (FIGS_M4, check_m4)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
