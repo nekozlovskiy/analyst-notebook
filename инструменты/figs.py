@@ -314,8 +314,48 @@ def fig_where_having():
     return svg.render()
 
 
+def cte_avg():
+    return db().execute(
+        "WITH paid AS (SELECT * FROM orders WHERE status = 'paid'), "
+        "per_user AS (SELECT user_id, SUM(revenue) AS total FROM paid GROUP BY user_id) "
+        "SELECT ROUND(AVG(total), 2) FROM per_user").fetchone()[0]
+
+
+def fig_cte_chain():
+    """Пример из теории урока 1.4 как конвейер. Числа строк не пишем:
+    189 оплаченных — ответ шага практикума, вместо них стопки черт."""
+    avg = cte_avg()
+    money = f"{avg:,.2f}".replace(",", " ").replace(".", ",")
+    steps = [("orders", "строка = заказ", 6, None),
+             ("paid", "строка = оплаченный заказ", 5, "WHERE status = 'paid'"),
+             ("per_user", "строка = клиент", 3, "GROUP BY user_id, SUM"),
+             ("итог", f"одна строка: {money}", 1, "AVG(total)")]
+    bw, bh, gap, y = 118, 46, 32, 30
+    svg = Svg("cte-chain", 366,
+              "CTE как конвейер именованных шагов",
+              "Запрос из примера читается сверху вниз: таблица orders, где строка — заказ; шаг paid "
+              "оставляет только оплаченные заказы; шаг per_user сворачивает их до одной строки на клиента "
+              f"с суммой; финальный SELECT усредняет суммы и возвращает одну строку, {money} рубля. "
+              "С каждым шагом строк меньше, а смысл строки меняется.")
+    svg.text(0, 14, "WITH читается сверху вниз", "f-hd", 12.5)
+    for i, (name, sub, n, op) in enumerate(steps):
+        if op:
+            svg.path(f"M{bw / 2} {y - gap + 4} V{y - 4}", "f-soft")
+            svg.text(bw / 2 + 10, y - gap / 2 + 4, op, "f-pen-t", 11.5)
+        svg.rect(0, y, bw, bh, "f-pen" if i == len(steps) - 1 else "f-box", 5)
+        svg.text(10, y + 18, name, "f-hd", 12)
+        for k in range(n):                          # стопка «строк»: чем меньше, тем короче
+            svg.line(10, y + 27 + k * 3.2, 10 + 16 * n, y + 27 + k * 3.2, "f-raw")
+        svg.text(bw + 12, y + bh / 2 + 4, sub, "f-sub", 10.5)
+        y += bh + gap
+    svg.note(0, y + 4, ["каждый шаг можно запустить отдельно:"], 15)
+    svg.text(0, y + 24, "SELECT * FROM paid;", "f-pen-t", 11.5)
+    return svg.render()
+
+
 FIGS_M1 = {
     "where-having": fig_where_having,
+    "cte-chain": fig_cte_chain,
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
     "window-frame": fig_window_frame,
@@ -330,6 +370,8 @@ def check_m1():
     errs = []
     if where_having_data() != {"A": 4000, "B": 2000, "C": 6000}:
         errs.append(f"where-having: суммы {where_having_data()}")
+    if num(cte_avg()) != "6282.97":
+        errs.append(f"cte-chain: среднее {cte_avg()} вместо 6282.97 из урока 1.1")
     users, orders = join_data()
     if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
         errs.append(f"join-rows: пользователи {users}")
