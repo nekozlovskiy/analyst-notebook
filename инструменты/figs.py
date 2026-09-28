@@ -583,8 +583,55 @@ def fig_clt_means():
     return svg.render()
 
 
+def ci_data():
+    """100 повторов группы A из задачи урока 3.2: истинная конверсия 5%,
+    n=4820. Random(42), по одному random() на визит. Возвращает
+    список (низ, верх) 95%-интервалов в долях."""
+    import random
+    p, n = .05, 4820
+    rnd = random.Random(42)
+    out = []
+    for _ in range(100):
+        q = sum(rnd.random() < p for _ in range(n)) / n
+        se = (q * (1 - q) / n) ** .5
+        out.append((q - 1.96 * se, q + 1.96 * se))
+    return out
+
+
+def fig_ci_100():
+    ci, p = ci_data(), .05
+    miss = [i for i, (a, b) in enumerate(ci) if not a <= p <= b]
+    lo, hi = .035, .065                             # ось, доли
+    x0, x1 = 0, 330
+    X = lambda v: x0 + (x1 - x0) * (v - lo) / (hi - lo)
+    top, dy = 40, 2.6
+    svg = Svg("ci-100", 382,
+              "Сто доверительных интервалов для одной и той же конверсии",
+              "Сто раз набрали по 4820 визитов при истинной конверсии 5 процентов и каждый раз "
+              "построили 95-процентный интервал. Интервалы скачут вокруг 5 процентов; "
+              f"{100 - len(miss)} из них накрывают истинное значение, {len(miss)} промахиваются "
+              "и выделены ручкой. По одному интервалу нельзя сказать, промах он или нет.")
+    svg.text(0, 14, "100 повторов теста, n = 4820", "f-hd", 12.5)
+    bottom = top + dy * 99
+    svg.path(f"M{X(p):.1f} {top - 8} V{bottom + 6}", "f-soft")
+    svg.text(X(p) + 4, top - 10, "истина 5%", "f-sub", 10.5)
+    for i, (a, b) in enumerate(ci):
+        y = top + i * dy
+        svg.line(round(X(a), 1), round(y, 1), round(X(b), 1), round(y, 1),
+                 "f-pen" if i in miss else "f-raw")
+    axis = bottom + 8
+    for v in (.04, .05, .06):
+        svg.line(X(v), axis, X(v), axis + 4, "f-row")
+        svg.text(X(v), axis + 16, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    svg.text(x1, axis + 40, f"накрыли: {100 - len(miss)}", "f-sub", 10.5, anchor="end")
+    svg.text(x1, axis + 54, f"промахнулись: {len(miss)}", "f-pen-t", 11.5, anchor="end")
+    svg.note(0, axis + 42, ["какой из них ваш,", "заранее не узнать"], 15)
+    return svg.render()
+
+
 FIGS_M3 = {
     "clt-means": fig_clt_means,
+    "ci-100": fig_ci_100,
 }
 
 
@@ -596,6 +643,9 @@ def check_m3():
         errs.append(f"clt-means: {got} — не совпало с эталоном задачи урока 3.1")
     if f"{mu:.2f}" != "3457.30":
         errs.append(f"clt-means: среднее совокупности {mu:.2f}")
+    miss = [i for i, (a, b) in enumerate(ci_data()) if not a <= .05 <= b]
+    if miss != [4, 16, 52, 54, 76, 90]:
+        errs.append(f"ci-100: промахи {miss} вместо [4, 16, 52, 54, 76, 90]")
     return errs
 
 
