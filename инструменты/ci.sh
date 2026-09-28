@@ -27,7 +27,7 @@ step() {
 
 syntax() {
   local ok=0
-  for f in app.js sw.js data.js glossary.js lessons.js content-*.js; do
+  for f in app.js sw.js data.js glossary.js lessons.js sandbox.js content-*.js; do
     node --check "$f" || ok=1
   done
   return $ok
@@ -74,7 +74,7 @@ regenerated() {
 version_bumped() {
   git rev-parse --verify -q "origin/$BASE_REF" >/dev/null || git fetch -q origin "$BASE_REF" || return 1
   local changed old new
-  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js \
+  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js sandbox.js \
             manifest.webmanifest 'content-*.js' fonts)
   if [ -z "$changed" ]; then echo "файлы сайта не менялись"; return 0; fi
   old=$(git show "origin/$BASE_REF:sw.js" | grep -o 'const VERSION = "[^"]*"')
