@@ -1544,7 +1544,55 @@ def fig_rfm_map():
     return svg.render()
 
 
+def fig_dash_pyramid():
+    """Эскиз дашборда из урока 4.6. Числа условные: это макет, не отчёт."""
+    import math
+    w, ax = 206, 218                                # ширина макета, колонка подписей
+    svg = Svg("dash-pyramid", 354,
+              "Дашборд в три этажа",
+              "Эскиз дашборда. Верх: три главных числа с изменением к прошлой неделе — отвечает на вопрос "
+              "«всё в порядке?» за пять секунд. Середина: график по дням с полосой обычного разброса и разрез "
+              "по сегментам — «где именно», за минуту. Низ: таблица деталей, которую открывают раз в месяц.")
+    svg.text(0, 14, "сверху вниз — по частоте использования", "f-hd", 12.5)
+    tiles = [("DAU", "4 010", "+2%"), ("конверсия", "3,2%", "−0,1 п.п."), ("ARPU", "1 842 ₽", "+3%")]
+    tw = (w - 8) / 3
+    for i, (name, val, d) in enumerate(tiles):
+        x = i * (tw + 4)
+        svg.rect(x, 30, tw, 52, "f-pen", 4)
+        svg.text(x + 6, 44, name, "f-sub", 9)
+        svg.text(x + 6, 62, val, "f-hd", 12)
+        svg.text(x + 6, 76, f"{d} к нед.", "f-sub", 8.5)
+    # середина: линия по дням в полосе нормы и разрез по сегментам
+    top, h = 96, 64
+    svg.rect(0, top, w, h, "f-box", 4)
+    band = lambda x, k: top + h / 2 + k * 10 + 4 * math.sin(x / 30)
+    xs = range(6, w - 5, 6)
+    svg.path("M" + " L".join(f"{x} {band(x, -1):.1f}" for x in xs), "f-soft")
+    svg.path("M" + " L".join(f"{x} {band(x, 1):.1f}" for x in xs), "f-soft")
+    svg.path("M" + " L".join(f"{x} {band(x, 0) + 5 * math.sin(x / 7) * math.cos(x / 17):.1f}" for x in xs), "f-raw")
+    svg.text(6, top + 12, "по дням, полоса — норма", "f-sub", 8.5)
+    for i, (seg, v) in enumerate((("iOS", .9), ("Android", .7), ("web", .45))):
+        y = top + h + 10 + i * 14
+        svg.text(0, y + 9, seg, "f-sub", 9)
+        svg.rect(48, y + 2, (w - 50) * v, 8, "f-box", 2)
+    # низ: таблица
+    tt = top + h + 60
+    svg.rect(0, tt, w, 70, "f-box", 4)
+    for k in range(1, 5):
+        svg.line(0, tt + k * 14, w, tt + k * 14, "f-row")
+    svg.line(w * .45, tt, w * .45, tt + 70, "f-row")
+    svg.text(6, tt + 10, "детали", "f-sub", 8.5)
+    notes = [(56, "всё в порядке?", "5 секунд", True), (top + 50, "где именно?", "минута", False),
+             (tt + 38, "детали", "раз в месяц", False)]
+    for y, q, t, hot in notes:
+        svg.text(ax, y - 6, q, "f-hd" if hot else "f-sub", 11 if hot else 10.5)
+        svg.text(ax, y + 10, t, "f-pen-t" if hot else "f-sub", 11.5 if hot else 10.5)
+    svg.note(0, tt + 104, ["рядом с каждым числом — база", "сравнения: неделя, план или норма"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "dash-pyramid": fig_dash_pyramid,
     "rfm-map": fig_rfm_map,
     "ltv-horizon": fig_ltv_horizon,
     "simpson-mix": fig_simpson_mix,
