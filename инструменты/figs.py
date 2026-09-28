@@ -390,8 +390,51 @@ def fig_corr_subquery():
     return svg.render()
 
 
+def storage_data():
+    """Три заказа со схемы JOIN (пользователи 16 и 21): id, пользователь, выручка."""
+    return db().execute("SELECT order_id, user_id, revenue FROM orders WHERE user_id IN (16, 21) "
+                        "ORDER BY order_id").fetchall()
+
+
+def fig_row_vs_column():
+    rows = storage_data()
+    cw, ch, gap = 25.5, 26, 8                       # ячейка и зазор между группами
+    cols = ["order_id", "user_id", "revenue", "…"]
+    val = lambda r, j: ("…" if j == 3 else f"{r[2]:.0f}" if j == 2 else str(r[j]))
+    svg = Svg("row-vs-column", 262,
+              "Хранение по строкам и по колонкам",
+              "Три заказа лежат на диске двумя способами. По строкам: подряд идут все поля первого "
+              "заказа, потом второго, потом третьего. По колонкам: подряд идут все номера заказов, "
+              "потом все пользователи, потом все суммы. Запрос SUM(revenue) в строковой базе читает "
+              "все двенадцать ячеек, включая остальные колонки, а в колоночной — только три ячейки revenue.")
+    svg.text(0, 14, "что читает SELECT SUM(revenue)", "f-hd", 12.5)
+
+    def strip(y, title, groups, labels, hot):
+        svg.text(0, y - 8, title, "f-hd", 11.5)
+        x = 0
+        for g, (cells, lab) in enumerate(zip(groups, labels)):
+            for k, (v, is_hot) in enumerate(cells):
+                svg.rect(x, y, cw, ch, "f-pen" if is_hot else "f-box", 2)
+                svg.text(x + cw / 2, y + ch / 2 + 4, v, "f-pen-t" if is_hot else "f-sub",
+                         9.5, anchor="middle")
+                x += cw
+            svg.text(x - len(cells) * cw / 2, y + ch + 14, lab, "f-sub", 10, anchor="middle")
+            x += gap
+        svg.text(330, y + ch + 32, hot, "f-pen-t", 11.5, anchor="end")
+
+    strip(44, "по строкам (PostgreSQL)",
+          [[(val(r, j), True) for j in range(4)] for r in rows],
+          [f"заказ {r[0]}" for r in rows], "прочитано 12 ячеек из 12")
+    strip(142, "по колонкам (ClickHouse)",
+          [[(val(r, j), j == 2) for r in rows] for j in range(4)],
+          cols, "прочитано 3 ячейки из 12")
+    svg.note(0, 240, ["чем больше колонок в таблице,", "тем больше выигрыш колоночной базы"], 15)
+    return svg.render()
+
+
 FIGS_M1 = {
     "where-having": fig_where_having,
+    "row-vs-column": fig_row_vs_column,
     "cte-chain": fig_cte_chain,
     "corr-subquery": fig_corr_subquery,
     "sql-order": fig_sql_order,
@@ -413,6 +456,8 @@ def check_m1():
     rows, last = corr_data()
     if [d for _, _, d in rows] != ["2024-04-17", "2024-05-17", "2024-04-06", "2024-04-25", "2024-04-29"]:
         errs.append(f"corr-subquery: даты {rows}")
+    if [(i, u, num(r)) for i, u, r in storage_data()] != [(18, 16, "2822.77"), (19, 16, "1931.78"), (23, 21, "5886.6")]:
+        errs.append(f"row-vs-column: {storage_data()}")
     users, orders = join_data()
     if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
         errs.append(f"join-rows: пользователи {users}")
