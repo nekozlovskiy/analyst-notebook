@@ -765,7 +765,68 @@ def check_m3():
     return errs
 
 
-MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3)}
+# ---------------------------------------------------------------- схемы m4
+
+FUNNEL = [("visit", "визит"), ("view_product", "карточка"), ("add_to_cart", "корзина"),
+          ("checkout", "оформление"), ("purchase", "оплата")]
+
+
+def funnel_data():
+    """Уникальные пользователи на каждом шаге — как в задаче урока 4.2,
+    без временного окна."""
+    con = db()
+    return [con.execute("SELECT COUNT(DISTINCT user_id) FROM events WHERE event_name = ?",
+                        (e,)).fetchone()[0] for e, _ in FUNNEL]
+
+
+def pct(v, digits=1):
+    return f"{v:.{digits}f}".replace(".", ",")
+
+
+def fig_funnel_steps():
+    users = funnel_data()
+    worst = min(range(1, 5), key=lambda i: users[i] / users[i - 1])
+    cx, wmax, bh, gap, y = 165, 300, 24, 26, 30
+    svg = Svg("funnel-steps", 318,
+              "Воронка «Дельта Маркет» по шагам",
+              "Пять шагов, ширина полосы — число людей: "
+              + ", ".join(f"{n} {u}" for (_, n), u in zip(FUNNEL, users))
+              + ". Конверсии шагов: "
+              + ", ".join(pct(100 * users[i] / users[i - 1]) for i in range(1, 5))
+              + f" процента. Хуже всего переход в оплату: там теряем {users[worst - 1] - users[worst]} человек. "
+              f"Сквозная конверсия {pct(100 * users[-1] / users[0])} процента.")
+    svg.text(0, 14, "уникальные пользователи, без окна", "f-hd", 12.5)
+    for i, ((_, name), u) in enumerate(zip(FUNNEL, users)):
+        w = wmax * u / users[0]
+        svg.rect(cx - w / 2, y, w, bh, "f-box", 4)
+        svg.text(cx, y + 16, f"{name} · {u}", "f-hd", 11.5, anchor="middle")
+        if i < 4:
+            c = 100 * users[i + 1] / u
+            hot = i + 1 == worst
+            s = f"↓ {pct(c)}%" + (f"   −{u - users[i + 1]} человек" if hot else "")
+            svg.text(cx, y + bh + 17, s, "f-pen-t" if hot else "f-sub", 11.5 if hot else 10.5,
+                     anchor="middle")
+        y += bh + gap
+    y -= gap
+    svg.text(330, y + 22, f"сквозная {pct(100 * users[-1] / users[0])}%", "f-sub", 10.5, anchor="end")
+    svg.note(0, y + 44, ["здесь теряем больше всего —", "и в процентах, и в людях"], 15)
+    return svg.render()
+
+
+FIGS_M4 = {
+    "funnel-steps": fig_funnel_steps,
+}
+
+
+def check_m4():
+    errs = []
+    if funnel_data() != [220, 206, 175, 121, 64]:
+        errs.append(f"funnel-steps: {funnel_data()} вместо 220 → 206 → 175 → 121 → 64 из урока 4.2")
+    return errs
+
+
+MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
+           "m4": (FIGS_M4, check_m4)}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
