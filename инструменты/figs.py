@@ -1854,7 +1854,66 @@ def fig_gd_steps():
     return svg.render()
 
 
+def arrow(svg, x1, y1, x2, y2, cls="f-pen", head=6):
+    """Стрелка от (x1, y1) к (x2, y2) с двумя усиками на конце."""
+    import math
+    a = math.atan2(y2 - y1, x2 - x1)
+    h = [(x2 - head * math.cos(a - s), y2 - head * math.sin(a - s)) for s in (.45, -.45)]
+    svg.path(f"M{x1:.1f} {y1:.1f} L{x2:.1f} {y2:.1f} M{h[0][0]:.1f} {h[0][1]:.1f} "
+             f"L{x2:.1f} {y2:.1f} L{h[1][0]:.1f} {h[1][1]:.1f}", cls)
+
+
+def fig_four_causes():
+    pw, ph, gx, gy, top = 160, 104, 10, 16, 30
+    svg = Svg("four-causes", 318,
+              "Четыре объяснения корреляции",
+              "Четыре маленькие схемы. Причинность: скидка вызывает продажи. Обратная причинность: уход "
+              "вызывает обращения в поддержку, а не наоборот. Общая причина: жара вызывает и продажи "
+              "мороженого, и утопления, между которыми прямой связи нет. Артефакт отбора: балл и спорт "
+              "оба ведут к поступлению, и среди поступивших между ними появляется связь. Пунктир — "
+              "наблюдаемая корреляция, стрелка — причина.")
+    svg.text(0, 14, "стрелка — причина, пунктир — видимая связь", "f-hd", 12.5)
+
+    def node(x, y, t, cls="f-box"):
+        w = 9 + 6.2 * len(t)
+        svg.rect(x - w / 2, y - 11, w, 22, cls, 4)
+        svg.text(x, y + 4, t, "f-sub" if cls == "f-box" else "f-hd", 10, anchor="middle")
+        return w / 2
+
+    panels = ["причинность", "обратная причинность", "общая причина", "артефакт отбора"]
+    for k, title in enumerate(panels):
+        x0 = (k % 2) * (pw + gx)
+        y0 = top + (k // 2) * (ph + gy)
+        svg.rect(x0, y0, pw, ph, "f-soft", 5)             # у f-row нет fill: none
+        svg.text(x0 + 8, y0 + 16, title, "f-hd", 11)
+        cx, l, r, yy = x0 + pw / 2, x0 + 40, x0 + pw - 40, y0 + 66
+        if k == 0:
+            a = node(l, yy, "скидка"); b = node(r, yy, "продажи")
+            arrow(svg, l + a + 2, yy, r - b - 4, yy)
+        elif k == 1:
+            a = node(l, yy, "поддержка"); b = node(r, yy, "уход")
+            arrow(svg, r - b - 2, yy + 6, l + a + 4, yy + 6)
+            svg.path(f"M{l + a + 2:.1f} {yy - 6} L{r - b - 2:.1f} {yy - 6}", "f-dash")
+        elif k == 2:
+            node(cx, y0 + 40, "жара", "f-pen")
+            l, r = x0 + 36, x0 + pw - 36                 # раздвинуть: иначе пунктир не виден
+            a = node(l, y0 + 84, "мороженое"); b = node(r, y0 + 84, "утопления")
+            arrow(svg, cx - 10, y0 + 51, l + 6, y0 + 72)
+            arrow(svg, cx + 10, y0 + 51, r - 6, y0 + 72)
+            svg.path(f"M{l + a + 2:.1f} {y0 + 84} L{r - b - 2:.1f} {y0 + 84}", "f-dash")
+        else:
+            a = node(l, y0 + 40, "балл"); b = node(r, y0 + 40, "спорт")
+            node(cx, y0 + 84, "поступили", "f-pen")
+            arrow(svg, l + 6, y0 + 51, cx - 14, y0 + 72)
+            arrow(svg, r - 6, y0 + 51, cx + 14, y0 + 72)
+            svg.path(f"M{l + a + 2:.1f} {y0 + 40} L{r - b - 2:.1f} {y0 + 40}", "f-dash")
+    y = top + 2 * ph + gy
+    svg.note(0, y + 34, ["причинность — только одна", "из четырёх версий"], 15)
+    return svg.render()
+
+
 FIGS_M5 = {
+    "four-causes": fig_four_causes,
     "ols-squares": fig_ols_squares,
     "resid-patterns": fig_resid_patterns,
     "roc-steps": fig_roc_steps,

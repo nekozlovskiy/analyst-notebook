@@ -2215,3 +2215,4 @@ figure.fig figcaption {
 .fig-svg .f-pen-t { fill: var(--pen); }
 .fig-svg .f-raw { fill: none; stroke: var(--ink-4); stroke-width: 1.1; }   /* сырые данные на графике: видны, но тише ручки */
 .fig-svg .f-tint { fill: var(--pen); stroke: none; }
+.fig-svg .f-dash { fill: none; stroke: var(--ink-4); stroke-width: 1.1; stroke-dasharray: 3 3; }  /* наблюдаемая связь, не причина */
