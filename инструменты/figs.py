@@ -1021,9 +1021,73 @@ def fig_resid_patterns():
     return svg.render()
 
 
+# Учебные оценки модели: 1 — купил, 0 — нет. Не из задачи (там AUC 0,8617)
+# и не из тренажёра на восьми наблюдениях.
+ROC_PTS = [(.92, 1), (.81, 1), (.74, 0), (.66, 1), (.52, 1),
+           (.45, 0), (.38, 0), (.30, 1), (.21, 0), (.12, 0)]
+
+
+def roc_auc(pts):
+    pos = [s for s, y in pts if y]
+    neg = [s for s, y in pts if not y]
+    return sum((p > n) + .5 * (p == n) for p in pos for n in neg) / (len(pos) * len(neg))
+
+
+def fig_roc_steps():
+    pts = sorted(ROC_PTS, reverse=True)
+    npos = sum(y for _, y in pts)
+    nneg = len(pts) - npos
+    x0, yb, side = 44, 236, 190
+    X = lambda f: x0 + side * f
+    Y = lambda t: yb - side * t
+    auc = roc_auc(pts)
+    svg = Svg("roc-steps", 312,
+              "ROC-кривая строится ступеньками по отсортированным оценкам",
+              f"Десять человек, {npos} покупателей и {nneg} непокупателей, отсортированы по оценке модели. "
+              "Идём сверху вниз: покупатель — шаг вверх, непокупатель — шаг вправо. Получается ступенчатая "
+              f"ROC-кривая, площадь под ней AUC = {pct(auc, 2)}. Диагональ — случайное угадывание, AUC 0,5. "
+              "Порог 0,5 — одна точка на кривой: поймано 4 покупателя из 5, ложная тревога 1 из 5.")
+    svg.text(0, 14, "доля пойманных покупателей", "f-hd", 12.5)
+    svg.rect(x0, Y(1), side, side, "f-box", 0)
+    svg.line(X(0), Y(0), X(1), Y(1), "f-soft")
+    svg.text(X(.62), Y(.5) + 8, "угадывание", "f-sub", 10.5)
+    for v in (0, .5, 1):
+        svg.text(x0 - 6, Y(v) + 4, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="end")
+        svg.text(X(v), yb + 16, f"{v * 100:.0f}%", "f-sub", 10.5, anchor="middle")
+    svg.text(X(1), yb + 32, "доля ложных тревог", "f-sub", 10.5, anchor="end")
+    tp = fp = 0
+    d = f"M{X(0):.1f} {Y(0):.1f}"
+    cut = None
+    for sc, y in pts:
+        if sc < .5 and cut is None:
+            cut = (fp / nneg, tp / npos)
+        if y:
+            tp += 1
+        else:
+            fp += 1
+        d += f" L{X(fp / nneg):.1f} {Y(tp / npos):.1f}"
+    svg.path(d, "f-pen")
+    svg.circle(X(cut[0]), Y(cut[1]), 3.2)
+    svg.text(X(cut[0]) + 8, Y(cut[1]) + 16, "порог 0,5", "f-pen-t", 11.5)
+    svg.text(X(.5), Y(.12), f"AUC = {pct(auc, 2)}", "f-hd", 12.5, anchor="middle")
+    # столбик оценок: как из него получается каждая ступенька
+    cx, ry = 300, (side - 10) / len(pts)
+    svg.text(cx, Y(1) - 8, "оценки", "f-sub", 10.5, anchor="middle")
+    for i, (sc, y) in enumerate(pts):
+        yy = Y(1) + 10 + i * ry
+        svg.text(cx - 6, yy + 4, f"{sc:.2f}".replace(".", ","), "f-pen-t" if y else "f-sub",
+                 11.5 if y else 10.5, anchor="end")
+        svg.text(cx + 6, yy + 4, "↑" if y else "→", "f-pen-t" if y else "f-sub", 11.5)
+        if i < len(pts) - 1 and sc >= .5 > pts[i + 1][0]:
+            svg.line(cx - 34, yy + ry / 2, cx + 22, yy + ry / 2, "f-pen")
+    svg.note(0, yb + 60, ["покупатель — шаг вверх, непокупатель —", "вправо; порог — точка на ступеньках"], 15)
+    return svg.render()
+
+
 FIGS_M5 = {
     "ols-squares": fig_ols_squares,
     "resid-patterns": fig_resid_patterns,
+    "roc-steps": fig_roc_steps,
 }
 
 
@@ -1032,6 +1096,8 @@ def check_m5():
     b0, b1 = ols_line(OLS_PTS)
     if f"{b0:.3f} {b1:.3f}" != "1.007 0.860":
         errs.append(f"ols-squares: прямая {b0:.3f} + {b1:.3f}x — поменялись учебные точки?")
+    if roc_auc(ROC_PTS) != .8:
+        errs.append(f"roc-steps: AUC {roc_auc(ROC_PTS)} вместо 0,80")
     return errs
 
 
