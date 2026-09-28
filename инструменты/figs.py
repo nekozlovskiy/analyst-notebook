@@ -261,7 +261,217 @@ def fig_cohort_triangle():
     return svg.render()
 
 
+# Игрушечные заказы к уроку 1.1: клиент, статус, сумма. Смысл схемы —
+# без WHERE у B было бы 7000 и группа прошла бы HAVING.
+WH_ORDERS = [("A", "paid", 1000), ("A", "paid", 3000), ("B", "paid", 2000),
+             ("B", "cancelled", 5000), ("C", "paid", 1000), ("C", "paid", 2000),
+             ("C", "paid", 3000)]
+WH_LIMIT = 3000
+
+
+def where_having_data():
+    sums = {}
+    for u, st, r in WH_ORDERS:
+        if st == "paid":
+            sums[u] = sums.get(u, 0) + r
+    return sums
+
+
+def fig_where_having():
+    sums = where_having_data()
+    w, rh, ax = 170, 20, 184                        # ширина таблиц, строка, колонка подписей
+    rub = lambda v: f"{v:,}".replace(",", " ")
+    svg = Svg("where-having", 392,
+              "WHERE фильтрует строки до группировки, HAVING — группы после",
+              "Семь заказов трёх клиентов. WHERE status = paid выбрасывает отменённый заказ клиента B "
+              "на 5 000 ещё до группировки. GROUP BY user_id сжимает строки: одна строка — один клиент, "
+              f"суммы A {rub(sums['A'])}, B {rub(sums['B'])}, C {rub(sums['C'])}. "
+              f"HAVING SUM(revenue) >= {rub(WH_LIMIT)} выбрасывает целую группу B. Без WHERE у B было бы "
+              "7 000, и группа прошла бы фильтр.")
+    mids = table(svg, 0, 30, w, "orders: строка = заказ",
+                 [("user", 12, "start"), ("status", 44, "start"), ("revenue", w - 10, "end")],
+                 [(u, st, rub(r)) for u, st, r in WH_ORDERS], rh)
+    k = next(i for i, o in enumerate(WH_ORDERS) if o[1] != "paid")
+    svg.line(4, mids[k], w - 4, mids[k], "f-pen")
+    svg.text(ax, mids[k] - 4, "WHERE", "f-pen-t", 11.5)
+    svg.text(ax, mids[k] + 11, "status = 'paid'", "f-pen-t", 11.5)
+    svg.text(ax, mids[k] + 26, "строку выбросили", "f-sub", 10.5)
+    svg.text(ax, mids[k] + 40, "до группировки", "f-sub", 10.5)
+    top2 = mids[-1] + rh / 2 + 44
+    svg.text(w / 2, top2 - 26, "↓ GROUP BY user_id", "f-hd", 11.5, anchor="middle")
+    g = sorted(sums.items())
+    mids2 = table(svg, 0, top2 + 14, w, "строка = клиент",
+                  [("user", 12, "start"), ("SUM(revenue)", w - 10, "end")],
+                  [(u, rub(v)) for u, v in g], rh)
+    for (u, v), m in zip(g, mids2):
+        if v < WH_LIMIT:
+            svg.line(4, m, w - 4, m, "f-pen")
+            svg.text(ax, m - 11, "HAVING", "f-pen-t", 11.5)
+            svg.text(ax, m + 4, "SUM(revenue)", "f-pen-t", 11.5)
+            svg.text(ax, m + 19, f">= {rub(WH_LIMIT)}", "f-pen-t", 11.5)
+            svg.text(ax, m + 34, "выбросили всю группу", "f-sub", 10.5)
+    svg.note(0, mids2[-1] + 44, ["без WHERE у B было бы 7 000 —", "и группа прошла бы HAVING"], 15)
+    return svg.render()
+
+
+def cte_avg():
+    return db().execute(
+        "WITH paid AS (SELECT * FROM orders WHERE status = 'paid'), "
+        "per_user AS (SELECT user_id, SUM(revenue) AS total FROM paid GROUP BY user_id) "
+        "SELECT ROUND(AVG(total), 2) FROM per_user").fetchone()[0]
+
+
+def fig_cte_chain():
+    """Пример из теории урока 1.4 как конвейер. Числа строк не пишем:
+    189 оплаченных — ответ шага практикума, вместо них стопки черт."""
+    avg = cte_avg()
+    money = f"{avg:,.2f}".replace(",", " ").replace(".", ",")
+    steps = [("orders", "строка = заказ", 6, None),
+             ("paid", "строка = оплаченный заказ", 5, "WHERE status = 'paid'"),
+             ("per_user", "строка = клиент", 3, "GROUP BY user_id, SUM"),
+             ("итог", f"одна строка: {money}", 1, "AVG(total)")]
+    bw, bh, gap, y = 118, 46, 32, 30
+    svg = Svg("cte-chain", 366,
+              "CTE как конвейер именованных шагов",
+              "Запрос из примера читается сверху вниз: таблица orders, где строка — заказ; шаг paid "
+              "оставляет только оплаченные заказы; шаг per_user сворачивает их до одной строки на клиента "
+              f"с суммой; финальный SELECT усредняет суммы и возвращает одну строку, {money} рубля. "
+              "С каждым шагом строк меньше, а смысл строки меняется.")
+    svg.text(0, 14, "WITH читается сверху вниз", "f-hd", 12.5)
+    for i, (name, sub, n, op) in enumerate(steps):
+        if op:
+            svg.path(f"M{bw / 2} {y - gap + 4} V{y - 4}", "f-soft")
+            svg.text(bw / 2 + 10, y - gap / 2 + 4, op, "f-pen-t", 11.5)
+        svg.rect(0, y, bw, bh, "f-pen" if i == len(steps) - 1 else "f-box", 5)
+        svg.text(10, y + 18, name, "f-hd", 12)
+        for k in range(n):                          # стопка «строк»: чем меньше, тем короче
+            svg.line(10, y + 27 + k * 3.2, 10 + 16 * n, y + 27 + k * 3.2, "f-raw")
+        svg.text(bw + 12, y + bh / 2 + 4, sub, "f-sub", 10.5)
+        y += bh + gap
+    svg.note(0, y + 4, ["каждый шаг можно запустить отдельно:"], 15)
+    svg.text(0, y + 24, "SELECT * FROM paid;", "f-pen-t", 11.5)
+    return svg.render()
+
+
+CORR_USERS = (16, 20)                               # не 3, 13, 103, 215 — они в тренажёре 1.5
+
+
+def corr_data():
+    q = ",".join("?" * len(CORR_USERS))
+    rows = db().execute(f"SELECT user_id, order_id, order_date FROM orders WHERE user_id IN ({q}) "
+                        "ORDER BY user_id, order_date", CORR_USERS).fetchall()
+    last = {u: max(d for uu, _, d in rows if uu == u) for u in CORR_USERS}
+    return rows, last
+
+
+def fig_corr_subquery():
+    rows, last = corr_data()
+    w, rh, ax = 150, 26, 166
+    svg = Svg("corr-subquery", 270,
+              "Коррелированный подзапрос выполняется для каждой строки",
+              f"Пять заказов двух пользователей, {CORR_USERS[0]} и {CORR_USERS[1]}. Для каждой строки внешнего "
+              "запроса подзапрос запускается заново и ищет последнюю дату заказов этого пользователя. "
+              "Строка остаётся, если её дата совпала с найденной: по одной на пользователя. "
+              "Пять строк снаружи — пять запусков внутри.")
+    mids = table(svg, 0, 30, w, "FROM orders o",
+                 [("user_id", 12, "start"), ("order_date", w - 10, "end")],
+                 [(str(u), d) for u, _, d in rows], rh)
+    svg.text(ax, 23, "подзапрос для строки", "f-hd", 12.5)
+    for i, ((u, _, d), m) in enumerate(zip(rows, mids)):
+        ok = d == last[u]
+        svg.text(ax, m + 4, f"{i + 1}) MAX у {u} = {last[u][5:]}", "f-pen-t" if ok else "f-sub",
+                 11.5 if ok else 10.5)
+        svg.text(330, m + 4, "✓" if ok else "✗", "f-pen-t" if ok else "f-sub", 12.5, anchor="end")
+        if ok:
+            svg.rect(1, m - rh / 2 + 2, w - 2, rh - 4, "f-pen", 4)
+    y = mids[-1] + rh / 2 + 26
+    svg.text(330, y, f"{len(rows)} строк снаружи — {len(rows)} запусков внутри", "f-sub", 10.5, anchor="end")
+    svg.note(0, y + 30, ["на миллионе строк — миллион запусков;", "окно справится за один проход"], 15)
+    return svg.render()
+
+
+def storage_data():
+    """Три заказа со схемы JOIN (пользователи 16 и 21): id, пользователь, выручка."""
+    return db().execute("SELECT order_id, user_id, revenue FROM orders WHERE user_id IN (16, 21) "
+                        "ORDER BY order_id").fetchall()
+
+
+def fig_row_vs_column():
+    rows = storage_data()
+    cw, ch, gap = 25.5, 26, 8                       # ячейка и зазор между группами
+    cols = ["order_id", "user_id", "revenue", "…"]
+    val = lambda r, j: ("…" if j == 3 else f"{r[2]:.0f}" if j == 2 else str(r[j]))
+    svg = Svg("row-vs-column", 262,
+              "Хранение по строкам и по колонкам",
+              "Три заказа лежат на диске двумя способами. По строкам: подряд идут все поля первого "
+              "заказа, потом второго, потом третьего. По колонкам: подряд идут все номера заказов, "
+              "потом все пользователи, потом все суммы. Запрос SUM(revenue) в строковой базе читает "
+              "все двенадцать ячеек, включая остальные колонки, а в колоночной — только три ячейки revenue.")
+    svg.text(0, 14, "что читает SELECT SUM(revenue)", "f-hd", 12.5)
+
+    def strip(y, title, groups, labels, hot):
+        svg.text(0, y - 8, title, "f-hd", 11.5)
+        x = 0
+        for g, (cells, lab) in enumerate(zip(groups, labels)):
+            for k, (v, is_hot) in enumerate(cells):
+                svg.rect(x, y, cw, ch, "f-pen" if is_hot else "f-box", 2)
+                svg.text(x + cw / 2, y + ch / 2 + 4, v, "f-pen-t" if is_hot else "f-sub",
+                         9.5, anchor="middle")
+                x += cw
+            svg.text(x - len(cells) * cw / 2, y + ch + 14, lab, "f-sub", 10, anchor="middle")
+            x += gap
+        svg.text(330, y + ch + 32, hot, "f-pen-t", 11.5, anchor="end")
+
+    strip(44, "по строкам (PostgreSQL)",
+          [[(val(r, j), True) for j in range(4)] for r in rows],
+          [f"заказ {r[0]}" for r in rows], "прочитано 12 ячеек из 12")
+    strip(142, "по колонкам (ClickHouse)",
+          [[(val(r, j), j == 2) for r in rows] for j in range(4)],
+          cols, "прочитано 3 ячейки из 12")
+    svg.note(0, 240, ["чем больше колонок в таблице,", "тем больше выигрыш колоночной базы"], 15)
+    return svg.render()
+
+
+# Учебная воронка к проекту 1.7: реальная (220 -> ... -> 64) — ответ проекта.
+TWO_CONV = [("визит", 1000), ("карточка", 600), ("корзина", 300), ("оплата", 240)]
+
+
+def fig_two_conversions():
+    n = [v for _, v in TWO_CONV]
+    step = [None] + [100 * n[i] / n[i - 1] for i in range(1, len(n))]
+    worst = min(range(1, len(n)), key=lambda i: step[i])
+    bx, bw, bh, gap, y0 = 96, 100, 22, 16, 50         # полосы правее подписей
+    cs, cp = 250, 324                               # правые края колонок
+    svg = Svg("two-conversions", 250,
+              "Сквозная и пошаговая конверсия",
+              "Учебная воронка: " + " → ".join(f"{t} {v}" for t, v in TWO_CONV) + ". Сквозная конверсия — "
+              "доля от первого шага: " + ", ".join(f"{100 * v / n[0]:.0f}" for v in n) + " процентов. "
+              "Пошаговая — доля от предыдущего: " + ", ".join(f"{v:.0f}" for v in step[1:]) + ". "
+              f"Хуже всего переход на шаг «{TWO_CONV[worst][0]}»: {step[worst]:.0f} процентов.")
+    svg.text(0, 14, "учебная воронка, 1000 человек", "f-hd", 12.5)
+    svg.text(cs, 38, "сквозная", "f-sub", 10.5, anchor="end")
+    svg.text(cp, 38, "пошаговая", "f-sub", 10.5, anchor="end")
+    for i, (t, v) in enumerate(TWO_CONV):
+        y = y0 + i * (bh + gap)
+        svg.rect(bx, y, bw * v / n[0], bh, "f-box", 3)
+        svg.text(0, y + 15, f"{t} · {v}", "f-hd", 11)
+        svg.text(cs, y + 15, f"{100 * v / n[0]:.0f}%", "f-sub", 10.5, anchor="end")
+        hot = i == worst
+        svg.text(cp, y + 15, "—" if step[i] is None else f"{step[i]:.0f}%",
+                 "f-pen-t" if hot else "f-sub", 11.5 if hot else 10.5, anchor="end")
+        if hot:
+            svg.rect(cp - 40, y + 1, 44, bh - 2, "f-pen", 4)
+    y = y0 + len(n) * (bh + gap) + 14
+    svg.note(0, y, ["сквозная — сколько потеряли всего,", "пошаговая — где именно чинить"], 15)
+    return svg.render()
+
+
 FIGS_M1 = {
+    "where-having": fig_where_having,
+    "two-conversions": fig_two_conversions,
+    "row-vs-column": fig_row_vs_column,
+    "cte-chain": fig_cte_chain,
+    "corr-subquery": fig_corr_subquery,
     "sql-order": fig_sql_order,
     "join-rows": fig_join_rows,
     "window-frame": fig_window_frame,
@@ -274,6 +484,17 @@ FIGS_M1 = {
 def check_m1():
     """Числа, которые стоят на схемах, — ровно те, что даёт база."""
     errs = []
+    if [v for _, v in TWO_CONV] != [1000, 600, 300, 240]:
+        errs.append("two-conversions: поменялась учебная воронка — проверьте подпись схемы")
+    if where_having_data() != {"A": 4000, "B": 2000, "C": 6000}:
+        errs.append(f"where-having: суммы {where_having_data()}")
+    if num(cte_avg()) != "6282.97":
+        errs.append(f"cte-chain: среднее {cte_avg()} вместо 6282.97 из урока 1.1")
+    rows, last = corr_data()
+    if [d for _, _, d in rows] != ["2024-04-17", "2024-05-17", "2024-04-06", "2024-04-25", "2024-04-29"]:
+        errs.append(f"corr-subquery: даты {rows}")
+    if [(i, u, num(r)) for i, u, r in storage_data()] != [(18, 16, "2822.77"), (19, 16, "1931.78"), (23, 21, "5886.6")]:
+        errs.append(f"row-vs-column: {storage_data()}")
     users, orders = join_data()
     if users != [(16, "Новосибирск"), (21, "Екатеринбург")]:
         errs.append(f"join-rows: пользователи {users}")
