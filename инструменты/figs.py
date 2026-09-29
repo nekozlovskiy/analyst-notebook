@@ -1024,6 +1024,47 @@ def power_data():
     return p1 - p0, out
 
 
+# Положения песочницы MDE — n на группу. 6125 и 31 234 есть в тексте урока;
+# 12 250 (ответ задачи, мощность 41,9%) и n тренажёра «Кривая мощности»
+# (5–25, 40, 60 тысяч) не берём, чтобы песочница не выдавала ответы.
+MDE_NS = (1000, 2500, 4000, 6125, 9000, 17000, 23000, 31234, 45000, 70000, 100000)
+MDE_HIDDEN = (12250, 5000, 10000, 15000, 20000, 25000, 40000, 60000)
+
+
+def mde_for(n, p0=.05, za=1.959963984540054, zb=.8416212335729143):
+    """Относительный MDE при мощности 80%: подбираем лифт, для которого
+    формула размера группы урока даёт ровно n."""
+    lo, hi = 1e-4, 5.0
+    for _ in range(100):
+        m = (lo + hi) / 2
+        p1 = p0 * (1 + m)
+        pb = (p0 + p1) / 2
+        need = (za * (2 * pb * (1 - pb)) ** .5 + zb * (p0 * (1 - p0) + p1 * (1 - p1)) ** .5) ** 2 / (p1 - p0) ** 2
+        lo, hi = (m, hi) if need > n else (lo, m)
+    return (lo + hi) / 2
+
+
+def mde_sandbox():
+    """Песочница урока 3.4: один кадр схемы power-bells (база 5%, лифт 10%),
+    ползунок — размер группы. Колокола JS рисует сам по se0/se1/c."""
+    p0, p1, za = .05, .055, 1.959963984540054
+    pb = (p0 + p1) / 2
+    se0 = [(2 * pb * (1 - pb) / n) ** .5 for n in MDE_NS]
+    se1 = [((p0 * (1 - p0) + p1 * (1 - p1)) / n) ** .5 for n in MDE_NS]
+    c = [za * s for s in se0]
+    pw = [1 - Phi((ci - (p1 - p0)) / s) for ci, s in zip(c, se1)]
+    mde = [mde_for(n) for n in MDE_NS]
+    return {"pos": list(MDE_NS), "start": MDE_NS.index(31234), "name": "Размер группы",
+            "ticks": [[0, "1 000"], [3, "6 125"], [7, "31 234"], [len(MDE_NS) - 1, "100 000"]],
+            "d": round(p1 - p0, 6), "lo": -.012, "hi": .018,
+            "se0": [round(v, 7) for v in se0], "se1": [round(v, 7) for v in se1], "c": [round(v, 7) for v in c],
+            "power": [round(v, 4) for v in pw], "mde": [round(v, 4) for v in mde],
+            "expect": [(f"{v * 100:.1f}".replace(".", ",") if v >= .995 else f"{v * 100:.0f}") + "%"
+                       for v in pw],                # 99,9% — не округлять до «100%»
+            "caption": "Рис. Двигайте ползунок: база 5%, настоящий эффект +10%. Больше людей в группе — "
+                       "уже колокола, выше мощность и меньше эффект, который тест способен поймать"}
+
+
 def fig_power_bells():
     d, panels = power_data()
     lo, hi = -.012, .018                            # ось: наблюдаемая разница, доли
@@ -1284,7 +1325,7 @@ def clt_sandbox():
                        "с ростом n разброс падает, а форма становится колоколом"}
 
 
-SANDBOX_M3 = {"clt-means": clt_sandbox}
+SANDBOX_M3 = {"clt-means": clt_sandbox, "power-bells": mde_sandbox}
 
 
 FIGS_M3 = {
@@ -1324,6 +1365,14 @@ def check_m3():
     got = [f"{fwer(k) * 100:.1f}" for k in (1, 3, 5, 10, 20)]
     if got != ["5.0", "14.3", "22.6", "40.1", "64.2"]:
         errs.append(f"fwer-curve: {got} — не совпало с таблицей урока 3.5")
+    mb = mde_sandbox()
+    i = mb["start"]
+    if (f"{mb['power'][i] * 100:.1f}", f"{mb['mde'][i] * 100:.1f}", f"{mb['power'][3] * 100:.1f}") != ("80.0", "10.0", "23.6"):
+        errs.append(f"mde-sandbox: 31 234 → {mb['power'][i]}, MDE {mb['mde'][i]}; 6125 → {mb['power'][3]}")
+    if set(MDE_NS) & set(MDE_HIDDEN):
+        errs.append("mde-sandbox: среди положений есть n из ответа задачи или тренажёра")
+    if f"{mde_for(12250) * 100:.1f}" != "16.2":
+        errs.append(f"mde-sandbox: MDE при 12 250 = {mde_for(12250):.4f}, в эталоне задачи 16,2%")
     sb = clt_sandbox()
     i5, i30 = sb["pos"].index(5), sb["pos"].index(30)
     got = (f"{sb['sd'][i5]:.2f}", f"{sb['sdf'][i5]:.2f}", f"{sb['sd'][i30]:.2f}", f"{sb['sdf'][i30]:.0f}")
