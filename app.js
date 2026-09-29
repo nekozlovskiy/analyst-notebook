@@ -1884,7 +1884,7 @@ const Check = {
     const last = String(msg).trim().split("\n").pop();
     let m;
     if ((m = /NameError: name '([^']+)' is not defined/.exec(last)))
-      return "Python не знает имени " + m[1] + ". Переменную создают выше строки, где её берут; проверьте, что она есть и имя написано так же. Если это текст — возьмите его в кавычки.";
+      return "Python не знает имени " + m[1] + ". Переменную создают выше строки, где её берут; проверьте, что она есть и имя написано так же. Если это текст или имя столбца — возьмите его в кавычки.";
     if (/was never closed|unexpected EOF|'\(' was never closed/.test(last))
       return "Не закрыта скобка. Сосчитайте открывающие и закрывающие скобки в строке — их должно быть поровну.";
     if (/unmatched '[)\]]'|closing parenthesis/.test(last))
@@ -1895,6 +1895,8 @@ const Check = {
       return "Python не понял строку — похоже, пропущена запятая между значениями.";
     if (/IndentationError/.test(last))
       return "Строка начинается с лишних пробелов. В Python отступ в начале строки что-то значит — уберите его.";
+    if (/KeyError: \('/.test(last))
+      return "Несколько столбцов берут двойными скобками: таблица[[\"a\", \"b\"]] — внутренние скобки делают из имён список.";
     if ((m = /KeyError: '?([^']+)'?/.exec(last)))
       return "Нет столбца " + m[1] + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
     if (/TypeError: .*'str' and '(int|float)'|TypeError: can only concatenate str/.test(last))

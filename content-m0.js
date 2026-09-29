@@ -357,3 +357,159 @@ window.CONTENT.m0l2 = {
       a: "Считают количество элементов, их сумму, самый большой и самый маленький элемент." }
   ]
 };
+
+window.CONTENT.m0l3 = {
+  intro: "Таблица pandas на тех же заказах, что в SQL: как её посмотреть, как взять один или несколько столбцов и как посчитать по столбцу сумму или среднее. Отбор строк и сортировка — в следующем уроке.",
+  duration: "≈ 25 минут",
+  plan: [
+    { m: "10 мин", w: "Таблица: head и len" },
+    { m: "15 мин", w: "Столбцы: один, расчёт по нему, несколько — и сами" }
+  ],
+  finish: "Все шаги решены. Следующий урок — 0.4: отбор, сортировка и группировка, то есть WHERE, ORDER BY и GROUP BY на pandas.",
+  schema: window.SH.pySchema,
+  data: window.SH.pyData,
+  packages: ["pandas"],
+  prelude: window.SH.pyPrelude,
+
+  steps: [
+    {
+      title: "Таблица pandas: head",
+      body: `
+<p>pandas — библиотека для работы с таблицами. Таблица в ней называется DataFrame. Три таблицы учебной базы уже загружены под теми же именами, что в SQL: <code>users</code>, <code>orders</code>, <code>events</code>.</p>
+<p>Посмотреть начало таблицы — <code>orders.head()</code>: первые пять строк, как <code>SELECT * FROM orders LIMIT 5</code>. В скобках можно сказать, сколько строк нужно: <code>orders.head(3)</code>. Точка значит «у этой таблицы сделай head». Действие, которое пишут через точку, называют методом.</p>
+<p>Как читать напечатанную таблицу: верхняя строка — имена столбцов, каждая следующая — одна строка данных. Числа слева без заголовка — индекс, номера строк. Счёт идёт с нуля.</p>
+<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>users.head(3)</code> — взять первые три строки.</li>
+<li><code>print(…)</code> — напечатать их. Без <code>print</code> в шаге ничего не появится.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка печатает пять первых заказов. Напечатайте первые три строки таблицы пользователей <code>users</code>.</p>`,
+      starter: "print(orders.head())",
+      expected: { stdout: `   user_id signup_date  channel         city platform
+0        1  2024-06-12  organic  Новосибирск      ios
+1        2  2024-02-05   social       Казань      ios
+2        3  2024-04-18  organic       Москва      ios` },
+      hint: "Поменяйте таблицу и число строк: <code>print(users.head(3))</code>.",
+      solution: "print(users.head(3))"
+    },
+    {
+      title: "Сколько строк: len",
+      body: `
+<p><code>len</code> вы знаете по спискам. С таблицей она работает так же: <code>len(orders)</code> — сколько в таблице строк, как <code>SELECT COUNT(*) FROM orders</code>.</p>
+<p><strong>Задание.</strong> Напечатайте тремя строками, сколько строк в каждой таблице: <code>Заказов: 215</code>, <code>Пользователей: 220</code>, <code>Событий: 1488</code>. Числа должен посчитать Python.</p>`,
+      starter: "print(\"Заказов:\", len(orders))",
+      expected: { stdout: "Заказов: 215\nПользователей: 220\nСобытий: 1488" },
+      hint: "Три <code>print</code> друг под другом, в каждом текст и <code>len</code> своей таблицы: <code>len(users)</code>, <code>len(events)</code>.",
+      solution: "print(\"Заказов:\", len(orders))\nprint(\"Пользователей:\", len(users))\nprint(\"Событий:\", len(events))"
+    },
+    {
+      title: "Один столбец",
+      body: `
+<p>Один столбец берут квадратными скобками с именем в кавычках: <code>orders["revenue"]</code> — как <code>SELECT revenue FROM orders</code>. Получается уже не таблица, а один столбец. В pandas его называют Series.</p>
+<p>Под напечатанным столбцом pandas пишет справку. <code>Name: revenue</code> — имя столбца. <code>dtype: float64</code> — тип значений: <code>float64</code> — дробные числа, <code>int64</code> — целые, <code>object</code> — текст. Если строк много, pandas показывает начало и конец, в середине ставит <code>...</code>, а <code>Length</code> говорит, сколько строк всего.</p>`,
+      ba: {
+        before: { columns: ["order_id", "user_id", "revenue", "status"],
+          rows: [[1, 1, 2997.2, "paid"], [2, 1, 4968.24, "paid"], [3, 1, 1994.76, "paid"]] },
+        after: { columns: ["revenue"], rows: [[2997.2], [4968.24], [1994.76]] },
+        hl: ["revenue"],
+        note: "«Было» — начало <code>orders</code>. «Стало» — <code>orders[\"revenue\"]</code>: от таблицы остался один столбец, строки те же."
+      },
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>orders["revenue"]</code> — взять столбец.</li>
+<li><code>.head(3)</code> — оставить первые три значения. У столбца тоже есть <code>head</code>.</li>
+<li><code>print(…)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка печатает весь столбец. Напечатайте только первые три значения <code>revenue</code>.</p>`,
+      starter: "print(orders[\"revenue\"])",
+      expected: { stdout: `0    2997.20
+1    4968.24
+2    1994.76
+Name: revenue, dtype: float64` },
+      hint: "Допишите <code>.head(3)</code> сразу после столбца, внутри <code>print</code>: <code>print(orders[\"revenue\"].head(3))</code>.",
+      solution: "print(orders[\"revenue\"].head(3))"
+    },
+    {
+      title: "Посчитать по столбцу: sum, mean, max",
+      body: `
+<p>У столбца есть методы-расчёты: <code>.sum()</code> — сумма, <code>.mean()</code> — среднее, <code>.max()</code> и <code>.min()</code> — самое большое и самое маленькое. Это <code>SUM</code>, <code>AVG</code>, <code>MAX</code> и <code>MIN</code> из SQL.</p>
+<p>Цепочку через точку читают <strong>слева направо</strong>: каждое звено работает с тем, что вернуло предыдущее. <code>orders["revenue"].mean()</code> — это таблица → столбец → одно число. Поэтому сначала выбирают столбец и только потом считают.</p>
+<p>А вложенные скобки, как вы помните по уроку 0.2, читают <strong>изнутри наружу</strong>. В <code>round(orders["revenue"].mean(), 2)</code> встречаются оба правила.</p>
+<p><strong>Порядок действий</strong> в <code>print(round(orders["revenue"].mean(), 2))</code>:</p>
+<ol class="order">
+<li><code>orders["revenue"]</code> — взять столбец выручки.</li>
+<li><code>.mean()</code> — посчитать среднее: <code>3560.3546…</code></li>
+<li><code>round(…, 2)</code> — округлить: <code>3560.35</code>.</li>
+<li><code>print(…)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте одной строкой средний заказ с двумя знаками и самый дорогой заказ: <code>3560.35 14473.88</code>.</p>`,
+      starter: "print(orders[\"revenue\"].sum())",
+      expected: { stdout: "3560.35 14473.88" },
+      hint: "Два значения через запятую в одном <code>print</code>: <code>round(orders[\"revenue\"].mean(), 2)</code> и <code>orders[\"revenue\"].max()</code>.",
+      solution: "print(round(orders[\"revenue\"].mean(), 2), orders[\"revenue\"].max())"
+    },
+    {
+      title: "Несколько столбцов: двойные скобки",
+      body: `
+<p><code>SELECT order_id, revenue</code> в pandas — <code>orders[["order_id", "revenue"]]</code>. Скобки двойные: внешние значат «возьми из таблицы», внутренние — это список имён, как списки из урока 0.2. Столбцы встанут в том порядке, в каком перечислены.</p>
+<p>Результат — снова таблица, только уже. У неё тоже есть <code>head</code>.</p>`,
+      ba: {
+        before: { columns: ["user_id", "signup_date", "channel", "city", "platform"],
+          rows: [[1, "2024-06-12", "organic", "Новосибирск", "ios"], [2, "2024-02-05", "social", "Казань", "ios"]] },
+        after: { columns: ["user_id", "city", "channel"],
+          rows: [[1, "Новосибирск", "organic"], [2, "Казань", "social"]] },
+        hl: ["city", "channel"],
+        note: "<code>users[[\"user_id\", \"city\", \"channel\"]]</code>: три столбца в порядке списка, <code>city</code> встал раньше <code>channel</code>."
+      },
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>users[[…]]</code> — выбрать столбцы.</li>
+<li><code>.head(4)</code> — оставить первые четыре строки.</li>
+<li><code>print(…)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте первые четыре строки <code>users</code> — только столбцы <code>user_id</code>, <code>city</code> и <code>channel</code>, в этом порядке.</p>`,
+      starter: "print(users.head(4))",
+      expected: { stdout: `   user_id         city  channel
+0        1  Новосибирск  organic
+1        2       Казань   social
+2        3       Москва  organic
+3        4       Казань   social` },
+      hint: "<code>print(users[[\"user_id\", \"city\", \"channel\"]].head(4))</code>. Две квадратные скобки открываются перед первым именем и две закрываются после последнего.",
+      solution: "print(users[[\"user_id\", \"city\", \"channel\"]].head(4))"
+    },
+    {
+      title: "Сами: сводка по заказам",
+      body: `
+<p>Новых слов здесь нет — всё из шагов 2–5. Соберите короткую сводку по таблице <code>orders</code>.</p>
+<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Напечатать, сколько всего заказов.</li>
+<li>Напечатать общую выручку — сумму <code>revenue</code>, два знака.</li>
+<li>Напечатать средний заказ, два знака.</li>
+<li>Напечатать первые три заказа — только <code>order_id</code>, <code>status</code> и <code>revenue</code>.</li>
+</ol>`,
+      task: "<p><strong>Задание.</strong> Напечатайте сводку: строки <code>Заказов: 215</code>, <code>Выручка: 765476.25</code>, <code>Средний: 3560.35</code>, а под ними — три первых заказа с тремя столбцами.</p>",
+      starter: "# 1. Заказов\n# 2. Выручка\n# 3. Средний\n# 4. Три первых заказа, три столбца\n",
+      expected: { stdout: `Заказов: 215
+Выручка: 765476.25
+Средний: 3560.35
+   order_id status  revenue
+0         1   paid  2997.20
+1         2   paid  4968.24
+2         3   paid  1994.76` },
+      hint: "<code>print(\"Заказов:\", len(orders))</code>, <code>print(\"Выручка:\", round(orders[\"revenue\"].sum(), 2))</code>, так же со <code>.mean()</code>, и последней строкой <code>print(orders[[\"order_id\", \"status\", \"revenue\"]].head(3))</code>.",
+      solution: "print(\"Заказов:\", len(orders))\nprint(\"Выручка:\", round(orders[\"revenue\"].sum(), 2))\nprint(\"Средний:\", round(orders[\"revenue\"].mean(), 2))\nprint(orders[[\"order_id\", \"status\", \"revenue\"]].head(3))"
+    }
+  ],
+
+  cards: [
+    { q: "Что делает <code>orders.head(3)</code> и что за числа слева в выводе?",
+      a: "Берёт первые три строки таблицы, как <code>LIMIT 3</code>. Числа слева — индекс, номера строк; счёт с нуля. Чтобы увидеть результат, его печатают: <code>print(orders.head(3))</code>." },
+    { q: "Чем <code>orders[\"revenue\"]</code> отличается от <code>orders[[\"order_id\", \"revenue\"]]</code>?",
+      a: "Одинарные скобки дают один столбец (Series). Двойные — таблицу из перечисленных столбцов: внутренние скобки — это список имён." },
+    { q: "Как читать <code>round(orders[\"revenue\"].mean(), 2)</code>?",
+      a: "Цепочку через точку — слева направо: таблица → столбец → среднее. Вложенные скобки — изнутри наружу: сначала посчитать среднее, потом округлить." },
+    { q: "Что значат <code>Name</code> и <code>dtype</code> под напечатанным столбцом?",
+      a: "<code>Name</code> — имя столбца, <code>dtype</code> — тип значений: <code>float64</code> — дробные, <code>int64</code> — целые, <code>object</code> — текст." }
+  ]
+};
