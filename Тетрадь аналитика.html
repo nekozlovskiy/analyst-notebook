@@ -1372,7 +1372,7 @@ button.st-h:hover .st-t { color: var(--ink); }
 }
 .st-out .io-body { max-height: 320px; }
 .st-rows { margin-top: 7px; font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
-.st-code { margin: 0; }
+.st-code { margin: 0; overflow-x: auto; }   /* длинная строка кода пройденного шага не растягивает страницу на телефоне */
 .st-final { margin-top: 22px; }
 /* урок на Python: строка, пока интерпретатор качается в браузер */
 .st-warm { margin: 0 0 12px; font-family: var(--sans); font-size: 14px; color: var(--ink-3); }
@@ -7973,9 +7973,10 @@ window.TINKER["window-frame"] = {"pos":["CURRENT ROW AND CURRENT ROW","1 PRECEDI
 
 window.CONTENT.m2l1 = {
   intro: "Тот же отчёт по каналам, что в модуле 1, но на Python. Заодно разбираемся, чем merge отличается от JOIN и почему count и nunique дают разные числа.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: Series, DataFrame, merge, groupby" },
+    { m: "30 мин", w: "Практикум: семь шагов от merge до готового отчёта" },
     { m: "45 мин", w: "Основная задача: отчёт по каналам на pandas" },
     { m: "30 мин", w: "Тренажёр: 5 задач" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -8021,7 +8022,7 @@ window.CONTENT.m2l1 = {
   <div class="example-b">
 <pre><code>before = len(users)
 m = users.merge(paid, on="user_id", how="left")
-print(before, "->", len(m))          # 220 -> 269
+print(before, "->", len(m))          # 220 -> 305
 
 # сколько пользователей потеряли?
 print(m["user_id"].nunique())        # 220, ничего не потеряли
@@ -8116,6 +8117,232 @@ paid["big"] = paid["revenue"] > 5000</code></pre>
   data: window.SH.pyData,
   packages: ["pandas"],
   prelude: window.SH.pyPrelude,
+
+  /* Практикум — пошаговые мини-задачи между карточками и основной
+     задачей, тем же форматом, что в 1.2–1.4, но на Python: шаг
+     проверяется по напечатанному (expected.stdout). Шаги 1, 2, 4 — на трёх
+     клиентах (3, 19 из partner без заказов, 21), остальные — на всей базе.
+     Решения: node инструменты/checksteps.js m2l1 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. В каждом — одна новая конструкция, таблица «было → стало» на настоящих строках базы и маленький код, который курс проверит сам. Шаги 1, 2 и 4 идут на трёх клиентах, чтобы каждую строку было видно глазами, остальные — на всей базе.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas"],
+    prelude: window.SH.pyPrelude,
+    done: "Все семь шагов решены. Основная задача собирает их вместе: оплаченные → <code>merge</code> с <code>how=\"left\"</code> → <code>groupby</code> и <code>agg</code> → производные столбцы с <code>fillna</code> → сортировка → печать. Новое там одно — <code>buyers_cnt</code>, о нём подсказки к задаче.",
+    steps: [
+      {
+        title: "merge — это JOIN, и по умолчанию он inner",
+        body: `
+<p>Возьмём трёх клиентов: 3 из <code>organic</code> — у него четыре оплаченных заказа, 19 из <code>partner</code> — у него заказов нет, и 21 из <code>email</code> — у него один заказ. Заготовка уже положила их в <code>u</code>, а оплаченные заказы — в <code>paid</code>.</p>
+<p><code>u.merge(paid, on="user_id")</code> — это <code>JOIN … ON user_id</code>: к каждой строке клиента приклеиваются его заказы. Слева то, у чего вызвали <code>merge</code>, справа — то, что в скобках. Клиент с четырьмя заказами превращается в четыре строки.</p>
+<p>Без настройки <code>how</code> pandas делает <code>inner</code>: остаются только клиенты, у которых нашлась пара. Клиент 19 молча исчезнет — ни ошибки, ни предупреждения.</p>`,
+        ba: {
+          before: { columns: ["user_id", "channel"], rows: [[3, "organic"], [19, "partner"], [21, "email"]] },
+          after: { columns: ["user_id", "channel", "order_id", "revenue"],
+            rows: [[3, "organic", 4, 1361.84], [3, "organic", 5, 9071.54], [3, "organic", 6, 3071.02], [3, "organic", 7, 1796.6], [21, "email", 23, 5886.6]] },
+          hl: ["order_id", "revenue"], keep: [0, 2],
+          note: "Было три клиента, стало пять строк — и среди них нет клиента 19."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>m = u.merge(paid, on="user_id")</code> — соединить клиентов с заказами.</li>
+<li><code>print(len(u), len(m))</code> — сколько строк было и стало.</li>
+<li>Напечатать <code>m</code> — только столбцы <code>user_id</code>, <code>channel</code>, <code>order_id</code>, <code>revenue</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Соедините клиентов с оплаченными заказами и напечатайте: сначала число строк до и после, потом саму таблицу из четырёх столбцов.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nprint(u[[\"user_id\", \"channel\"]])\n",
+        expected: { stdout: `3 5
+   user_id  channel  order_id  revenue
+0        3  organic         4  1361.84
+1        3  organic         5  9071.54
+2        3  organic         6  3071.02
+3        3  organic         7  1796.60
+4       21    email        23  5886.60` },
+        hint: "Под строкой с <code>u</code>: <code>m = u.merge(paid, on=\"user_id\")</code>, <code>print(len(u), len(m))</code> и <code>print(m[[\"user_id\", \"channel\", \"order_id\", \"revenue\"]])</code>. Строку <code>print(u[…])</code> из заготовки уберите — иначе она напечатается первой.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nm = u.merge(paid, on=\"user_id\")\nprint(len(u), len(m))\nprint(m[[\"user_id\", \"channel\", \"order_id\", \"revenue\"]])"
+      },
+      {
+        title: "how=\"left\": никого не потерять",
+        body: `
+<p><code>how="left"</code> — это <code>LEFT JOIN</code>: все строки левой таблицы остаются, даже если пары справа нет. У клиента 19 заказов нет, поэтому в столбцах заказа у него окажется <code>NaN</code> — «пусто», как <code>NULL</code> в SQL.</p>
+<p>Заметьте: <code>order_id</code> стал печататься с точкой — <code>4.0</code>. Столбец целых чисел, в который попал <code>NaN</code>, pandas превращает в дробный. Это нормально, так будет и в основной задаче.</p>`,
+        ba: {
+          before: { columns: ["user_id", "channel"], rows: [[3, "organic"], [19, "partner"], [21, "email"]] },
+          after: { columns: ["user_id", "channel", "order_id", "revenue"],
+            rows: [[3, "organic", "4.0", 1361.84], ["…", "…", "…", "…"], [19, "partner", "NaN", "NaN"], [21, "email", "23.0", 5886.6]] },
+          hl: ["order_id", "revenue"],
+          note: "Клиент 19 остался — с пустыми заказами. Четыре строки клиента 3 сокращены до одной и «…»."
+        },
+        task: "<p><strong>Задание.</strong> Сделайте то же соединение, но с <code>how=\"left\"</code>, и напечатайте то же самое: число строк до и после и таблицу из четырёх столбцов.</p>",
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nm = u.merge(paid, on=\"user_id\")\nprint(len(u), len(m))\nprint(m[[\"user_id\", \"channel\", \"order_id\", \"revenue\"]])",
+        expected: { stdout: `3 6
+   user_id  channel  order_id  revenue
+0        3  organic       4.0  1361.84
+1        3  organic       5.0  9071.54
+2        3  organic       6.0  3071.02
+3        3  organic       7.0  1796.60
+4       19  partner       NaN      NaN
+5       21    email      23.0  5886.60` },
+        hint: "В скобках <code>merge</code> после <code>on=\"user_id\"</code> добавьте запятую и <code>how=\"left\"</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nm = u.merge(paid, on=\"user_id\", how=\"left\")\nprint(len(u), len(m))\nprint(m[[\"user_id\", \"channel\", \"order_id\", \"revenue\"]])"
+      },
+      {
+        title: "Проверка после merge: indicator=True",
+        body: `
+<p>На трёх клиентах всё видно глазами, а на всей базе — нет. Поэтому после каждого <code>merge</code> делают две проверки: число строк до и после и откуда взялась каждая строка.</p>
+<p>Вторую даёт настройка <code>indicator=True</code>: pandas добавит столбец <code>_merge</code>. В нём <code>both</code> — пара нашлась, <code>left_only</code> — строка только из левой таблицы (клиент без заказов), <code>right_only</code> — только из правой. <code>.value_counts()</code> у столбца считает, сколько раз встречается каждое значение.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id"], rows: [[3, "4.0"], [19, "NaN"], [21, "23.0"]] },
+          after: { columns: ["user_id", "order_id", "_merge"], rows: [[3, "4.0", "both"], [19, "NaN", "left_only"], [21, "23.0", "both"]] },
+          hl: ["_merge"],
+          note: "Столбец <code>_merge</code> подписывает каждую строку: нашлась ли пара."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Соединить <strong>всех</strong> <code>users</code> с <code>paid</code>: <code>how="left"</code> и <code>indicator=True</code>.</li>
+<li>Напечатать число строк до и после.</li>
+<li>Напечатать <code>m["_merge"].value_counts()</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Сколько строк получилось из 220 пользователей и сколько из них без заказов?</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\n",
+        expected: { stdout: `220 305
+_merge
+both          189
+left_only     116
+right_only      0
+Name: count, dtype: int64` },
+        hint: "<code>m = users.merge(paid, on=\"user_id\", how=\"left\", indicator=True)</code>, потом <code>print(len(users), len(m))</code> и <code>print(m[\"_merge\"].value_counts())</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\", indicator=True)\nprint(len(users), len(m))\nprint(m[\"_merge\"].value_counts())"
+      },
+      {
+        title: "groupby и agg: несколько итогов с именами",
+        body: `
+<p>В уроке 0.4 после <code>groupby</code> считали один столбец одним способом. Для отчёта нужно несколько итогов сразу — для этого <code>agg</code>. Каждый итог пишут так: <code>имя=("столбец", "как считать")</code>. Это <code>SELECT … AS имя</code>: <code>users_cnt=("user_id", "nunique")</code> — «число разных <code>user_id</code>, назови <code>users_cnt</code>».</p>
+<pre><code>m.groupby("channel").agg(
+    users_cnt=("user_id", "nunique"),
+    orders_cnt=("order_id", "count"),
+    revenue=("revenue", "sum"),
+)</code></pre>
+<p>Каналы встают в индекс слева, по алфавиту. Над ними печатается имя индекса — <code>channel</code>.</p>`,
+        ba: {
+          before: { columns: ["channel", "user_id", "order_id", "revenue"],
+            rows: [["organic", 3, "4.0", 1361.84], ["organic", 3, "5.0", 9071.54], ["organic", 3, "6.0", 3071.02], ["organic", 3, "7.0", 1796.6], ["partner", 19, "NaN", "NaN"], ["email", 21, "23.0", 5886.6]] },
+          after: { columns: ["channel", "users_cnt", "orders_cnt", "revenue"],
+            rows: [["email", 1, 1, 5886.6], ["organic", 1, 4, 15301.0], ["partner", 1, 0, 0.0]] },
+          hl: ["users_cnt", "orders_cnt", "revenue"],
+          note: "Шесть строк после <code>merge</code> свернулись в три — по строке на канал."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>m</code> — соединение трёх клиентов с заказами, уже в заготовке.</li>
+<li><code>m.groupby("channel")</code> — разложить по каналам.</li>
+<li><code>.agg(…)</code> — три итога с именами, как в примере выше.</li>
+<li>Положить в <code>res</code> и напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте для трёх клиентов по каналам <code>users_cnt</code>, <code>orders_cnt</code> и <code>revenue</code>.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nm = u.merge(paid, on=\"user_id\", how=\"left\")\n",
+        expected: { stdout: `         users_cnt  orders_cnt  revenue
+channel
+email            1           1   5886.6
+organic          1           4  15301.0
+partner          1           0      0.0` },
+        hint: "<code>res = m.groupby(\"channel\").agg(users_cnt=(\"user_id\", \"nunique\"), orders_cnt=(\"order_id\", \"count\"), revenue=(\"revenue\", \"sum\"))</code>, потом <code>print(res)</code>. Можно в несколько строк, как в примере, — внутри скобок переносы разрешены.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nu = users[users[\"user_id\"].isin([3, 19, 21])]\nm = u.merge(paid, on=\"user_id\", how=\"left\")\nres = m.groupby(\"channel\").agg(\n    users_cnt=(\"user_id\", \"nunique\"),\n    orders_cnt=(\"order_id\", \"count\"),\n    revenue=(\"revenue\", \"sum\"),\n)\nprint(res)"
+      },
+      {
+        title: "size, nunique, count: три разных числа",
+        body: `
+<p>После <code>merge</code> одна и та же группа даёт три разных «количества», и путать их — главная ошибка в отчётах:</p>
+<ul>
+<li><code>"size"</code> — сколько строк в группе, вместе с пустыми. Это <code>COUNT(*)</code>. Клиент с четырьмя заказами даёт четыре строки.</li>
+<li><code>"nunique"</code> — сколько разных значений. Это <code>COUNT(DISTINCT user_id)</code> — честное число людей.</li>
+<li><code>"count"</code> — сколько непустых значений. Это <code>COUNT(order_id)</code>: у <code>partner</code> — 0, потому что <code>order_id</code> там <code>NaN</code>.</li>
+</ul>
+<p>На всей базе разница — десятки: если посчитать людей через <code>size</code>, канал <code>organic</code> получит 109 «пользователей» вместо 75.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Соединить всех <code>users</code> с <code>paid</code>, <code>how="left"</code> — уже в заготовке.</li>
+<li>По каналам посчитать три итога: <code>rows=("user_id", "size")</code>, <code>users=("user_id", "nunique")</code>, <code>orders=("order_id", "count")</code>.</li>
+<li>Напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте три числа по всем каналам и посмотрите, где они расходятся.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\n",
+        expected: { stdout: `             rows  users  orders
+channel
+email          40     28      28
+organic       109     75      74
+paid_search    78     55      51
+partner         6      6       0
+referral       18     14      12
+social         54     42      24` },
+        hint: "<code>print(m.groupby(\"channel\").agg(rows=(\"user_id\", \"size\"), users=(\"user_id\", \"nunique\"), orders=(\"order_id\", \"count\")))</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\nprint(m.groupby(\"channel\").agg(\n    rows=(\"user_id\", \"size\"),\n    users=(\"user_id\", \"nunique\"),\n    orders=(\"order_id\", \"count\"),\n))"
+      },
+      {
+        title: "Столбец из столбцов и fillna(0)",
+        body: `
+<p>Новый столбец считают из старых и кладут под новым именем: <code>res["aov"] = res["revenue"] / res["orders_cnt"]</code> — средний чек. Деление идёт построчно: каждая строка делится сама на себя, как формула в Excel, протянутая вниз.</p>
+<p>У <code>partner</code> получится 0 / 0. В школе это «делить нельзя», а pandas ставит <code>NaN</code> — и он уедет в отчёт. Закрывают его <code>.fillna(0)</code> — «пустое замени нулём».</p>`,
+        ba: {
+          before: { columns: ["channel", "orders_cnt", "revenue", "aov"],
+            rows: [["email", 28, 122017.95, 4357.78], ["partner", 0, 0.0, "NaN"], ["social", 24, 61776.11, 2574.0]] },
+          after: { columns: ["channel", "orders_cnt", "revenue", "aov"],
+            rows: [["email", 28, 122017.95, 4357.78], ["partner", 0, 0.0, 0.0], ["social", 24, 61776.11, 2574.0]] },
+          hl: ["aov"],
+          note: "«Было» — только деление и <code>round</code>. «Стало» — с <code>.fillna(0)</code> на конце."
+        },
+        task: `<p><strong>Порядок действий</strong> в <code>(res["revenue"] / res["orders_cnt"]).round(2).fillna(0)</code>:</p>
+<ol class="order">
+<li><code>res["revenue"] / res["orders_cnt"]</code> — поделить построчно. Круглые скобки вокруг деления нужны, чтобы методы дальше применились к результату, а не к одному <code>res["orders_cnt"]</code>.</li>
+<li><code>.round(2)</code> — два знака.</li>
+<li><code>.fillna(0)</code> — пустое заменить нулём.</li>
+<li>Положить в <code>res["aov"]</code> и напечатать <code>res</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка уже посчитала отчёт по каналам. Добавьте столбец <code>aov</code> — средний чек, два знака, без <code>NaN</code>.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\nres = m.groupby(\"channel\").agg(\n    users_cnt=(\"user_id\", \"nunique\"),\n    orders_cnt=(\"order_id\", \"count\"),\n    revenue=(\"revenue\", \"sum\"),\n)\nprint(res)",
+        expected: { stdout: `             users_cnt  orders_cnt    revenue      aov
+channel
+email               28          28  122017.95  4357.78
+organic             75          74  271926.54  3674.68
+paid_search         55          51  141330.95  2771.20
+partner              6           0       0.00     0.00
+referral            14          12   56377.23  4698.10
+social              42          24   61776.11  2574.00` },
+        hint: "Перед <code>print(res)</code> добавьте строку <code>res[\"aov\"] = (res[\"revenue\"] / res[\"orders_cnt\"]).round(2).fillna(0)</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\nres = m.groupby(\"channel\").agg(\n    users_cnt=(\"user_id\", \"nunique\"),\n    orders_cnt=(\"order_id\", \"count\"),\n    revenue=(\"revenue\", \"sum\"),\n)\nres[\"aov\"] = (res[\"revenue\"] / res[\"orders_cnt\"]).round(2).fillna(0)\nprint(res)"
+      },
+      {
+        title: "Отчёт в конце: reset_index, сортировка, печать без индекса",
+        body: `
+<p>Осталось оформить. Каналы сидят в индексе, а в отчёте они нужны обычным столбцом: <code>res.reset_index()</code> делает из индекса столбец <code>channel</code>, а слева появляются номера 0, 1, 2…</p>
+<p>Дальше — знакомая сортировка по выручке. Номера слева после неё перемешаются, и в отчёте они не нужны: <code>print(res.to_string(index=False))</code> печатает таблицу без индекса.</p>`,
+        ba: {
+          before: { columns: ["channel (индекс)", "revenue"], rows: [["email", 122017.95], ["organic", 271926.54], ["paid_search", 141330.95]] },
+          after: { columns: ["channel", "revenue"], rows: [["organic", 271926.54], ["paid_search", 141330.95], ["email", 122017.95]] },
+          hl: ["channel"],
+          note: "Канал из индекса стал столбцом, строки встали по выручке, номеров слева нет."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>res = res.reset_index()</code> — канал в столбец.</li>
+<li><code>res = res.sort_values("revenue", ascending=False)</code> — самые доходные сверху.</li>
+<li><code>print(res.to_string(index=False))</code> — напечатать без индекса.</li>
+</ol>
+<p><strong>Задание.</strong> Оформите отчёт из заготовки: канал столбцом, сортировка по выручке по убыванию, печать без индекса.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\nres = m.groupby(\"channel\").agg(\n    users_cnt=(\"user_id\", \"nunique\"),\n    orders_cnt=(\"order_id\", \"count\"),\n    revenue=(\"revenue\", \"sum\"),\n)\nres[\"aov\"] = (res[\"revenue\"] / res[\"orders_cnt\"]).round(2).fillna(0)\nprint(res)",
+        expected: { stdout: `    channel  users_cnt  orders_cnt   revenue     aov
+    organic         75          74 271926.54 3674.68
+paid_search         55          51 141330.95 2771.20
+      email         28          28 122017.95 4357.78
+     social         42          24  61776.11 2574.00
+   referral         14          12  56377.23 4698.10
+    partner          6           0      0.00    0.00` },
+        hint: "Замените последнюю строку на три: <code>res = res.reset_index()</code>, <code>res = res.sort_values(\"revenue\", ascending=False)</code>, <code>print(res.to_string(index=False))</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"]\nm = users.merge(paid, on=\"user_id\", how=\"left\")\nres = m.groupby(\"channel\").agg(\n    users_cnt=(\"user_id\", \"nunique\"),\n    orders_cnt=(\"order_id\", \"count\"),\n    revenue=(\"revenue\", \"sum\"),\n)\nres[\"aov\"] = (res[\"revenue\"] / res[\"orders_cnt\"]).round(2).fillna(0)\nres = res.reset_index()\nres = res.sort_values(\"revenue\", ascending=False)\nprint(res.to_string(index=False))"
+      }
+    ]
+  },
 
   starter: `# Отчёт по каналам привлечения
 # users, orders и events уже загружены
