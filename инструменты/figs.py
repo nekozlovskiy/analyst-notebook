@@ -523,11 +523,15 @@ def check_m1():
 
 # ---------------------------------------------------------------- запись
 
-def write_block(module, figs):
+def write_block(module, figs, sandboxes=None):
     p = ROOT / f"content-{module}.js"
     s = p.read_text(encoding="utf8")
     body = "window.FIGS = window.FIGS || {};\n" + "".join(
         f"window.FIGS[{json.dumps(k)}] = {json.dumps(v, ensure_ascii=False)};\n" for k, v in figs.items())
+    if sandboxes:                                   # данные песочниц «покрути», см. tinker.js
+        body += "window.TINKER = window.TINKER || {};\n" + "".join(
+            f"window.TINKER[{json.dumps(k)}] = {json.dumps(v, ensure_ascii=False, separators=(',', ':'))};\n"
+            for k, v in sandboxes.items())
     block = ("/* FIGS:BEGIN — схемы генерирует инструменты/figs.py, руками не править */\n"
              + body + "/* FIGS:END */")
     if "/* FIGS:BEGIN" in s:
@@ -1249,6 +1253,38 @@ def fig_arpu_split():
     return svg.render()
 
 
+SANDBOX_NS = (1, 2, 3, 5, 10, 20, 30, 50, 100, 200)
+
+
+def clt_sandbox():
+    """Песочница урока 3.1: те же выборки, что в задаче (Random(42) заново
+    для каждого n), гистограммы по 250 руб. на оси 0–11 000. sd — разброс
+    по опыту, sdf — по формуле σ/√n."""
+    import random
+    rev = [r for (r,) in db().execute(
+        "SELECT revenue FROM orders WHERE status = 'paid' ORDER BY order_id")]
+    mu = sum(rev) / len(rev)
+    sigma = sd(rev)
+    step, top = 250, 11000
+    bins, sds, sdfs = [], [], []
+    for n in SANDBOX_NS:
+        rnd = random.Random(42)
+        means = [sum(rnd.choice(rev) for _ in range(n)) / n for _ in range(2000)]
+        cnt = [0] * (top // step)
+        for m in means:
+            cnt[min(int(m // step), len(cnt) - 1)] += 1
+        bins.append(cnt)
+        sds.append(round(sd(means), 2))
+        sdfs.append(round(sigma / n ** .5, 2))
+    return {"ns": list(SANDBOX_NS), "start": SANDBOX_NS.index(30), "ticks": [1, 5, 30, 200],
+            "step": step, "top": top, "mean": round(mu, 2), "bins": bins, "sd": sds, "sdf": sdfs,
+            "caption": "Рис. Двигайте ползунок: средние 2000 выборок из одних и тех же чеков — "
+                       "с ростом n разброс падает, а форма становится колоколом"}
+
+
+SANDBOX_M3 = {"clt-means": clt_sandbox}
+
+
 FIGS_M3 = {
     "arpu-split": fig_arpu_split,
     "peeking": fig_peeking,
@@ -1286,6 +1322,13 @@ def check_m3():
     got = [f"{fwer(k) * 100:.1f}" for k in (1, 3, 5, 10, 20)]
     if got != ["5.0", "14.3", "22.6", "40.1", "64.2"]:
         errs.append(f"fwer-curve: {got} — не совпало с таблицей урока 3.5")
+    sb = clt_sandbox()
+    i5, i30 = sb["ns"].index(5), sb["ns"].index(30)
+    got = (f"{sb['sd'][i5]:.2f}", f"{sb['sdf'][i5]:.2f}", f"{sb['sd'][i30]:.2f}", f"{sb['sdf'][i30]:.0f}")
+    if got != ("778.80", "773.11", "323.06", "316"):
+        errs.append(f"clt-sandbox: {got} — не совпало с уроком 3.1")
+    if any(sum(b) != 2000 for b in sb["bins"]) or sb["ns"][sb["start"]] != 30:
+        errs.append("clt-sandbox: в каждой гистограмме 2000 средних, исходное n = 30")
     return errs
 
 
@@ -2178,19 +2221,20 @@ def check_m6():
     return []
 
 
-MODULES = {"m1": (FIGS_M1, check_m1), "m2": (FIGS_M2, check_m2), "m3": (FIGS_M3, check_m3),
-           "m4": (FIGS_M4, check_m4), "m5": (FIGS_M5, check_m5), "m6": (FIGS_M6, check_m6)}
+MODULES = {"m1": (FIGS_M1, check_m1, {}), "m2": (FIGS_M2, check_m2, {}),
+           "m3": (FIGS_M3, check_m3, SANDBOX_M3), "m4": (FIGS_M4, check_m4, {}),
+           "m5": (FIGS_M5, check_m5, {}), "m6": (FIGS_M6, check_m6, {})}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
     if mod not in MODULES:
         sys.exit("укажите модуль: " + ", ".join(MODULES))
-    figs, check = MODULES[mod]
+    figs, check, boxes = MODULES[mod]
     errs = check()
     if errs:
         sys.exit("Числа не сошлись с базой:\n" + "\n".join(errs))
     if "--check" in sys.argv:
         print("Числа сходятся с базой.")
         sys.exit(0)
-    write_block(mod, {k: f() for k, f in figs.items()})
+    write_block(mod, {k: f() for k, f in figs.items()}, {k: f() for k, f in boxes.items()})
     print(f"content-{mod}.js: схем {len(figs)} — " + ", ".join(figs))

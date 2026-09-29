@@ -33,6 +33,25 @@ for (const [fid, svg] of Object.entries(FIGS)) {
   if (/#[0-9a-f]{3,8}\b|rgba?\(|(fill|stroke)="(?!none)[a-z]/i.test(svg.replace(/url\(#[\w-]+\)/g, "")))
     bad.push(fid + ": цвет задан напрямую — только классы .f-*");
 }
+const tnkFile = path.join(base, "tinker.js");
+if (fs.existsSync(tnkFile)) vm.runInContext(fs.readFileSync(tnkFile, "utf8"), ctx);
+const SBX = ctx.window.TINKER || {}, S = ctx.window.Tinker || { draw: {}, label: {} };
+for (const [id, data] of Object.entries(SBX)) {
+  if (!used[id]) bad.push("песочница " + id + " — схемы нет в теории");
+  if (!S.draw[id] || !S.label[id]) { bad.push("песочница " + id + ": нет Tinker.draw/label в tinker.js"); continue; }
+  data.ns.forEach(function (n, i) {
+    const svg = S.draw[id](data, i), l = S.label[id](data, i);
+    const vb = svg.match(/^<svg[^>]*viewBox="-?[\d.]+ -?[\d.]+ ([\d.]+) /);
+    if (!vb || +vb[1] > 340) bad.push(id + " n=" + n + ": нет viewBox или он шире 340");
+    if (/NaN|undefined/.test(svg + l.text + l.aria)) bad.push(id + " n=" + n + ": NaN или undefined");
+    if (/#[0-9a-f]{3,8}\b|rgba?\(|(fill|stroke)="(?!none)[a-z]/i.test(svg))
+      bad.push(id + " n=" + n + ": цвет задан напрямую — только классы .f-*");
+    if (l.text.replace(/\s/g, "").indexOf(String(Math.round(data.sd[i]))) < 0)   /* «1 778» — с пробелом */
+      bad.push(id + " n=" + n + ": в подписи нет разброса " + Math.round(data.sd[i]));
+  });
+}
+for (const id of Object.keys(S.draw)) if (!SBX[id]) bad.push("Tinker.draw[" + id + "] есть, а данных нет — запустите figs.py");
+console.log("Песочниц: " + Object.keys(SBX).length);
 console.log("Схем: " + Object.keys(FIGS).length + ", меток в теории: " + Object.keys(used).length);
 if (bad.length) { console.log("\nОшибки:\n" + bad.join("\n")); process.exit(1); }
 console.log("Ошибок нет.");

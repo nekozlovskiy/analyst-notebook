@@ -59,7 +59,7 @@ html = read("index.html")
 html = drop(html, '<link rel="manifest" href="manifest.webmanifest">\n')
 
 # подключены в index.html и встраиваются на своё место
-EAGER = ("lessons.js", "content-core.js", "glossary.js", "app.js")
+EAGER = ("lessons.js", "content-core.js", "glossary.js", "tinker.js", "app.js")
 # на сайте грузятся по требованию — в файл кладём заранее, перед app.js
 LAZY = ("content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
         "content-m4.js", "content-m5.js", "content-m6.js", "data.js")
@@ -80,7 +80,7 @@ if "fonts/" in re.sub(r"/\*.*?\*/", "", css, flags=re.S):
 html = swap(html, '<link rel="stylesheet" href="styles.css">',
             "<style>\n" + css + "\n</style>")
 
-for name in ("lessons.js", "content-core.js", "glossary.js"):
+for name in ("lessons.js", "content-core.js", "glossary.js", "tinker.js"):
     html = swap(html, '<script src="%s"></script>' % name,
                 "<script>\n" + read(name) + "\n</script>")
 

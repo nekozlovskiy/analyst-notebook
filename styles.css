@@ -2216,3 +2216,10 @@ figure.fig figcaption {
 .fig-svg .f-raw { fill: none; stroke: var(--ink-4); stroke-width: 1.1; }   /* сырые данные на графике: видны, но тише ручки */
 .fig-svg .f-tint { fill: var(--pen); stroke: none; }
 .fig-svg .f-dash { fill: none; stroke: var(--ink-4); stroke-width: 1.1; stroke-dasharray: 3 3; }  /* наблюдаемая связь, не причина */
+/* Песочница: живая схема + ползунок (tinker.js) */
+.tnk-range { display: block; width: 100%; margin: .6rem 0 0; accent-color: var(--pen); }
+.tnk-ticks { position: relative; height: 1.1rem; margin: 0 .55rem; font: 11px var(--sans); color: var(--ink-3); }
+.tnk-ticks span { position: absolute; transform: translateX(-50%); }
+.tnk-ticks span:first-child { transform: none; }            /* крайние засечки — внутрь, чтобы не обрезались */
+.tnk-ticks span:last-child { transform: translateX(-100%); }
+.tnk-read { margin: .4rem 0 0; font: 13px var(--mono); color: var(--ink-2); text-align: center; }

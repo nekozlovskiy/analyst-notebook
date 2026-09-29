@@ -4335,6 +4335,7 @@ function renderLesson(app, id) {
   /* ---------- термины из словаря ---------- */
   Terms.mark($("#s-theory .theory"));
   Figs.mount($("#s-theory .theory"));
+  if (window.Tinker) Tinker.mount($("#s-theory .theory"));
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
