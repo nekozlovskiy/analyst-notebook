@@ -39,8 +39,18 @@ window.Tinker = (function () {
       return { text: "порог " + thr + " · полнота " + rec + " · точность " + prec,
                aria: "порог " + thr + ": поймано " + tp + " из " + data.npos + ", ложных тревог " +
                      fp + " из " + data.nneg };
+    },
+    "power-bells": function (data, i) {
+      const n = fmt(data.pos[i]), pw = share(data.power[i]), m = data.mde[i] * 100,
+            mde = (m >= 10 ? Math.round(m) : pct(m.toFixed(1))) + "%";   /* 37%, но 8,3% */
+      return { text: "n = " + n + " · мощность " + pw + " · MDE " + mde,
+               aria: n + " на группу: мощность " + pw + ", ловим эффект от " + mde };
     }
   };
+
+  function share(v) {                               /* 0,999 → «99,9%», а не «100%» */
+    return (v >= .995 ? pct((v * 100).toFixed(1)) : Math.round(v * 100)) + "%";
+  }
 
   function pct(v) { return String(v).replace(".", ","); }
 
@@ -64,6 +74,51 @@ window.Tinker = (function () {
       });
       s += '<text class="f-sub" x="330" y="' + (base + 32) + '" font-size="10.5" text-anchor="end">серым — сами чеки</text>';
       s += '<text class="f-note" x="0" y="' + (base + 56) + '" font-size="15">двигайте n — колокол сужается как √n</text>';
+      return s + "</svg>";
+    },
+    "power-bells": function (data, i) {
+      const x1 = 330, top = 44, base = 190, ph = 118, d = data.d, lo = data.lo, hi = data.hi;
+      const se0 = data.se0[i], se1 = data.se1[i], c = data.c[i];
+      const X = function (v) { return x1 * (v - lo) / (hi - lo); };
+      const H = function (v, m, sd) { return base - ph * Math.exp(-Math.pow((v - m) / sd, 2) / 2); };
+      function bell(m, sd) {
+        let p = "";
+        for (let k = 0; k <= 220; k++) {
+          const v = lo + k * (hi - lo) / 220;
+          p += (k ? " L" : "M") + X(v).toFixed(1) + " " + H(v, m, sd).toFixed(1);
+        }
+        return p;
+      }
+      let s = '<svg class="fig-svg" viewBox="-4 0 340 270" role="img" aria-label="' +
+              label["power-bells"](data, i).aria + '">';
+      s += '<text class="f-hd" x="0" y="14" font-size="12.5">разница конверсий B − A, п.п.</text>';
+      s += '<path class="f-raw" d="' + bell(0, se0) + '"/>';
+      s += '<path class="f-pen" d="' + bell(d, se1) + '"/>';
+      /* β: штриховка под колоколом «эффект есть» левее порога */
+      for (let v = lo; v < Math.min(c, hi); v += 4 * (hi - lo) / x1) {
+        const y = H(v, d, se1);
+        if (base - y > ph * .03)
+          s += '<line class="f-soft" x1="' + X(v).toFixed(1) + '" y1="' + base + '" x2="' + X(v).toFixed(1) +
+               '" y2="' + y.toFixed(1) + '"/>';
+      }
+      s += '<line class="f-row" x1="0" y1="' + base + '" x2="' + x1 + '" y2="' + base + '"/>';
+      const cx = Math.min(X(c), x1);
+      s += '<path class="f-box" d="M' + cx.toFixed(1) + ' ' + (top + 8) + ' V' + base + '"/>';
+      s += '<text class="f-sub" x="' + (cx > x1 - 40 ? cx - 3 : cx + 3).toFixed(1) + '" y="' + (top + 16) +
+           '" font-size="10.5"' + (cx > x1 - 40 ? ' text-anchor="end"' : '') + '>порог</text>';
+      s += '<text class="f-sub" x="' + (X(0) - 6).toFixed(1) + '" y="' + (top + 4) +
+           '" font-size="10.5" text-anchor="end">эффекта нет</text>';
+      s += '<text class="f-pen-t" x="' + (X(d) + 6).toFixed(1) + '" y="' + (top + 4) +
+           '" font-size="11.5">эффект +10%</text>';
+      [-.01, 0, .01].forEach(function (v) {
+        s += '<line class="f-row" x1="' + X(v).toFixed(1) + '" y1="' + base + '" x2="' + X(v).toFixed(1) +
+             '" y2="' + (base + 4) + '"/>';
+        s += '<text class="f-sub" x="' + X(v).toFixed(1) + '" y="' + (base + 16) +
+             '" font-size="10.5" text-anchor="middle">' + (v < 0 ? "−1" : v > 0 ? "+1" : "0") + '</text>';
+      });
+      s += '<text class="f-sub" x="' + x1 + '" y="' + (base + 32) + '" font-size="10.5" text-anchor="end">штриховка — β</text>';
+      s += '<text class="f-note" x="0" y="' + (base + 56) + '" font-size="15">больше людей — уже колокола,</text>';
+      s += '<text class="f-note" x="0" y="' + (base + 74) + '" font-size="15">и эффект пропускают реже</text>';
       return s + "</svg>";
     },
     "roc-steps": function (data, i) {

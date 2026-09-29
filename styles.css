@@ -2219,7 +2219,7 @@ figure.fig figcaption {
 /* Песочница: живая схема + ползунок (tinker.js) */
 .tnk-range { display: block; width: 100%; margin: .6rem 0 0; accent-color: var(--pen); }
 .tnk-ticks { position: relative; height: 1.1rem; margin: 0 .55rem; font: 11px var(--sans); color: var(--ink-3); }
-.tnk-ticks span { position: absolute; transform: translateX(-50%); }
+.tnk-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }   /* «100 000» — одной строкой */
 .tnk-ticks span:first-child { transform: none; }            /* крайние засечки — внутрь, чтобы не обрезались */
 .tnk-ticks span:last-child { transform: translateX(-100%); }
 .tnk-read { margin: .4rem 0 0; font: 13px var(--mono); color: var(--ink-2); text-align: center; }
