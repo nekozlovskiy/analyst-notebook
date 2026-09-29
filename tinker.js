@@ -45,6 +45,13 @@ window.Tinker = (function () {
             mde = (m >= 10 ? Math.round(m) : pct(m.toFixed(1))) + "%";   /* 37%, но 8,3% */
       return { text: "n = " + n + " · мощность " + pw + " · MDE " + mde,
                aria: n + " на группу: мощность " + pw + ", ловим эффект от " + mde };
+    },
+    "window-frame": function (data, i) {
+      const sp = data.span[i], k = sp[1] - sp[0] + 1, sum = data.sums[i][data.rows.length - 1];
+      const rows = k + (k === 1 ? " строка" : " строки");
+      return { text: "в рамке " + rows + " · сумма " + sum,
+               aria: "ROWS BETWEEN " + data.frames[i][0] + " " + data.frames[i][1] + ": в рамке последней строки " +
+                     rows + ", сумма " + sum };
     }
   };
 
@@ -119,6 +126,38 @@ window.Tinker = (function () {
       s += '<text class="f-sub" x="' + x1 + '" y="' + (base + 32) + '" font-size="10.5" text-anchor="end">штриховка — β</text>';
       s += '<text class="f-note" x="0" y="' + (base + 56) + '" font-size="15">больше людей — уже колокола,</text>';
       s += '<text class="f-note" x="0" y="' + (base + 74) + '" font-size="15">и эффект пропускают реже</text>';
+      return s + "</svg>";
+    },
+    "window-frame": function (data, i) {
+      const w = 282, y = 44, hh = 22, rh = 26, sp = data.span[i], f = data.frames[i];
+      const cols = [8, 54, 190, 274], n = data.rows.length, bottom = y + hh + rh * n;
+      let s = '<svg class="fig-svg" viewBox="-4 0 340 ' + (bottom + 58) + '" role="img" aria-label="' +
+              label["window-frame"](data, i).aria + '">';
+      s += '<text class="f-t" x="0" y="14" font-size="11.5">ROWS BETWEEN ' + f[0] + '</text>';
+      s += '<text class="f-t" x="0" y="30" font-size="11.5">' + f[1] + '</text>';
+      s += '<rect class="f-box" x="0" y="' + y + '" width="' + w + '" height="' + (hh + rh * n) + '" rx="5"/>';
+      ["user_id", "order_date", "revenue", "в рамке"].forEach(function (t, c) {
+        s += '<text class="f-sub" x="' + cols[c] + '" y="' + (y + 15) + '" font-size="10.5"' +
+             (c > 1 ? ' text-anchor="end"' : '') + '>' + t + '</text>';
+      });
+      data.rows.forEach(function (r, k) {
+        const top = y + hh + k * rh, ty = top + rh / 2 + 4.5, inside = k >= sp[0] && k <= sp[1];
+        s += '<line class="f-row" x1="0" y1="' + top + '" x2="' + w + '" y2="' + top + '"/>';
+        s += '<text class="f-t" x="' + cols[0] + '" y="' + ty + '" font-size="12.5">' + r[0] + '</text>';
+        s += '<text class="f-t" x="' + cols[1] + '" y="' + ty + '" font-size="12.5">' + r[1] + '</text>';
+        s += '<text class="' + (inside ? "f-pen-t" : "f-t") + '" x="' + cols[2] + '" y="' + ty +
+             '" font-size="12.5" text-anchor="end">' + r[2] + '</text>';
+        s += '<text class="' + (k === n - 1 ? "f-pen-t" : "f-t") + '" x="' + cols[3] + '" y="' + ty +
+             '" font-size="12.5" text-anchor="end">' + data.sums[i][k] + '</text>';
+      });
+      /* граница окон — ручкой: дальше неё рамка не заходит */
+      const cut = y + hh + data.cut * rh;
+      s += '<line class="f-pen" x1="0" y1="' + cut + '" x2="' + w + '" y2="' + cut + '"/>';
+      /* скобка рамки последней строки */
+      const a = y + hh + sp[0] * rh + 3, b = y + hh + (sp[1] + 1) * rh - 3;
+      s += '<path class="f-pen" d="M' + (w + 5) + ' ' + a + ' h7 V' + b + ' h-7"/>';
+      s += '<text class="f-sub" x="' + (w + 15) + '" y="' + ((a + b) / 2 + 4) + '" font-size="10.5">рамка</text>';
+      s += '<text class="f-note" x="0" y="' + (bottom + 28) + '" font-size="15">' + f[2] + '</text>';
       return s + "</svg>";
     },
     "roc-steps": function (data, i) {
