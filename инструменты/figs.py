@@ -1967,9 +1967,6 @@ def roc_sandbox():
                        "и тем больше ложных тревог. Точка идёт по ступенькам ROC-кривой"}
 
 
-SANDBOX_M5 = {"roc-steps": roc_sandbox}
-
-
 # Учебная чаша L(b) = b²: вторая производная 2, граница шага 2/2 = 1.
 # Шаги свои, не 0,5 и 1,1 из задачи урока 5.5.
 GD_STEPS = [(.1, -1.0, "шаг 0,1 — мал", "ползёт к минимуму"),
@@ -1983,6 +1980,45 @@ def gd_path(lr, b, n=6):
         b = b - lr * 2 * b                          # градиент b² равен 2b
         out.append(b)
     return out
+
+
+# Шаги песочницы. Не берём шаги задачи урока 5.5 (0,01; 0,1 там на другой
+# задаче; 0,5; 1,1) кроме 0,1 из статичной схемы, и шаги тренажёра
+# «Найти границу устойчивости» (0,05 0,2 0,4 0,6 0,8 0,9 0,95 1,0).
+GD_LRS = (.03, .1, .15, .25, .35, .45, .7, .85, .98, 1.02, 1.05)
+GD_HIDDEN = (.01, .5, 1.1, .05, .2, .4, .6, .8, .9, .95, 1.0)
+GD_BOTTOM = .01                                     # «дно»: |b| < 0,01 при старте из −1
+
+
+def gd_note(lr):
+    if lr < .2:
+        return "шаг мал — ползёт к минимуму"
+    if lr < .5:
+        return "в самый раз — доходит быстро"
+    if lr < 1:
+        return "скачет со склона на склон, но сходится"
+    return "перепрыгивает и уходит вверх"
+
+
+def gd_sandbox():
+    """Песочница урока 5.5: чаша L = b² из схемы gd-steps, старт b = −1,
+    десять шагов; bottom — сколько шагов до |b| < 0,01 (None — расходится)."""
+    paths, bottom = [], []
+    for lr in GD_LRS:
+        paths.append([round(b, 6) for b in gd_path(lr, -1.0, 11)])
+        q = abs(1 - 2 * lr)                         # каждый шаг умножает b на (1 − 2η)
+        bottom.append(None if q >= 1 else math.ceil(math.log(GD_BOTTOM) / math.log(q) - 1e-9))
+    return {"pos": list(GD_LRS), "start": GD_LRS.index(.35), "name": "Длина шага",
+            "ticks": [[0, "0,03"], [GD_LRS.index(.35), "0,35"], [GD_LRS.index(.98), "0,98"],
+                      [len(GD_LRS) - 1, "1,05"]],
+            "paths": paths, "bottom": bottom, "notes": [gd_note(lr) for lr in GD_LRS], "lim": 1.3,
+            "expect": ["расходится" if b is None else str(b) for b in bottom],
+            "caption": "Рис. Двигайте ползунок: та же чаша L = b², десять шагов спуска из b = −1. "
+                       "Медленно и при слишком малом шаге, и у самой границы η = 1, а за ней спуск расходится"}
+
+
+SANDBOX_M5 = {"roc-steps": roc_sandbox, "gd-steps": gd_sandbox}
+
 
 
 def fig_gd_steps():
@@ -2098,6 +2134,14 @@ def check_m5():
     i = sb["start"]
     if (sb["tp"][i], sb["fp"][i], sb["tp"][-1], sb["fp"][-1]) != (4, 1, 5, 5):
         errs.append(f"roc-sandbox: при пороге 0,5 {sb['tp'][i]} из 5 и {sb['fp'][i]} из 5 — в схеме 4 и 1")
+    gb = gd_sandbox()
+    if set(GD_LRS) & set(GD_HIDDEN):
+        errs.append("gd-sandbox: среди шагов есть шаг из задачи или тренажёра урока 5.5")
+    got = dict(zip(GD_LRS, gb["bottom"]))
+    if (got[.35], got[.45], got[.1], got[1.02]) != (4, 2, 21, None):
+        errs.append(f"gd-sandbox: шагов до дна {got}")
+    if any(b is not None and abs(gd_path(lr, -1.0, b + 1)[-1]) >= GD_BOTTOM for lr, b in got.items()):
+        errs.append("gd-sandbox: за bottom шагов |b| не опустился ниже 0,01")
     ends = [abs(gd_path(lr, b)[-1]) < abs(b) for lr, b, _, _ in GD_STEPS]
     if ends != [True, True, False]:
         errs.append(f"gd-steps: сходимость {ends} — два первых шага должны сходиться, третий расходиться")

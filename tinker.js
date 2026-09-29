@@ -52,8 +52,18 @@ window.Tinker = (function () {
       return { text: "в рамке " + rows + " · сумма " + sum,
                aria: "ROWS BETWEEN " + data.frames[i][0] + " " + data.frames[i][1] + ": в рамке последней строки " +
                      rows + ", сумма " + sum };
+    },
+    "gd-steps": function (data, i) {
+      const lr = pct(data.pos[i]), n = data.bottom[i];
+      const tail = n === null ? "расходится" : "до дна " + n + " " + steps(n);
+      return { text: "шаг " + lr + " · " + tail, aria: "шаг " + lr + ": " + tail };
     }
   };
+
+  function steps(n) {                               /* 1 шаг, 2 шага, 5 шагов, 21 шаг, 113 шагов */
+    const d = n % 10, h = n % 100;
+    return d === 1 && h !== 11 ? "шаг" : d >= 2 && d <= 4 && (h < 12 || h > 14) ? "шага" : "шагов";
+  }
 
   function share(v) {                               /* 0,999 → «99,9%», а не «100%» */
     return (v >= .995 ? pct((v * 100).toFixed(1)) : Math.round(v * 100)) + "%";
@@ -158,6 +168,40 @@ window.Tinker = (function () {
       s += '<path class="f-pen" d="M' + (w + 5) + ' ' + a + ' h7 V' + b + ' h-7"/>';
       s += '<text class="f-sub" x="' + (w + 15) + '" y="' + ((a + b) / 2 + 4) + '" font-size="10.5">рамка</text>';
       s += '<text class="f-note" x="0" y="' + (bottom + 28) + '" font-size="15">' + f[2] + '</text>';
+      return s + "</svg>";
+    },
+    "gd-steps": function (data, i) {
+      const lim = data.lim, x1 = 330, top = 40, base = 196, ph = base - top;
+      const X = function (v) { return (x1 * (v + lim) / (2 * lim)).toFixed(1); };
+      const Y = function (v) { return (base - ph * v * v / (lim * lim)).toFixed(1); };
+      let s = '<svg class="fig-svg" viewBox="-4 0 340 270" role="img" aria-label="' +
+              label["gd-steps"](data, i).aria + '">';
+      s += '<text class="f-hd" x="0" y="14" font-size="12.5">десять шагов спуска по чаше L = b²</text>';
+      let bowl = "";
+      for (let k = 0; k <= 60; k++) {
+        const v = -lim + 2 * lim * k / 60;
+        bowl += (k ? " L" : "M") + X(v) + " " + Y(v);
+      }
+      s += '<path class="f-soft" d="' + bowl + '"/>';
+      s += '<line class="f-row" x1="0" y1="' + base + '" x2="' + x1 + '" y2="' + base + '"/>';
+      s += '<line class="f-row" x1="' + X(0) + '" y1="' + base + '" x2="' + X(0) + '" y2="' + (base + 4) + '"/>';
+      s += '<text class="f-sub" x="' + X(0) + '" y="' + (base + 16) + '" font-size="10.5" text-anchor="middle">минимум</text>';
+      /* путь до первой точки за краем чаши: дальше рисовать некуда */
+      const pts = [];
+      for (let k = 0; k < data.paths[i].length && Math.abs(data.paths[i][k]) <= lim; k++) pts.push(data.paths[i][k]);
+      s += '<path class="f-pen" d="' + pts.map(function (v, k) { return (k ? "L" : "M") + X(v) + " " + Y(v); }).join(" ") + '"/>';
+      pts.forEach(function (v, k) {
+        s += '<circle class="' + (k ? "f-pen-fill" : "f-sub") + '" cx="' + X(v) + '" cy="' + Y(v) + '" r="' +
+             (k ? 2.4 : 3.2) + '"/>';
+      });
+      s += '<text class="f-sub" x="' + (+X(-1) - 7) + '" y="' + (+Y(-1) + 4) + '" font-size="10.5" text-anchor="end">старт</text>';
+      if (pts.length < data.paths[i].length) {
+        const last = pts[pts.length - 1], right = last < 0;   /* следующая точка — на другом склоне */
+        s += '<text class="f-pen-t" x="' + (right ? x1 : 0) + '" y="' + (top - 6) + '" font-size="11.5"' +
+             (right ? ' text-anchor="end"' : '') + '>ушёл за край на ' + pts.length + '-м шаге</text>';   /* pts[k] — после k шагов */
+      }
+      s += '<text class="f-sub" x="' + x1 + '" y="' + (base + 16) + '" font-size="10.5" text-anchor="end">дно — |b| &lt; 0,01</text>';
+      s += '<text class="f-note" x="0" y="' + (base + 50) + '" font-size="15">' + data.notes[i] + '</text>';
       return s + "</svg>";
     },
     "roc-steps": function (data, i) {
