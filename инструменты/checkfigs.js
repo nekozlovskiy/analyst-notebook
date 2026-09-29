@@ -39,15 +39,15 @@ const SBX = ctx.window.TINKER || {}, S = ctx.window.Tinker || { draw: {}, label:
 for (const [id, data] of Object.entries(SBX)) {
   if (!used[id]) bad.push("песочница " + id + " — схемы нет в теории");
   if (!S.draw[id] || !S.label[id]) { bad.push("песочница " + id + ": нет Tinker.draw/label в tinker.js"); continue; }
-  data.ns.forEach(function (n, i) {
+  data.pos.forEach(function (n, i) {
     const svg = S.draw[id](data, i), l = S.label[id](data, i);
     const vb = svg.match(/^<svg[^>]*viewBox="-?[\d.]+ -?[\d.]+ ([\d.]+) /);
-    if (!vb || +vb[1] > 340) bad.push(id + " n=" + n + ": нет viewBox или он шире 340");
-    if (/NaN|undefined/.test(svg + l.text + l.aria)) bad.push(id + " n=" + n + ": NaN или undefined");
+    if (!vb || +vb[1] > 340) bad.push(id + " " + n + ": нет viewBox или он шире 340");
+    if (/NaN|undefined/.test(svg + l.text + l.aria)) bad.push(id + " " + n + ": NaN или undefined");
     if (/#[0-9a-f]{3,8}\b|rgba?\(|(fill|stroke)="(?!none)[a-z]/i.test(svg))
-      bad.push(id + " n=" + n + ": цвет задан напрямую — только классы .f-*");
-    if (l.text.replace(/\s/g, "").indexOf(String(Math.round(data.sd[i]))) < 0)   /* «1 778» — с пробелом */
-      bad.push(id + " n=" + n + ": в подписи нет разброса " + Math.round(data.sd[i]));
+      bad.push(id + " " + n + ": цвет задан напрямую — только классы .f-*");
+    if (l.text.replace(/\s/g, "").indexOf(data.expect[i]) < 0)   /* «1 778» — с пробелом */
+      bad.push(id + " " + n + ": в строке чисел нет " + data.expect[i] + " из figs.py");
   });
 }
 for (const id of Object.keys(S.draw)) if (!SBX[id]) bad.push("Tinker.draw[" + id + "] есть, а данных нет — запустите figs.py");
