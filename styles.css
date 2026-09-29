@@ -828,6 +828,8 @@ body.reading .hdr-bar { display: none; }
 .theory ul, .theory ol { margin: 0 0 18px; padding-left: 25px; }
 .theory li { margin-bottom: 9px; }
 .theory li::marker { color: var(--ink-4); }
+/* «Порядок действий» в шагах 0.2–0.4: номер — это очередь действий, его видно */
+.theory ol.order li::marker { color: var(--pen); font-family: var(--mono); font-weight: 600; }
 .theory strong { font-weight: 600; }
 .theory em { font-style: italic; }
 .theory hr { border: 0; border-top: 1px solid var(--rule); margin: 36px 0; }

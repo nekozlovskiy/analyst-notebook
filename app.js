@@ -1878,6 +1878,36 @@ const Figs = {
    ============================================================ */
 
 const Check = {
+  /* Частые ошибки новичка в Python — по-русски: что сломалось и что
+     поправить. Берётся последняя строка трассировки; "" — нет разбора. */
+  pyErr: function (msg) {
+    const last = String(msg).trim().split("\n").pop();
+    let m;
+    if ((m = /NameError: name '([^']+)' is not defined/.exec(last)))
+      return "Python не знает имени " + m[1] + ". Переменную создают выше строки, где её берут; проверьте, что она есть и имя написано так же. Если это текст — возьмите его в кавычки.";
+    if (/was never closed|unexpected EOF|'\(' was never closed/.test(last))
+      return "Не закрыта скобка. Сосчитайте открывающие и закрывающие скобки в строке — их должно быть поровну.";
+    if (/unmatched '[)\]]'|closing parenthesis/.test(last))
+      return "Лишняя или не та закрывающая скобка. Сосчитайте скобки в строке — их должно быть поровну.";
+    if (/unterminated string/.test(last))
+      return "Текст начат кавычкой, но не закрыт. У текста кавычка и в начале, и в конце.";
+    if (/forgot a comma/.test(last))
+      return "Python не понял строку — похоже, пропущена запятая между значениями.";
+    if (/IndentationError/.test(last))
+      return "Строка начинается с лишних пробелов. В Python отступ в начале строки что-то значит — уберите его.";
+    if ((m = /KeyError: '?([^']+)'?/.exec(last)))
+      return "Нет столбца " + m[1] + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
+    if (/TypeError: .*'str' and '(int|float)'|TypeError: can only concatenate str/.test(last))
+      return "Текст и число смешаны в одном расчёте. Числа пишут без кавычек, а в print их перечисляют через запятую.";
+    if ((m = /AttributeError: .* has no attribute '([^']+)'/.exec(last))) {
+      const alt = /Did you mean: '([^']+)'/.exec(last);
+      return "Нет метода " + m[1] + "." + (alt ? " Возможно, нужен " + alt[1] + "." :
+        " Проверьте, как он пишется, и что перед точкой стоит таблица или столбец.");
+    }
+    if (/SyntaxError/.test(last))
+      return "Python не понял строку. Частые причины: пропущена запятая, кавычка или скобка, либо одно = вместо == в сравнении.";
+    return "";
+  },
   normLines: function (s) {
     return String(s).replace(/\r/g, "").split("\n")
       .map(function (l) { return l.trim().replace(/\s+/g, " "); })
@@ -3424,9 +3454,10 @@ const Steps = {
     let justPassed = -1;
     let editor = null, last = null, lastOut = null, helped = false;
 
-    box.innerHTML =
+    /* у урока 0.2 таблиц ещё нет — нет и справки о них */
+    box.innerHTML = (S.schema ?
       '<details class="schema"><summary>Какие таблицы есть в базе</summary>' +
-        '<div class="schema-body">' + S.schema + "</div></details>" +
+        '<div class="schema-body">' + S.schema + "</div></details>" : "") +
       '<ol class="steps"></ol>';
     const list = $(".steps", box);
 
@@ -3610,7 +3641,7 @@ const Steps = {
           }).slice(-8);
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(lines.join("\n").trim()) + "</span></pre>";
           status("bad", "Код упал с ошибкой",
-            "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python.");
+            esc(Check.pyErr(lines.join("\n")) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
           return false;
         } finally {
           ns.destroy();

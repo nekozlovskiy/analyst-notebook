@@ -46,10 +46,10 @@ window.COURSE = {
           desc: "SELECT, WHERE, ORDER BY, GROUP BY — с нуля до группировки",
           say: "запрос — это вежливая просьба к базе показать нужное",
           sayTask: "каждый шаг — одна новая мысль и одна проверка" },
-        { id: "m0l2", title: "Python с нуля", kind: "python", ready: true, steps: true,
+        { id: "m0l2", title: "Python: первые строки", kind: "python", ready: true, steps: true,
           before: "m2l1",
-          desc: "print, списки и таблица pandas на знакомых заказах — перед модулем 2",
-          say: "pandas — это тот же SQL, только другими словами",
+          desc: "print, переменные, функции и списки — первый из трёх уроков перед модулем 2",
+          say: "код идёт сверху вниз, скобки — изнутри наружу",
           sayTask: "печатайте всё: print — ваши глаза в Python" }
       ]
     },
