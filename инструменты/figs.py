@@ -202,6 +202,46 @@ def fig_window_frame():
     return svg.render()
 
 
+# Положения песочницы рамки: (две строки ROWS BETWEEN …, реплика почерком).
+FRAMES = [
+    ("CURRENT ROW", "AND CURRENT ROW", "рамка — одна текущая строка"),
+    ("1 PRECEDING", "AND CURRENT ROW", "текущая и одна перед ней"),
+    ("2 PRECEDING", "AND CURRENT ROW", "скользящая сумма за 3 строки"),
+    ("UNBOUNDED PRECEDING", "AND CURRENT ROW", "так по умолчанию при ORDER BY"),
+    ("UNBOUNDED PRECEDING", "AND UNBOUNDED FOLLOWING", "всё окно в каждой строке"),
+]
+
+
+def frame_sandbox():
+    """Песочница урока 1.2: те же строки, что в схеме window-frame; столбец
+    «в рамке» для каждой рамки считает сама SQLite. span — рамка последней
+    строки второго окна (номера строк с нуля)."""
+    rows = window_data()
+    c = db()
+    ids = sorted({r[0] for r in rows})
+    sums, spans = [], []
+    last = len(rows) - 1
+    start = next(k for k, r in enumerate(rows) if r[0] == rows[-1][0])
+    for a, b, _ in FRAMES:
+        clause = "ROWS BETWEEN " + ("CURRENT ROW" if a == "CURRENT ROW" else a) + " " + b
+        got = [v for (v,) in c.execute(
+            f"SELECT SUM(revenue) OVER (PARTITION BY user_id ORDER BY order_date {clause}) "
+            "FROM orders WHERE status = 'paid' AND user_id IN (?, ?) ORDER BY user_id, order_date", ids)]
+        sums.append([num(v) for v in got])
+        k = {"CURRENT ROW": 0, "1 PRECEDING": 1, "2 PRECEDING": 2}.get(a, last)
+        spans.append([max(start, last - k), last])
+    return {"pos": [f[0] + " " + f[1] for f in FRAMES], "start": 3, "name": "Рамка окна",
+            "ticks": [[0, "0"], [1, "1"], [2, "2"], [3, "с начала"], [4, "всё окно"]],
+            "frames": [[a, b, n] for a, b, n in FRAMES],
+            "rows": [[u, d, num(r)] for u, d, r, _ in rows], "cut": start,
+            "sums": sums, "span": spans, "expect": [v[-1] for v in sums],
+            "caption": "Рис. Двигайте ползунок: рамка ROWS BETWEEN решает, какие строки окна попадут в сумму "
+                       "для текущей строки. Окно — PARTITION BY user_id, рамка никогда не выходит за его границу"}
+
+
+SANDBOX_M1 = {"window-frame": frame_sandbox}
+
+
 LAST_FULL = "2024-09-01"   # заказы в базе по 11.09.2024: август — последний полный месяц
 
 
@@ -507,6 +547,11 @@ def check_m1():
             (3, "2024-05-26", "9071.54", "10433.38"), (3, "2024-07-08", "3071.02", "13504.4"),
             (3, "2024-07-31", "1796.6", "15301.0")]:
         errs.append(f"window-frame: {w}")
+    fb = frame_sandbox()
+    if fb["sums"][3] != [num(s) for _, _, _, s in w]:
+        errs.append("frame-sandbox: рамка «с начала» должна совпасть с накопительной суммой схемы")
+    if fb["sums"][4][-1] != fb["sums"][3][-1] or fb["sums"][0] != [r for _, _, r in fb["rows"]]:
+        errs.append(f"frame-sandbox: {fb['sums']}")
     want = [
         ("2024-01", 33, [15.2, 45.5, 45.5, 45.5, 45.5, 45.5]),
         ("2024-02", 34, [11.8, 35.3, 38.2, 38.2, 38.2, 38.2]),
@@ -2303,7 +2348,7 @@ def check_m6():
     return []
 
 
-MODULES = {"m1": (FIGS_M1, check_m1, {}), "m2": (FIGS_M2, check_m2, {}),
+MODULES = {"m1": (FIGS_M1, check_m1, SANDBOX_M1), "m2": (FIGS_M2, check_m2, {}),
            "m3": (FIGS_M3, check_m3, SANDBOX_M3), "m4": (FIGS_M4, check_m4, {}),
            "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {})}
 
