@@ -156,7 +156,7 @@ const Course = (function () {
     });
   });
   /* Порядок прохождения: урок с полем before встаёт прямо перед
-     указанным уроком (0.2 «Python с нуля» — перед 2.1). Карта курса и
+     указанным уроком (0.2–0.4 «Python с нуля» — перед 2.1). Карта курса и
      номера уроков остаются по местам в модулях. */
   const order = flat.filter(function (l) { return !l.before; });
   flat.forEach(function (l) {
@@ -1429,8 +1429,14 @@ const Route = {
     const out = [];
     Course.data.modules.forEach(function (m) {
       if (m.num === 0) {
+        /* уроки с route: "id" рисуются одним узлом с уроком id (0.2–0.4 —
+           один блок «Python с нуля»); ссылка ведёт в первый непройденный */
         m.lessons.forEach(function (l) {
-          out.push({ id: l.id, href: "#" + l.id, label: l.num + " " + l.title, done: Course.isDone(l.id) });
+          if (l.route) return;
+          const group = [l].concat(m.lessons.filter(function (x) { return x.route === l.id; }));
+          const next = group.filter(function (x) { return !Course.isDone(x.id); })[0] || l;
+          out.push({ id: l.id, href: "#" + next.id, label: l.routeTitle || l.num + " " + l.title,
+                     done: group.every(function (x) { return Course.isDone(x.id); }) });
         });
       } else {
         out.push({ id: m.id, href: "#toc-" + m.id, label: m.num + " · " + (m.short || m.title),
@@ -1883,6 +1889,8 @@ const Check = {
   pyErr: function (msg) {
     const last = String(msg).trim().split("\n").pop();
     let m;
+    if (/NameError: name '(true|false|TRUE|FALSE)'/.test(last))
+      return "True и False пишут с большой буквы и без кавычек: ascending=False.";
     if ((m = /NameError: name '([^']+)' is not defined/.exec(last)))
       return "Python не знает имени " + m[1] + ". Переменную создают выше строки, где её берут; проверьте, что она есть и имя написано так же. Если это текст или имя столбца — возьмите его в кавычки.";
     if (/was never closed|unexpected EOF|'\(' was never closed/.test(last))
@@ -1901,6 +1909,10 @@ const Check = {
       return "Нет столбца " + m[1] + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
     if (/TypeError: .*'str' and '(int|float)'|TypeError: can only concatenate str/.test(last))
       return "Текст и число смешаны в одном расчёте. Числа пишут без кавычек, а в print их перечисляют через запятую.";
+    if (/AttributeError: 'str' object has no attribute/.test(last))
+      return "Метод вызван у текста, а не у таблицы или столбца. Частая причина — один знак = вместо == в сравнении: тогда в переменную попадает сам текст.";
+    if (/expected type bool/.test(last))
+      return "True и False пишут без кавычек: ascending=False, а не ascending=\"False\".";
     if ((m = /AttributeError: .* has no attribute '([^']+)'/.exec(last))) {
       const alt = /Did you mean: '([^']+)'/.exec(last);
       return "Нет метода " + m[1] + "." + (alt ? " Возможно, нужен " + alt[1] + "." :
@@ -3450,7 +3462,7 @@ const Steps = {
      только что, а не уже при открытии. */
   render: function (L, S, box, onFinish, tag) {
     const id = L.id, total = S.steps.length;
-    const py = L.kind === "python";  /* урок 0.2: шаги на Python, проверка по напечатанному */
+    const py = L.kind === "python";  /* уроки 0.2–0.4: шаги на Python, проверка по напечатанному */
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;

@@ -513,3 +513,228 @@ Name: revenue, dtype: float64` },
       a: "<code>Name</code> — имя столбца, <code>dtype</code> — тип значений: <code>float64</code> — дробные, <code>int64</code> — целые, <code>object</code> — текст." }
   ]
 };
+
+window.CONTENT.m0l4 = {
+  intro: "WHERE, ORDER BY, LIMIT и GROUP BY на pandas — по одному звену за шаг. Главное здесь — очерёдность: что сделать сначала, что потом, и почему от порядка меняется ответ.",
+  duration: "≈ 35 минут",
+  plan: [
+    { m: "10 мин", w: "Отбор строк: сравнение и квадратные скобки" },
+    { m: "15 мин", w: "Сортировка, первые строки, столбцы — по звену" },
+    { m: "10 мин", w: "Группировка — и сами" }
+  ],
+  finish: "Все шаги решены. Следующий урок — 2.1: pandas всерьёз, тот же отчёт по каналам, что в SQL, и первый merge.",
+  schema: window.SH.pySchema,
+  data: window.SH.pyData,
+  packages: ["pandas"],
+  prelude: window.SH.pyPrelude,
+
+  steps: [
+    {
+      title: "Сравнение: == даёт True и False",
+      body: `
+<p>В SQL строки отбирали так: <code>WHERE status = 'paid'</code>. В pandas это делают в два приёма, и первый из них — сравнение.</p>
+<p><code>orders["status"] == "paid"</code> проверяет каждую строку столбца и даёт столбец ответов: <code>True</code> — «да» или <code>False</code> — «нет». Сравнивают двумя знаками <code>==</code>: один <code>=</code> в Python кладёт значение в переменную.</p>
+<p>Столбец ответов можно положить в переменную и посчитать: <code>True</code> считается за 1, <code>False</code> — за 0. Поэтому <code>.sum()</code> у такого столбца — сколько строк подошло.</p>`,
+      ba: {
+        before: { columns: ["order_id", "status"],
+          rows: [[190, "paid"], [191, "pending"], [192, "refunded"], [193, "paid"], [194, "pending"]] },
+        after: { columns: ["order_id", "status", "== \"paid\""],
+          rows: [[190, "paid", "True"], [191, "pending", "False"], [192, "refunded", "False"], [193, "paid", "True"], [194, "pending", "False"]] },
+        hl: ["== \"paid\""],
+        note: "Заказы пользователя 196: у каждой строки свой ответ — подходит она или нет."
+      },
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Сравнить столбец <code>status</code> с <code>"refunded"</code> и положить ответы в переменную <code>mask</code>.</li>
+<li><code>mask.sum()</code> — сосчитать ответы <code>True</code>.</li>
+<li>Напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка печатает первые ответы для оплаченных. Узнайте, сколько в магазине возвратов — заказов со статусом <code>refunded</code>.</p>`,
+      starter: "mask = orders[\"status\"] == \"paid\"\nprint(mask.head())",
+      expected: { stdout: "13" },
+      hint: "Поменяйте <code>\"paid\"</code> на <code>\"refunded\"</code>, а вместо <code>mask.head()</code> напечатайте <code>mask.sum()</code>.",
+      solution: "mask = orders[\"status\"] == \"refunded\"\nprint(mask.sum())"
+    },
+    {
+      title: "Отбор строк — это WHERE",
+      body: `
+<p>Второй приём: столбец ответов ставят в квадратные скобки таблицы — <code>orders[mask]</code>. Останутся только строки с <code>True</code>. Получится снова таблица, её кладут в переменную и работают с ней, как с <code>orders</code>.</p>
+<p>Часто пишут в одну строку: <code>orders[orders["status"] == "paid"]</code>. Внутренние скобки — сравнение, внешние — «оставь такие строки».</p>`,
+      ba: {
+        before: { columns: ["order_id", "status", "revenue"],
+          rows: [[190, "paid", 6310.9], [191, "pending", 7524.11], [192, "refunded", 5494.59], [193, "paid", 2290.61], [194, "pending", 2820.17]] },
+        after: { columns: ["order_id", "status", "revenue"],
+          rows: [[190, "paid", 6310.9], [193, "paid", 2290.61]] },
+        hl: [], keep: [0, 3],
+        note: "<code>orders[orders[\"status\"] == \"paid\"]</code> на заказах пользователя 196: остались строки с <code>True</code>, они выделены в «было»."
+      },
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Сравнение: <code>orders["status"] == "refunded"</code>.</li>
+<li>Поставить его в квадратные скобки <code>orders[…]</code> и положить результат в переменную <code>refunds</code>.</li>
+<li>Ниже — напечатать, сколько строк в <code>refunds</code>.</li>
+<li>Ещё ниже — напечатать сумму их <code>revenue</code>, два знака.</li>
+</ol>
+<p><strong>Задание.</strong> Положите возвраты в переменную <code>refunds</code> и напечатайте двумя строками: сколько их и на какую сумму.</p>`,
+      starter: "paid = orders[orders[\"status\"] == \"paid\"]\nprint(len(paid))",
+      expected: { stdout: "13\n56018.96" },
+      hint: "<code>refunds = orders[orders[\"status\"] == \"refunded\"]</code>, потом <code>print(len(refunds))</code> и <code>print(round(refunds[\"revenue\"].sum(), 2))</code>.",
+      solution: "refunds = orders[orders[\"status\"] == \"refunded\"]\nprint(len(refunds))\nprint(round(refunds[\"revenue\"].sum(), 2))"
+    },
+    {
+      title: "Сортировка: sort_values",
+      body: `
+<p><code>ORDER BY revenue</code> в pandas — <code>sort_values("revenue")</code>: в скобках имя столбца, по которому сортировать. По умолчанию от меньшего к большему. Строки переставляются целиком, а номера индекса слева едут вместе со своими строками — по ним видно, откуда строка пришла.</p>
+<p>Чтобы результат было легко разглядеть, возьмём заказы одного клиента — их всего четыре. Заготовка уже отобрала их в переменную <code>u3</code>, как в прошлом шаге.</p>`,
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>u3</code> — заказы клиента 3, уже в переменной.</li>
+<li><code>.sort_values("revenue")</code> — отсортировать по выручке.</li>
+<li><code>print(…)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте заказы клиента 3 от самого дешёвого к самому дорогому.</p>`,
+      starter: "u3 = orders[orders[\"user_id\"] == 3]\nprint(u3)",
+      expected: { stdout: `   order_id  user_id order_date  revenue status
+3         4        3 2024-04-23  1361.84   paid
+6         7        3 2024-07-31  1796.60   paid
+5         6        3 2024-07-08  3071.02   paid
+4         5        3 2024-05-26  9071.54   paid` },
+      hint: "Допишите метод к <code>u3</code> внутри <code>print</code>: <code>print(u3.sort_values(\"revenue\"))</code>.",
+      solution: "u3 = orders[orders[\"user_id\"] == 3]\nprint(u3.sort_values(\"revenue\"))"
+    },
+    {
+      title: "По убыванию: ascending=False",
+      body: `
+<p><code>DESC</code> в pandas — настройка <code>ascending=False</code>: <code>sort_values("revenue", ascending=False)</code>. <code>ascending</code> по-английски «по возрастанию», <code>False</code> — «нет».</p>
+<p>Так пишут настройки почти во всех методах pandas: имя настройки, знак <code>=</code>, значение. Её ставят в те же скобки через запятую после имени столбца. <code>False</code> и <code>True</code> пишут с большой буквы и без кавычек.</p>`,
+      task: "<p><strong>Задание.</strong> Напечатайте заказы клиента 3 от самого дорогого к самому дешёвому.</p>",
+      starter: "u3 = orders[orders[\"user_id\"] == 3]\nprint(u3.sort_values(\"revenue\"))",
+      expected: { stdout: `   order_id  user_id order_date  revenue status
+4         5        3 2024-05-26  9071.54   paid
+5         6        3 2024-07-08  3071.02   paid
+6         7        3 2024-07-31  1796.60   paid
+3         4        3 2024-04-23  1361.84   paid` },
+      hint: "Внутри скобок <code>sort_values</code> после <code>\"revenue\"</code> поставьте запятую и <code>ascending=False</code>.",
+      solution: "u3 = orders[orders[\"user_id\"] == 3]\nprint(u3.sort_values(\"revenue\", ascending=False))"
+    },
+    {
+      title: "Сначала сортировка, потом head",
+      body: `
+<p><code>ORDER BY revenue DESC LIMIT 3</code> — «три самых дорогих заказа». В pandas это два звена: отсортировать, потом взять верхние строки через <code>head(3)</code>. <strong>Порядок здесь решает ответ.</strong></p>
+<p>Если сначала взять <code>head(3)</code>, а потом сортировать, получатся три <em>первых по номеру</em> заказа, просто переставленные: <code>orders.head(3).sort_values("revenue", ascending=False)</code> даст заказы 2, 1 и 3 — ни одного из самых дорогих.</p>
+<p>Пока каждое звено пишите отдельной строкой и кладите в свою переменную — так порядок виден глазами.</p>`,
+      ba: {
+        before: { columns: ["order_id", "revenue"], rows: [[1, 2997.2], [2, 4968.24], [3, 1994.76]] },
+        after: { columns: ["order_id", "revenue"], rows: [[196, 14473.88], [198, 10177.29], [156, 9550.87]] },
+        hl: [],
+        note: "«Было» — <code>head(3)</code>, потом сортировка: первые три заказа по номеру. «Стало» — сортировка, потом <code>head(3)</code>: три самых дорогих из всех."
+      },
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>s = orders.sort_values("revenue", ascending=False)</code> — вся таблица, самые дорогие сверху.</li>
+<li><code>top = s.head(3)</code> — три верхние строки из отсортированной.</li>
+<li><code>print(top)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка делает в неправильном порядке. Напечатайте три самых дорогих заказа магазина, все столбцы.</p>`,
+      starter: "h = orders.head(3)\ntop = h.sort_values(\"revenue\", ascending=False)\nprint(top)",
+      expected: { stdout: `     order_id  user_id order_date   revenue    status
+195       196      205 2024-07-18  14473.88  refunded
+197       198      205 2024-09-11  10177.29      paid
+155       156      156 2024-07-05   9550.87      paid` },
+      hint: "Поменяйте звенья местами: первой строкой <code>s = orders.sort_values(\"revenue\", ascending=False)</code>, второй <code>top = s.head(3)</code>, третьей <code>print(top)</code>.",
+      solution: "s = orders.sort_values(\"revenue\", ascending=False)\ntop = s.head(3)\nprint(top)"
+    },
+    {
+      title: "Столбцы в конце — и цепочка одной строкой",
+      body: `
+<p>Нужные столбцы, как в <code>SELECT order_id, revenue</code>, выбирают двойными скобками из урока 0.3: <code>top[["order_id", "revenue"]]</code>. Столбцы берут последним звеном — когда строки уже отобраны и отсортированы.</p>
+<p>Когда звенья понятны, их можно записать одной цепочкой. Строки</p>
+<pre><code>s = orders.sort_values("revenue", ascending=False)
+top = s.head(3)
+print(top[["order_id", "revenue"]])</code></pre>
+<p>делают то же, что одна строка <code>print(orders.sort_values("revenue", ascending=False).head(3)[["order_id", "revenue"]])</code>. Цепочку читают слева направо — это те же звенья в том же порядке. Если в длинной строке запутались, разложите её обратно по переменным.</p>`,
+      task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Отсортировать по <code>revenue</code> от большего к меньшему.</li>
+<li>Взять три верхние строки.</li>
+<li>Оставить столбцы <code>order_id</code> и <code>revenue</code>.</li>
+<li>Напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте три самых дорогих заказа — только столбцы <code>order_id</code> и <code>revenue</code>. Можно по строкам, можно одной цепочкой.</p>`,
+      starter: "s = orders.sort_values(\"revenue\", ascending=False)\ntop = s.head(3)\nprint(top)",
+      expected: { stdout: `     order_id   revenue
+195       196  14473.88
+197       198  10177.29
+155       156   9550.87` },
+      hint: "Замените последнюю строку на <code>print(top[[\"order_id\", \"revenue\"]])</code>.",
+      solution: "s = orders.sort_values(\"revenue\", ascending=False)\ntop = s.head(3)\nprint(top[[\"order_id\", \"revenue\"]])"
+    },
+    {
+      title: "Группировка — это GROUP BY",
+      body: `
+<p><code>GROUP BY status</code> в pandas — <code>groupby("status")</code>. Дальше, как в SQL, говорят, какой столбец считать и как: <code>orders.groupby("status")["order_id"].count()</code> — сколько заказов в каждом статусе, как <code>SELECT status, COUNT(order_id) … GROUP BY status</code>.</p>
+<p>Вместо <code>count</code> бывают <code>sum</code>, <code>mean</code>, <code>max</code>. Результат печатается столбиком: слева статусы, справа итоги, внизу — имя столбца и тип чисел.</p>`,
+      ba: {
+        before: { columns: ["status", "revenue"],
+          rows: [["paid", 6310.9], ["pending", 7524.11], ["refunded", 5494.59], ["paid", 2290.61], ["pending", 2820.17]] },
+        after: { columns: ["status", "revenue"], rows: [["paid", 8601.51], ["pending", 10344.28], ["refunded", 5494.59]] },
+        hl: ["revenue"],
+        note: "Заказы пользователя 196: строки с одинаковым статусом сложились в одну — как <code>SUM(revenue) … GROUP BY status</code>."
+      },
+      task: `<p><strong>Порядок действий</strong> в <code>orders.groupby("status")["revenue"].sum().round(2)</code> — слева направо:</p>
+<ol class="order">
+<li><code>groupby("status")</code> — разложить заказы на группы по статусу.</li>
+<li><code>["revenue"]</code> — в каждой группе взять столбец выручки.</li>
+<li><code>.sum()</code> — сложить его внутри каждой группы.</li>
+<li><code>.round(2)</code> — округлить все итоги сразу.</li>
+<li><code>print(…)</code> — напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка считает заказы в каждом статусе. Напечатайте вместо этого выручку по статусам — сумму <code>revenue</code>, два знака.</p>`,
+      starter: "print(orders.groupby(\"status\")[\"order_id\"].count())",
+      expected: { stdout: `status
+paid        653428.78
+pending      56028.51
+refunded     56018.96
+Name: revenue, dtype: float64` },
+      hint: "Поменяйте столбец на <code>\"revenue\"</code>, <code>count()</code> — на <code>sum()</code> и допишите <code>.round(2)</code>: <code>print(orders.groupby(\"status\")[\"revenue\"].sum().round(2))</code>.",
+      solution: "print(orders.groupby(\"status\")[\"revenue\"].sum().round(2))"
+    },
+    {
+      title: "Сами: самые дорогие оплаченные заказы",
+      body: `
+<p>Новых слов здесь нет. Вопрос: какие пять <strong>оплаченных</strong> заказов самые дорогие?</p>
+<p>Отбор нужен первым. Без него на первое место встанет заказ 196 на 14 473,88 ₽, а это возврат, выручки от него нет. А если сначала взять пять самых дорогих и только потом отбирать оплаченные, останется четыре строки: один из пяти — тот самый возврат.</p>
+<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Отобрать оплаченные заказы в переменную.</li>
+<li>Отсортировать их по <code>revenue</code> от большего к меньшему.</li>
+<li>Взять пять верхних строк.</li>
+<li>Оставить столбцы <code>order_id</code>, <code>user_id</code> и <code>revenue</code>.</li>
+<li>Напечатать.</li>
+</ol>`,
+      task: "<p><strong>Задание.</strong> Напечатайте пять самых дорогих оплаченных заказов — столбцы <code>order_id</code>, <code>user_id</code> и <code>revenue</code>.</p>",
+      starter: "# 1. paid = …\n# 2. s = …\n# 3. top = …\n# 4–5. print(…)\n",
+      expected: { stdout: `     order_id  user_id   revenue
+197       198      205  10177.29
+155       156      156   9550.87
+4           5        3   9071.54
+88         89       91   8835.71
+73         74       80   8173.74` },
+      hint: "<code>paid = orders[orders[\"status\"] == \"paid\"]</code>, <code>s = paid.sort_values(\"revenue\", ascending=False)</code>, <code>top = s.head(5)</code> и <code>print(top[[\"order_id\", \"user_id\", \"revenue\"]])</code>.",
+      solution: "paid = orders[orders[\"status\"] == \"paid\"]\ns = paid.sort_values(\"revenue\", ascending=False)\ntop = s.head(5)\nprint(top[[\"order_id\", \"user_id\", \"revenue\"]])"
+    }
+  ],
+
+  cards: [
+    { q: "Как в pandas записать <code>WHERE status = 'paid'</code>?",
+      a: "<code>orders[orders[\"status\"] == \"paid\"]</code>. Внутри — сравнение, оно даёт True или False для каждой строки; внешние скобки оставляют строки с True. Сравнивают двумя знаками <code>==</code>." },
+    { q: "Как получить три самых дорогих заказа и почему важен порядок?",
+      a: "Сначала <code>sort_values(\"revenue\", ascending=False)</code>, потом <code>head(3)</code>. Если сначала взять <code>head(3)</code>, отсортируются лишь три первых по номеру заказа." },
+    { q: "В каком порядке идут звенья «отбор, сортировка, первые N, столбцы»?",
+      a: "Отбор строк → сортировка → <code>head</code> → нужные столбцы → <code>print</code>. Как в SQL: сначала WHERE, потом ORDER BY, потом LIMIT." },
+    { q: "Что делает <code>orders.groupby(\"status\")[\"revenue\"].sum()</code>?",
+      a: "Раскладывает заказы на группы по статусу, в каждой берёт столбец выручки и складывает: одна строка итога на статус, как <code>SUM(revenue) … GROUP BY status</code>." },
+    { q: "Что значит <code>ascending=False</code>?",
+      a: "Настройка <code>sort_values</code>: сортировать не по возрастанию, а по убыванию, как <code>DESC</code>. Настройки пишут в скобках метода: имя, <code>=</code>, значение." }
+  ]
+};
