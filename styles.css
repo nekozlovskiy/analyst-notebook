@@ -1313,9 +1313,9 @@ button.st-h:hover .st-t { color: var(--ink); }
 .st-n .pen-tick { width: 20px; height: 20px; vertical-align: -4px; }
 .st-t { margin: 0; font-size: 16px; font-weight: 500; color: var(--ink-2); }
 .st.todo .st-t { color: var(--ink-3); }
-.st.done .st-t { flex: none; }
+.st.done .st-t { flex: 0 1 auto; min-width: 0; }   /* длинный заголовок переносится, а не выталкивает страницу вбок */
 .st-q {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 0; min-width: 0;                         /* запросу — только оставшееся место */ overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: var(--mono); font-size: 12.5px; color: var(--ink-3);
 }
 .st.open .st-n { color: var(--pen); font-weight: 600; }
