@@ -1276,7 +1276,9 @@ def clt_sandbox():
         bins.append(cnt)
         sds.append(round(sd(means), 2))
         sdfs.append(round(sigma / n ** .5, 2))
-    return {"ns": list(SANDBOX_NS), "start": SANDBOX_NS.index(30), "ticks": [1, 5, 30, 200],
+    return {"pos": list(SANDBOX_NS), "start": SANDBOX_NS.index(30), "name": "Размер выборки n",
+            "ticks": [[SANDBOX_NS.index(n), str(n)] for n in (1, 5, 30, 200)],
+            "expect": [f"{v:.0f}" for v in sds],
             "step": step, "top": top, "mean": round(mu, 2), "bins": bins, "sd": sds, "sdf": sdfs,
             "caption": "Рис. Двигайте ползунок: средние 2000 выборок из одних и тех же чеков — "
                        "с ростом n разброс падает, а форма становится колоколом"}
@@ -1323,11 +1325,11 @@ def check_m3():
     if got != ["5.0", "14.3", "22.6", "40.1", "64.2"]:
         errs.append(f"fwer-curve: {got} — не совпало с таблицей урока 3.5")
     sb = clt_sandbox()
-    i5, i30 = sb["ns"].index(5), sb["ns"].index(30)
+    i5, i30 = sb["pos"].index(5), sb["pos"].index(30)
     got = (f"{sb['sd'][i5]:.2f}", f"{sb['sdf'][i5]:.2f}", f"{sb['sd'][i30]:.2f}", f"{sb['sdf'][i30]:.0f}")
     if got != ("778.80", "773.11", "323.06", "316"):
         errs.append(f"clt-sandbox: {got} — не совпало с уроком 3.1")
-    if any(sum(b) != 2000 for b in sb["bins"]) or sb["ns"][sb["start"]] != 30:
+    if any(sum(b) != 2000 for b in sb["bins"]) or sb["pos"][sb["start"]] != 30:
         errs.append("clt-sandbox: в каждой гистограмме 2000 средних, исходное n = 30")
     return errs
 
@@ -1850,6 +1852,30 @@ def fig_roc_steps():
     return svg.render()
 
 
+# Пороги песочницы: по одному в каждом промежутке между оценками ROC_PTS,
+# от «никого не берём» до «берём всех». Правило: «купит», если оценка ≥ порога.
+ROC_THR = (.95, .9, .8, .7, .6, .5, .4, .35, .25, .15, .05)
+
+
+def roc_sandbox():
+    """Песочница урока 5.3: тот же учебный пример, что в схеме roc-steps,
+    ползунок идёт по порогам сверху вниз — точка ползёт по ступенькам."""
+    pts = sorted(ROC_PTS, reverse=True)
+    npos = sum(y for _, y in pts)
+    tp = [sum(y for sc, y in pts if sc >= t) for t in ROC_THR]
+    fp = [sum(1 - y for sc, y in pts if sc >= t) for t in ROC_THR]
+    return {"pos": list(ROC_THR), "start": ROC_THR.index(.5), "name": "Порог классификации",
+            "ticks": [[0, "0,95"], [ROC_THR.index(.5), "0,5"], [len(ROC_THR) - 1, "0,05"]],
+            "pts": [[sc, y] for sc, y in pts], "npos": npos, "nneg": len(pts) - npos,
+            "auc": roc_auc(pts), "tp": tp, "fp": fp,
+            "expect": [f"{t / npos * 100:.0f}%" for t in tp],
+            "caption": "Рис. Двигайте ползунок: чем ниже порог, тем больше покупателей поймано — "
+                       "и тем больше ложных тревог. Точка идёт по ступенькам ROC-кривой"}
+
+
+SANDBOX_M5 = {"roc-steps": roc_sandbox}
+
+
 # Учебная чаша L(b) = b²: вторая производная 2, граница шага 2/2 = 1.
 # Шаги свои, не 0,5 и 1,1 из задачи урока 5.5.
 GD_STEPS = [(.1, -1.0, "шаг 0,1 — мал", "ползёт к минимуму"),
@@ -1971,6 +1997,13 @@ def check_m5():
         errs.append(f"ols-squares: прямая {b0:.3f} + {b1:.3f}x — поменялись учебные точки?")
     if roc_auc(ROC_PTS) != .8:
         errs.append(f"roc-steps: AUC {roc_auc(ROC_PTS)} вместо 0,80")
+    sb = roc_sandbox()
+    if any(sum(sc >= a for sc, _ in ROC_PTS) != sum(sc >= b for sc, _ in ROC_PTS) - 1
+           for a, b in zip(ROC_THR, ROC_THR[1:])):
+        errs.append("roc-sandbox: между соседними порогами должна быть ровно одна оценка")
+    i = sb["start"]
+    if (sb["tp"][i], sb["fp"][i], sb["tp"][-1], sb["fp"][-1]) != (4, 1, 5, 5):
+        errs.append(f"roc-sandbox: при пороге 0,5 {sb['tp'][i]} из 5 и {sb['fp'][i]} из 5 — в схеме 4 и 1")
     ends = [abs(gd_path(lr, b)[-1]) < abs(b) for lr, b, _, _ in GD_STEPS]
     if ends != [True, True, False]:
         errs.append(f"gd-steps: сходимость {ends} — два первых шага должны сходиться, третий расходиться")
@@ -2223,7 +2256,7 @@ def check_m6():
 
 MODULES = {"m1": (FIGS_M1, check_m1, {}), "m2": (FIGS_M2, check_m2, {}),
            "m3": (FIGS_M3, check_m3, SANDBOX_M3), "m4": (FIGS_M4, check_m4, {}),
-           "m5": (FIGS_M5, check_m5, {}), "m6": (FIGS_M6, check_m6, {})}
+           "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {})}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
