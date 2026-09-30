@@ -8,9 +8,10 @@
 
 window.CONTENT.m1l1 = {
   intro: "Соединяем таблицы так, чтобы не потерять строки и не размножить их. Это первое, что проверяют на SQL-секции собеседования, и первое, на чём валятся.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: четыре вида соединений и две главные ловушки" },
+    { m: "30 мин", w: "Практикум: шесть шагов от INNER JOIN до размножения строк" },
     { m: "40 мин", w: "Основная задача: сводка по каналам для маркетинга" },
     { m: "35 мин", w: "Тренажёр: 5 задач на ту же базу" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -148,6 +149,134 @@ LEFT JOIN orders o ON o.user_id = u.user_id
   },
 
   schema: window.SH.sqlSchema,
+
+  /* Практикум — шесть шагов на трёх пользователях (16 — один оплаченный
+     и один возвращённый заказ, 19 из partner без заказов, 21 — один
+     оплаченный), по платформам и на пользователе 31: основная задача
+     считает каналы, её числа здесь не появляются.
+     Решения: node инструменты/checksteps.js m1l1 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. Первые шаги идут на трёх пользователях, чтобы каждую строку соединения было видно глазами: у 16-го два заказа, один из них возвращён, у 19-го заказов нет, у 21-го — один. В каждом шаге одна новая конструкция и маленький запрос, который курс проверит сам.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача собирает их на каналах: <code>LEFT JOIN</code> с условием на статус в <code>ON</code> → <code>COUNT(DISTINCT u.user_id)</code> и <code>COUNT(o.order_id)</code> → <code>COALESCE</code> у суммы → сортировка по выручке.",
+    steps: [
+      {
+        title: "INNER JOIN: только те, у кого нашлась пара",
+        body: `
+<p><code>JOIN … ON …</code> подставляет к строке левой таблицы подходящие строки правой: <code>FROM users u JOIN orders o ON o.user_id = u.user_id</code> — к каждому пользователю его заказы. <code>u</code> и <code>o</code> — короткие имена таблиц, через них пишут, откуда столбец: <code>u.channel</code>, <code>o.revenue</code>.</p>
+<p>Просто <code>JOIN</code> — это <code>INNER JOIN</code>: остаются только пары. У пользователя 19 заказов нет, и он из результата пропадёт — без ошибки и без предупреждения. А пользователь 16 с двумя заказами превратится в две строки.</p>`,
+        ba: {
+          before: { columns: ["user_id", "channel"], rows: [[16, "organic"], [19, "partner"], [21, "email"]] },
+          after: { columns: ["user_id", "channel", "order_id", "status"],
+            rows: [[16, "organic", 18, "refunded"], [16, "organic", 19, "paid"], [21, "email", 23, "paid"]] },
+          hl: ["order_id", "status"], keep: [0, 2],
+          note: "Было три пользователя, стало три строки — но другие: 16-й раздвоился, 19-го нет."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 16, 19 и 21 выведите <code>user_id</code>, <code>channel</code>, <code>order_id</code> и <code>status</code> — соединив <code>users</code> с <code>orders</code> обычным <code>JOIN</code>.</p>",
+        starter: "SELECT u.user_id, u.channel\nFROM users u\nWHERE u.user_id IN (16, 19, 21);",
+        expected: { ordered: false, columns: ["user_id", "channel", "order_id", "status"],
+          rows: [[16, "organic", 18, "refunded"], [16, "organic", 19, "paid"], [21, "email", 23, "paid"]] },
+        hint: "После <code>FROM users u</code> добавьте строку <code>JOIN orders o ON o.user_id = u.user_id</code>, а в <code>SELECT</code> — <code>o.order_id, o.status</code>. <code>WHERE</code> остаётся последним.",
+        solution: "SELECT u.user_id, u.channel, o.order_id, o.status\nFROM users u\nJOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21);"
+      },
+      {
+        title: "LEFT JOIN: никого не потерять",
+        body: `
+<p><code>LEFT JOIN</code> оставляет все строки левой таблицы. Если пары справа нет, строка всё равно остаётся, а в столбцах правой таблицы у неё будет <code>NULL</code> — «значения нет».</p>
+<p>Какая таблица левая, решает вопрос. «Все пользователи и их заказы, если есть» — слева <code>users</code>. Отчёт, где должны быть и те, кто ничего не купил, почти всегда начинается с <code>FROM users u LEFT JOIN orders o</code>.</p>`,
+        ba: {
+          before: { columns: ["user_id", "channel"], rows: [[16, "organic"], [19, "partner"], [21, "email"]] },
+          after: { columns: ["user_id", "channel", "order_id", "status"],
+            rows: [[16, "organic", 18, "refunded"], [16, "organic", 19, "paid"], [19, "partner", null, null], [21, "email", 23, "paid"]] },
+          hl: ["order_id", "status"],
+          note: "Пользователь 19 вернулся — с пустыми столбцами заказа."
+        },
+        task: "<p><strong>Задание.</strong> Тот же запрос, но так, чтобы пользователь 19 остался в результате.</p>",
+        starter: "SELECT u.user_id, u.channel, o.order_id, o.status\nFROM users u\nJOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21);",
+        expected: { ordered: false, columns: ["user_id", "channel", "order_id", "status"],
+          rows: [[16, "organic", 18, "refunded"], [16, "organic", 19, "paid"], [19, "partner", null, null], [21, "email", 23, "paid"]] },
+        hint: "Замените <code>JOIN</code> на <code>LEFT JOIN</code> — больше ничего менять не нужно.",
+        solution: "SELECT u.user_id, u.channel, o.order_id, o.status\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21);"
+      },
+      {
+        title: "После JOIN строк больше, чем людей",
+        body: `
+<p>После соединения пользователь с тремя заказами — это три строки. Поэтому одно и то же «количество» считают по-разному:</p>
+<ul>
+<li><code>COUNT(*)</code> — строки после соединения, вместе с пустыми;</li>
+<li><code>COUNT(DISTINCT u.user_id)</code> — разные пользователи, то есть люди;</li>
+<li><code>COUNT(o.order_id)</code> — заказы: <code>COUNT</code> по столбцу пропускает <code>NULL</code>, и пользователь без заказов даёт ноль, а не единицу.</li>
+</ul>
+<p>Посмотрим на всю базу по платформам — там разница уже не в одну строку.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id"], rows: [[16, 18], [16, 19], [19, null], [21, 23]] },
+          after: { columns: ["rows_cnt", "users_cnt", "orders_cnt"], rows: [[4, 3, 3]] },
+          hl: ["rows_cnt", "users_cnt", "orders_cnt"],
+          note: "На трёх пользователях: четыре строки, три человека, три заказа — три разных числа."
+        },
+        task: "<p><strong>Задание.</strong> Соедините всех пользователей с их заказами через <code>LEFT JOIN</code> и для каждой платформы посчитайте <code>rows_cnt</code> — строк после соединения, <code>users_cnt</code> — пользователей и <code>orders_cnt</code> — заказов. Статус заказа пока не важен.</p>",
+        starter: "SELECT u.platform\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nGROUP BY u.platform;",
+        expected: { ordered: false, columns: ["platform", "rows_cnt", "users_cnt", "orders_cnt"],
+          rows: [["android", 147, 94, 98], ["ios", 101, 75, 65], ["web", 77, 51, 52]] },
+        hint: "В <code>SELECT</code> после <code>u.platform</code> три столбца: <code>COUNT(*) AS rows_cnt</code>, <code>COUNT(DISTINCT u.user_id) AS users_cnt</code>, <code>COUNT(o.order_id) AS orders_cnt</code>.",
+        solution: "SELECT u.platform,\n       COUNT(*) AS rows_cnt,\n       COUNT(DISTINCT u.user_id) AS users_cnt,\n       COUNT(o.order_id) AS orders_cnt\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nGROUP BY u.platform;"
+      },
+      {
+        title: "Условие на правую таблицу — в ON, а не в WHERE",
+        body: `
+<p>Нужны только оплаченные заказы. Первое, что приходит в голову, — дописать <code>WHERE o.status = 'paid'</code>. Запустите заготовку: пользователь 19 снова пропал.</p>
+<p>У него <code>o.status</code> равен <code>NULL</code>, а сравнение <code>NULL = 'paid'</code> даёт не «ложь», а «неизвестно». <code>WHERE</code> пропускает только истинные условия — строка отбрасывается, и <code>LEFT JOIN</code> молча работает как обычный <code>JOIN</code>.</p>
+<p>Условие на правую таблицу ставят в <code>ON</code>, через <code>AND</code>: <code>ON o.user_id = u.user_id AND o.status = 'paid'</code>. Теперь оно значит «присоединяй только оплаченные заказы», а пользователь без них остаётся с <code>NULL</code>. Условия на левую таблицу — как <code>u.user_id IN (…)</code> — остаются в <code>WHERE</code>.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id", "status"], rows: [[16, 19, "paid"], [21, 23, "paid"]] },
+          after: { columns: ["user_id", "order_id", "status"], rows: [[16, 19, "paid"], [19, null, null], [21, 23, "paid"]] },
+          hl: ["user_id"],
+          note: "«Было» — с условием в <code>WHERE</code>, «стало» — в <code>ON</code>. Возвращённый заказ 18 не попал ни туда, ни туда."
+        },
+        task: "<p><strong>Задание.</strong> Исправьте запрос так, чтобы остались только оплаченные заказы, но пользователь 19 не пропал.</p>",
+        starter: "SELECT u.user_id, o.order_id, o.status\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21)\n  AND o.status = 'paid';",
+        expected: { ordered: false, columns: ["user_id", "order_id", "status"],
+          rows: [[16, 19, "paid"], [19, null, null], [21, 23, "paid"]] },
+        hint: "Перенесите <code>AND o.status = 'paid'</code> из <code>WHERE</code> в строку с <code>ON</code>: <code>LEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'</code>. В <code>WHERE</code> остаётся только отбор пользователей.",
+        solution: "SELECT u.user_id, o.order_id, o.status\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nWHERE u.user_id IN (16, 19, 21);"
+      },
+      {
+        title: "Сумма по пустому — NULL: COALESCE",
+        body: `
+<p>Теперь сведём три пользователя в итоги: сколько у каждого оплаченных заказов и на какую сумму. У пользователя 19 заказов нет, и <code>COUNT(o.order_id)</code> честно даст 0. А <code>SUM(o.revenue)</code> даст не 0, а <code>NULL</code>: сумма по пустому набору в SQL — «неизвестно».</p>
+<p>В отчёте <code>NULL</code> вместо нуля ломает всё дальнейшее: <code>100 + NULL</code> — снова <code>NULL</code>. Закрывают его <code>COALESCE(выражение, 0)</code> — «возьми значение, а если оно <code>NULL</code>, то 0».</p>`,
+        ba: {
+          before: { columns: ["user_id", "orders_cnt", "revenue"], rows: [[16, 1, 1931.78], [19, 0, null], [21, 1, 5886.6]] },
+          after: { columns: ["user_id", "orders_cnt", "revenue"], rows: [[16, 1, 1931.78], [19, 0, 0], [21, 1, 5886.6]] },
+          hl: ["revenue"],
+          note: "«Было» — просто <code>SUM</code>, «стало» — <code>COALESCE(SUM(…), 0)</code>."
+        },
+        task: "<p><strong>Задание.</strong> Заготовка считает по трём пользователям <code>orders_cnt</code> и <code>revenue</code> по оплаченным заказам. Сделайте так, чтобы у пользователя без заказов в <code>revenue</code> стоял 0.</p>",
+        starter: "SELECT u.user_id,\n       COUNT(o.order_id) AS orders_cnt,\n       SUM(o.revenue) AS revenue\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nWHERE u.user_id IN (16, 19, 21)\nGROUP BY u.user_id;",
+        expected: { ordered: false, columns: ["user_id", "orders_cnt", "revenue"],
+          rows: [[16, 1, 1931.78], [19, 0, 0], [21, 1, 5886.6]] },
+        hint: "Оберните сумму: <code>COALESCE(SUM(o.revenue), 0) AS revenue</code>. Имя столбца <code>AS revenue</code> остаётся снаружи скобок.",
+        solution: "SELECT u.user_id,\n       COUNT(o.order_id) AS orders_cnt,\n       COALESCE(SUM(o.revenue), 0) AS revenue\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nWHERE u.user_id IN (16, 19, 21)\nGROUP BY u.user_id;"
+      },
+      {
+        title: "Две таблицы «многие» — сумма раздувается",
+        body: `
+<p>У пользователя 31 два оплаченных заказа на 5 813,20 ₽ и пять событий в журнале. Если соединить заказы с событиями по <code>user_id</code>, каждый заказ встанет в пару с каждым событием: 2 × 5 = 10 строк. <code>SUM(o.revenue)</code> по этим строкам сложит каждый заказ пять раз.</p>
+<p>Ошибка не видна по коду: запрос выглядит разумно и возвращает число. Выдают её две вещи — строк больше, чем заказов, и сумма подозрительно большая. Лечат тем, что каждую таблицу сначала сворачивают до одной строки на пользователя и только потом соединяют. Как это удобно записать — в уроке 1.4 про <code>WITH</code>.</p>`,
+        ba: {
+          before: { columns: ["order_id", "revenue"], rows: [[26, 3670.6], [27, 2142.6]] },
+          after: { columns: ["order_id", "revenue", "event_id"], rows: [[26, 3670.6, "1-е событие"], [26, 3670.6, "…"], [26, 3670.6, "5-е"], [27, 2142.6, "1-е"], [27, 2142.6, "…"]] },
+          hl: ["event_id"],
+          note: "Каждый заказ повторился столько раз, сколько у пользователя событий."
+        },
+        task: "<p><strong>Задание.</strong> Соедините оплаченные заказы пользователя 31 с его событиями из <code>events</code> и посчитайте <code>rows_cnt</code> — строк после соединения, <code>orders_cnt</code> — разных заказов и <code>revenue</code> — <code>SUM(o.revenue)</code>. Сравните сумму с настоящей: 5 813,20 ₽.</p>",
+        starter: "SELECT COUNT(*) AS orders_cnt,\n       SUM(revenue) AS revenue\nFROM orders\nWHERE user_id = 31 AND status = 'paid';",
+        expected: { ordered: false, columns: ["rows_cnt", "orders_cnt", "revenue"], rows: [[10, 2, 29066]] },
+        hint: "<code>FROM orders o JOIN events e ON e.user_id = o.user_id</code>, условие <code>WHERE o.user_id = 31 AND o.status = 'paid'</code>. В <code>SELECT</code>: <code>COUNT(*) AS rows_cnt</code>, <code>COUNT(DISTINCT o.order_id) AS orders_cnt</code>, <code>SUM(o.revenue) AS revenue</code>.",
+        solution: "SELECT COUNT(*) AS rows_cnt,\n       COUNT(DISTINCT o.order_id) AS orders_cnt,\n       SUM(o.revenue) AS revenue\nFROM orders o\nJOIN events e ON e.user_id = o.user_id\nWHERE o.user_id = 31 AND o.status = 'paid';"
+      }
+    ]
+  },
 
   starter: `-- Сводка по каналам привлечения
 -- Подсказка по структуре: начните с той таблицы,
