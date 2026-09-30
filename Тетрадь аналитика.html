@@ -10823,9 +10823,10 @@ for dt, r in spikes.iterrows():
 
 window.CONTENT.m2l5 = {
   intro: "Половина графиков в дашбордах не отвечает ни на один вопрос. Разбираем, какой тип графика под какую задачу, и строим настоящие графики в matplotlib — прямо здесь, картинка появится под кодом.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: пять типов графиков и что ими врут" },
+    { m: "30 мин", w: "Практикум: шесть шагов от ряда чисел до честных столбцов" },
     { m: "35 мин", w: "Основная задача: линия выручки с заголовком-выводом" },
     { m: "35 мин", w: "Тренажёр: 5 задач на подачу данных" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -10967,6 +10968,220 @@ for label, v in values.items():
   data: window.SH.pyData,
   packages: ["pandas", "matplotlib"],
   prelude: window.SH.pyPrelude,
+
+  /* Практикум — шесть шагов. Первый проверяется по напечатанному, остальные
+     рисуют график (expected.plot): шаг сверяется с графиком своего решения
+     теми же правилами Check.plot, что основная задача, — тип, данные,
+     подписи, обрезанная ось. Ряды другие, чем в задаче: регистрации и число
+     заказов по месяцам, пользователи по каналам — выручка остаётся задаче.
+     Решения: node инструменты/checksteps.js m2l5 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. В первом считаем числа, в остальных рисуем: картинка появляется под кодом, а курс проверяет не её, а сам график — тип, данные, подписи. Цвета и размер — на ваш вкус.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas", "matplotlib"],
+    prelude: window.SH.pyPrelude,
+    done: "Все шесть шагов решены. Основная задача — линия помесячной выручки: тот же <code>resample(\"MS\")</code>, срез без сентября, <code>plt.plot</code>, подпись оси и заголовок. Нового там два места: выручку переводят в тысячи рублей, а заголовок-вывод вы формулируете сами — по тому, что увидите на линии.",
+    steps: [
+      {
+        title: "Сначала числа: ряд для графика",
+        body: `
+<p>График рисуют по готовому ряду: слева подписи, справа значения. Сначала этот ряд считают и смотрят на него глазами — иначе по картинке не понять, верная она или нет.</p>
+<p>Возьмём регистрации по месяцам. Приёмы из урока 2.4: дата регистрации становится индексом, <code>resample("MS")</code> группирует по месяцам, <code>.count()</code> считает строки в каждом.</p>`,
+        ba: {
+          before: { columns: ["user_id", "signup_date"], rows: [[1, "2024-06-12"], [2, "2024-02-05"], ["…", "…"]] },
+          after: { columns: ["signup_date (индекс)", "user_id"], rows: [["2024-01-01", 33], ["2024-02-01", 34], ["2024-03-01", 49]] },
+          hl: ["user_id"],
+          note: "«Было» — по строке на пользователя. «Стало» — по строке на месяц: сколько человек зарегистрировалось."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>users.set_index("signup_date")["user_id"]</code> — дата в индекс, взять столбец.</li>
+<li><code>.resample("MS").count()</code> — сколько регистраций в каждом месяце.</li>
+<li>Положить в <code>reg</code> и напечатать.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте число регистраций по месяцам. В каком месяце их больше всего?</p>`,
+        starter: `# users: user_id, signup_date, channel, city, platform
+`,
+        expected: { stdout: `signup_date
+2024-01-01    33
+2024-02-01    34
+2024-03-01    49
+2024-04-01    34
+2024-05-01    44
+2024-06-01    26
+Freq: MS, Name: user_id, dtype: int64` },
+        hint: "<code>reg = users.set_index(\"signup_date\")[\"user_id\"].resample(\"MS\").count()</code>, потом <code>print(reg)</code>.",
+        solution: `reg = users.set_index("signup_date")["user_id"].resample("MS").count()
+print(reg)`
+      },
+      {
+        title: "Первая линия: plt.plot и plt.show",
+        body: `
+<p><code>import matplotlib.pyplot as plt</code> подключает библиотеку графиков под коротким именем <code>plt</code> — так пишут все, строка уже в заготовке.</p>
+<p><code>plt.plot(x, y)</code> рисует линию: первым идёт то, что по горизонтали, вторым — то, что по вертикали. У ряда pandas подписи лежат в <code>reg.index</code>, значения — в <code>reg.values</code>. <code>plt.show()</code> в конце показывает готовый график.</p>
+<p>Линия — график для вопроса «как менялось со временем»: наклон читается как скорость изменения.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>plt.plot(reg.index, reg.values)</code> — месяцы по горизонтали, регистрации по вертикали.</li>
+<li><code>plt.show()</code> — показать.</li>
+</ol>
+<p><strong>Задание.</strong> Нарисуйте регистрации по месяцам линией.</p>`,
+        starter: `import matplotlib.pyplot as plt
+
+reg = users.set_index("signup_date")["user_id"].resample("MS").count()
+`,
+        expected: { plot: "Линия из 6 точек: регистрации по месяцам, январь…июнь." },
+        hint: "Под заготовкой две строки: <code>plt.plot(reg.index, reg.values)</code> и <code>plt.show()</code>.",
+        solution: `import matplotlib.pyplot as plt
+
+reg = users.set_index("signup_date")["user_id"].resample("MS").count()
+plt.plot(reg.index, reg.values)
+plt.show()`
+      },
+      {
+        title: "Точки, единицы и заголовок-вывод",
+        body: `
+<p>Линия из прошлого шага никому ничего не говорит: непонятно, что по вертикали и зачем на неё смотреть. График доделывают тремя вещами.</p>
+<ul>
+<li><code>marker="o"</code> внутри <code>plt.plot</code> ставит точку на каждом значении. Месяцев шесть, и читателю видно, где именно данные, а где линия просто соединяет соседей.</li>
+<li><code>plt.ylabel("…")</code> подписывает вертикальную ось: что это и в каких единицах.</li>
+<li><code>plt.title("…")</code> — заголовок. В нём пишут вывод, а не тему: не «Регистрации по месяцам», а то, что читатель должен унести, если на сам график не посмотрит.</li>
+</ul>
+<p>Все подписи ставят до <code>plt.show()</code>.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>В <code>plt.plot(…)</code> после <code>reg.values</code> добавить <code>marker="o"</code>.</li>
+<li><code>plt.ylabel("регистраций в месяц")</code> — подпись оси.</li>
+<li><code>plt.title("…")</code> — свой вывод. Например: «В марте пришло 49 новых пользователей — больше, чем в любой другой месяц».</li>
+</ol>
+<p><strong>Задание.</strong> Доделайте график из заготовки: точки на линии, подпись оси Y и заголовок с выводом. Формулировки проверка не сверяет — только то, что они есть.</p>`,
+        starter: `import matplotlib.pyplot as plt
+
+reg = users.set_index("signup_date")["user_id"].resample("MS").count()
+plt.plot(reg.index, reg.values)
+plt.show()`,
+        expected: { plot: "Та же линия из 6 точек, ось Y подписана, есть заголовок." },
+        hint: "<code>plt.plot(reg.index, reg.values, marker=\"o\")</code>, ниже <code>plt.ylabel(\"регистраций в месяц\")</code> и <code>plt.title(\"В марте пришло 49 новых пользователей — больше, чем в любой другой месяц\")</code>, последней строкой остаётся <code>plt.show()</code>.",
+        solution: `import matplotlib.pyplot as plt
+
+reg = users.set_index("signup_date")["user_id"].resample("MS").count()
+plt.plot(reg.index, reg.values, marker="o")
+plt.ylabel("регистраций в месяц")
+plt.title("В марте пришло 49 новых пользователей — больше, чем в любой другой месяц")
+plt.show()`
+      },
+      {
+        title: "Неполный месяц на линии: срез перед графиком",
+        body: `
+<p>Заготовка рисует число оплаченных заказов по месяцам. Запустите её: в конце линия падает почти до нуля — в сентябре один заказ.</p>
+<p>Это не спад, а край данных: заказы в базе кончаются 11 сентября, месяц не закрыт. На графике такая точка читается как обвал, и заметят её раньше всего остального. Поэтому неполный период отрезают до рисования: <code>cnt.loc[:"2024-08"]</code> — всё по август включительно. Пусто перед двоеточием значит «с самого начала».</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "order_id"], rows: [["2024-07-01", 29], ["2024-08-01", 8], ["2024-09-01", 1]] },
+          after: { columns: ["order_date (индекс)", "order_id"], rows: [["2024-07-01", 29], ["2024-08-01", 8]] },
+          keep: [0, 1],
+          note: "Хвост ряда: сентябрь с одним заказом уходит. Остаётся восемь полных месяцев."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустить заготовку и посмотреть на последнюю точку.</li>
+<li>После расчёта <code>cnt</code> добавить строку <code>cnt = cnt.loc[:"2024-08"]</code>.</li>
+<li>Запустить ещё раз: точек должно стать восемь.</li>
+</ol>
+<p><strong>Задание.</strong> Уберите с графика неполный сентябрь.</p>`,
+        starter: `import matplotlib.pyplot as plt
+
+paid = orders[orders["status"] == "paid"]
+cnt = paid.set_index("order_date")["order_id"].resample("MS").count()
+
+plt.plot(cnt.index, cnt.values, marker="o")
+plt.ylabel("оплаченных заказов в месяц")
+plt.title("Заказы: пик в апреле — 36, в августе всего 8")
+plt.show()`,
+        expected: { plot: "Линия из 8 точек: оплаченные заказы по месяцам, январь…август." },
+        hint: "Строка <code>cnt = cnt.loc[:\"2024-08\"]</code> ставится до <code>plt.plot</code>: рисуется то, что лежит в <code>cnt</code> в момент вызова.",
+        solution: `import matplotlib.pyplot as plt
+
+paid = orders[orders["status"] == "paid"]
+cnt = paid.set_index("order_date")["order_id"].resample("MS").count()
+cnt = cnt.loc[:"2024-08"]
+
+plt.plot(cnt.index, cnt.values, marker="o")
+plt.ylabel("оплаченных заказов в месяц")
+plt.title("Заказы: пик в апреле — 36, в августе всего 8")
+plt.show()`
+      },
+      {
+        title: "Сравнить категории: plt.barh и сортировка",
+        body: `
+<p>Вопрос «кто больше, кто меньше» — не про время, и линия тут не годится: между каналами нет «до» и «после». Категории сравнивают столбцами. Горизонтальные удобнее: длинные названия читаются слева, без наклона.</p>
+<p><code>plt.barh(названия, значения)</code> рисует по столбцу на категорию. Значения теперь идут по горизонтали, поэтому единицы подписывают через <code>plt.xlabel("…")</code>.</p>
+<p>После <code>groupby</code> каналы стоят по алфавиту — порядок, в котором нет смысла. Столбцы сортируют по величине: <code>ch.sort_values()</code>. У <code>barh</code> первая строка рисуется внизу, поэтому при сортировке по возрастанию самый большой канал окажется сверху.</p>`,
+        ba: {
+          before: { columns: ["channel", "user_id"], rows: [["email", 28], ["organic", 75], ["paid_search", 55], ["partner", 6], ["referral", 14], ["social", 42]] },
+          after: { columns: ["channel", "user_id"], rows: [["partner", 6], ["referral", 14], ["email", 28], ["social", 42], ["paid_search", 55], ["organic", 75]] },
+          hl: ["user_id"],
+          note: "«Было» — по алфавиту. «Стало» — по величине: на графике <code>organic</code> встанет сверху."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>ch = ch.sort_values()</code> — каналы по величине.</li>
+<li><code>plt.barh(ch.index, ch.values)</code> — горизонтальные столбцы.</li>
+<li><code>plt.xlabel("пользователей")</code> — единицы на оси.</li>
+<li><code>plt.title("…")</code> — вывод. Например: «Organic приводит каждого третьего пользователя: 75 из 220».</li>
+<li><code>plt.show()</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Покажите, сколько пользователей привёл каждый канал: горизонтальные столбцы по величине, подпись оси и заголовок-вывод.</p>`,
+        starter: `import matplotlib.pyplot as plt
+
+ch = users.groupby("channel")["user_id"].count()
+`,
+        expected: { plot: "Шесть горизонтальных столбцов по величине: пользователи по каналам, ось X подписана, есть заголовок." },
+        hint: "Пять строк из «Порядка действий» подряд. Если проверка пишет «данные верные, но в другом порядке» — не хватает <code>ch = ch.sort_values()</code> перед <code>plt.barh</code>.",
+        solution: `import matplotlib.pyplot as plt
+
+ch = users.groupby("channel")["user_id"].count()
+ch = ch.sort_values()
+plt.barh(ch.index, ch.values)
+plt.xlabel("пользователей")
+plt.title("Organic приводит каждого третьего пользователя: 75 из 220")
+plt.show()`
+      },
+      {
+        title: "Столбцы начинаются с нуля",
+        body: `
+<p>В заготовке тот же график, но с одной лишней строкой: <code>plt.xlim(5, 80)</code> — ось начинается с пяти, а не с нуля. Запустите: <code>partner</code> почти исчез.</p>
+<p>Столбец показывает величину своей длиной. У <code>organic</code> 75 пользователей, у <code>partner</code> 6 — разница в 12,5 раза. С осью от пяти длины столбцов — 70 и 1, и глаз видит разницу в 70 раз. Числа на графике верные, а впечатление ложное.</p>
+<p>На линии обрезать ось можно: там читают наклон. На столбцах — нельзя никогда. Такой график проверка не примет.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустить заготовку и сравнить на глаз <code>organic</code> и <code>partner</code>.</li>
+<li>Убрать строку <code>plt.xlim(5, 80)</code>.</li>
+<li>Запустить ещё раз.</li>
+</ol>
+<p><strong>Задание.</strong> Исправьте график: столбцы должны начинаться с нуля.</p>`,
+        starter: `import matplotlib.pyplot as plt
+
+ch = users.groupby("channel")["user_id"].count()
+ch = ch.sort_values()
+plt.barh(ch.index, ch.values)
+plt.xlim(5, 80)
+plt.xlabel("пользователей")
+plt.title("Organic приводит каждого третьего пользователя: 75 из 220")
+plt.show()`,
+        expected: { plot: "Те же шесть горизонтальных столбцов, ось X с нуля." },
+        hint: "Удалите строку <code>plt.xlim(5, 80)</code> целиком: без неё matplotlib сам начнёт ось столбцов с нуля.",
+        solution: `import matplotlib.pyplot as plt
+
+ch = users.groupby("channel")["user_id"].count()
+ch = ch.sort_values()
+plt.barh(ch.index, ch.values)
+plt.xlabel("пользователей")
+plt.title("Organic приводит каждого третьего пользователя: 75 из 220")
+plt.show()`
+      }
+    ]
+  },
 
   starter: `import matplotlib.pyplot as plt
 
@@ -68048,7 +68263,9 @@ const Steps = {
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
-    let editor = null, last = null, lastOut = null, helped = false;
+    let editor = null, last = null, lastOut = null, lastFigs = [], helped = false;
+    const plots = Plots.on(S);       /* практикум 2.5: шаги рисуют графики */
+    const refFigs = {};              /* графики решения шага — эталон для Check.plot */
 
     /* у урока 0.2 таблиц ещё нет — нет и справки о них */
     box.innerHTML = (S.schema ?
@@ -68159,6 +68376,48 @@ const Steps = {
           plural(last.values.length, "строка", "строки", "строк") + "</div>";
       }
 
+      /* Шаг с matplotlib идёт через общий Run.python: он снимает фигуры —
+         картинку для вывода и «паспорт» графика для проверки. */
+      async function runPlot(code) {
+        let r;
+        try { r = await Run.python(code, S); }
+        catch (e) {
+          lastOut = null; lastFigs = [];
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        }
+        if (open !== n || !document.body.contains(li)) return false;
+        if (r.err) {
+          lastOut = null; lastFigs = [];
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
+          status("bad", "Код упал с ошибкой",
+            esc(Check.pyErr(r.err) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
+          return false;
+        }
+        lastOut = r.out; lastFigs = r.figs || [];
+        q(".st-res").innerHTML = (lastOut.trim() ? "<pre>" + esc(lastOut) + "</pre>" : "") + Plots.html(lastFigs) ||
+          '<div class="empty">Код отработал без ошибок, но ничего не нарисовал и не напечатал.</div>';
+        return true;
+      }
+      /* Шаг-график сверяется с графиком своего решения: тип, данные,
+         подписи — теми же правилами, что основная задача урока 2.5. */
+      async function checkPlot() {
+        let want;
+        try { want = refFigs[n] || (refFigs[n] = await Run.python(S.steps[n].solution, S)); }
+        catch (e) { want = null; }
+        if (open !== n || !document.body.contains(li)) return;
+        if (!want || want.err) {
+          delete refFigs[n];
+          status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз.");
+          return;
+        }
+        const c = Check.plot(lastFigs, want.figs || []);
+        if (c.ok) { pass(n); return; }
+        status("bad", "Пока не совпадает", esc(c.why.replace(/^./, function (x) { return x.toUpperCase(); })) +
+          (c.hint ? '<br><span class="s-hint">' + esc(c.hint) + "</span>" : ""));
+      }
+
       /* true — код выполнен (вывода может и не быть), false — пусто или ошибка */
       async function run() {
         if (open !== n || !document.body.contains(li)) return false;
@@ -68206,6 +68465,7 @@ const Steps = {
       async function runPy(code) {
         q(".st-res").innerHTML = '<div class="empty">' + (Engine.py ? "Выполняю…"
           : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
+        if (plots) return runPlot(code);
         let pyi;
         try {
           const got = await Promise.all([Engine.python(S.packages || []), Lazy.data()]);
@@ -68255,6 +68515,7 @@ const Steps = {
         if (!ran || open !== n) return;
         /* у шага нет окна «ожидаемый результат», поэтому строку эталона
            показываем в причине — как значения в SQL-шагах */
+        if (py && S.steps[n].expected.plot) { await checkPlot(); return; }
         if (py) {
           const want = S.steps[n].expected.stdout;
           const rp = Check.python(lastOut, want);
