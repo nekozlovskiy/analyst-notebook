@@ -13449,10 +13449,11 @@ print(f"отношение: {p_two / p_one:.1f}")`,
 
 window.CONTENT.m3l2 = {
   intro: "Откуда берётся «нормальность» средних и почему на неё можно опираться, даже когда сами данные распределены как угодно криво.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   math: true,
   plan: [
     { m: "40 мин", w: "Теория и карточки: распределения, ЦПТ, стандартная ошибка" },
+    { m: "30 мин", w: "Практикум: пять шагов от доли до двух тысяч выборок" },
     { m: "40 мин", w: "Основная задача: увидеть ЦПТ на симуляции" },
     { m: "30 мин", w: "Тренажёр: 5 задач на распределения" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -13553,6 +13554,177 @@ rnd.choice(rev)              # случайный элемент списка</c
   data: window.SH.pyData,
   packages: ["pandas"],
   prelude: window.SH.statsDataPrelude,
+
+  /* Практикум — пять шагов на конверсии пользователей в покупку (список
+     из 220 нулей и единиц), а не на чеках: основная задача симулирует
+     ЦПТ на суммах заказов, её числа здесь не появляются. random.choice
+     с одним зерном даёт одинаковый результат в pyodide и CPython 3.12+.
+     Решения: node инструменты/checksteps.js m3l2 */
+  practicum: {
+    intro: "Пять коротких шагов перед основной задачей. Материал — конверсия пользователей в покупку: список из 220 нулей и единиц. На нём видно всё, что нужно для задачи: среднее, разброс, воспроизводимый случай, одна выборка и две тысячи выборок.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas"],
+    prelude: window.SH.statsDataPrelude,
+    done: "Все пять шагов решены. Основная задача — те же две тысячи выборок, но из сумм заказов и для трёх размеров: 1, 5 и 30. Нового там два места: цикл по размерам снаружи, и генератор пересоздаётся перед каждым размером — как в шаге 3.",
+    steps: [
+      {
+        title: "Доля — это среднее нулей и единиц",
+        body: `
+<p>Конверсия в покупку — доля пользователей, которые хоть раз оплатили заказ. Если каждому пользователю поставить 1, когда он покупатель, и 0, когда нет, доля станет обычным средним этих чисел. Поэтому всё, что ЦПТ говорит о средних, верно и для конверсий.</p>
+<p>Заготовка строит такой список. <code>set(…)</code> — множество номеров покупателей: в нём удобно проверять «есть ли такой». <code>[1 if u in buyers else 0 for u in users["user_id"]]</code> — список, собранный в одну строку: для каждого <code>u</code> из столбца — 1 или 0.</p>
+<p><code>mean</code>, <code>sd</code>, <code>median</code> уже определены в прологе урока.</p>`,
+        ba: {
+          before: { columns: ["user_id", "покупатель"], rows: [[16, "да"], [19, "нет"], [21, "да"]] },
+          after: { columns: ["user_id", "conv"], rows: [[16, 1], [19, 0], [21, 1]] },
+          hl: ["conv"],
+          note: "Среднее столбца <code>conv</code> — ровно доля покупателей."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>conv</code> уже в заготовке.</li>
+<li><code>print(len(conv), sum(conv), f"{mean(conv):.4f}")</code> — сколько пользователей, сколько покупателей и какая доля.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте конверсию в покупку как среднее списка <code>conv</code>.</p>`,
+        starter: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+`,
+        expected: { stdout: `220 104 0.4727` },
+        hint: "Одна строка под заготовкой: <code>print(len(conv), sum(conv), f\"{mean(conv):.4f}\")</code>. <code>sum</code> от нулей и единиц — число единиц.",
+        solution: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+print(len(conv), sum(conv), f"{mean(conv):.4f}")`
+      },
+      {
+        title: "Разброс доли: формула p(1 − p)",
+        body: `
+<p>Стандартное отклонение списка из нулей и единиц можно не считать перебором: оно выражается через саму долю. Дисперсия такой величины равна <code>p * (1 - p)</code>, отклонение — корень из неё.</p>
+<p><code>sd</code> из пролога делит на <code>n - 1</code>, как принято для выборки, а формула соответствует делению на <code>n</code>. На 220 пользователях разница в третьем знаке — это нормально.</p>
+<p>Из формулы видно: разброс максимален при <code>p = 0.5</code>. Наша конверсия 47 % почти там, поэтому разброс у неё почти предельный.</p>`,
+        ba: {
+          before: { columns: ["способ", "как"], rows: [["перебором", "sd(conv)"], ["по формуле", "math.sqrt(p * (1 - p))"]] },
+          after: { columns: ["способ", "sd"], rows: [["перебором", 0.5004], ["по формуле", 0.4993]] },
+          hl: ["sd"],
+          note: "Два способа сходятся до третьего знака."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>p = mean(conv)</code> — доля.</li>
+<li><code>print(f"{sd(conv):.4f} {math.sqrt(p * (1 - p)):.4f}")</code> — разброс двумя способами.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте стандартное отклонение конверсии перебором и по формуле и сравните.</p>`,
+        starter: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+`,
+        expected: { stdout: `0.5004 0.4993` },
+        hint: "Две строки: <code>p = mean(conv)</code> и <code>print(f\"{sd(conv):.4f} {math.sqrt(p * (1 - p)):.4f}\")</code>. <code>math</code> подключён в прологе.",
+        solution: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+p = mean(conv)
+print(f"{sd(conv):.4f} {math.sqrt(p * (1 - p)):.4f}")`
+      },
+      {
+        title: "Случай по заказу: random.Random(42)",
+        body: `
+<p>Симуляция опирается на случайные выборки, а проверка в курсе ждёт точных чисел. Поэтому случай делают воспроизводимым. <code>rnd = random.Random(42)</code> создаёт свой генератор случайных чисел с зерном 42; <code>rnd.choice(список)</code> вынимает из списка случайный элемент.</p>
+<p>Генератор выдаёт последовательность, которая зависит только от зерна. Два генератора с одним зерном дают одно и то же. А один генератор, спрошенный второй раз, продолжает свою последовательность дальше — и числа будут другими.</p>`,
+        ba: {
+          before: { columns: ["генератор", "8 бросков кубика"], rows: [["Random(42)", "6 1 1 6 3 2 2 2"], ["тот же, дальше", "6 1 6 6 5 1 5 4"]] },
+          after: { columns: ["генератор", "8 бросков кубика"], rows: [["Random(42) заново", "6 1 1 6 3 2 2 2"]] },
+          hl: ["8 бросков кубика"],
+          note: "Пересозданный генератор повторяет первую серию. Продолжение даёт другую."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Заготовка создаёт генератор и дважды бросает кубик восемь раз. Запустите.</li>
+<li>Ниже снова создать генератор: <code>rnd = random.Random(42)</code>.</li>
+<li>Ещё раз напечатать восемь бросков — той же строкой, что в заготовке.</li>
+</ol>
+<p><strong>Задание.</strong> Получите третьей строкой ту же серию, что первой.</p>`,
+        starter: `dice = [1, 2, 3, 4, 5, 6]
+rnd = random.Random(42)
+print([rnd.choice(dice) for _ in range(8)])
+print([rnd.choice(dice) for _ in range(8)])
+`,
+        expected: { stdout: `[6, 1, 1, 6, 3, 2, 2, 2]
+[6, 1, 6, 6, 5, 1, 5, 4]
+[6, 1, 1, 6, 3, 2, 2, 2]` },
+        hint: "Две строки в конце: <code>rnd = random.Random(42)</code> и <code>print([rnd.choice(dice) for _ in range(8)])</code>. <code>_</code> — имя для переменной цикла, которая не нужна: важно только, сколько раз повторить.",
+        solution: `dice = [1, 2, 3, 4, 5, 6]
+rnd = random.Random(42)
+print([rnd.choice(dice) for _ in range(8)])
+print([rnd.choice(dice) for _ in range(8)])
+rnd = random.Random(42)
+print([rnd.choice(dice) for _ in range(8)])`
+      },
+      {
+        title: "Одна выборка: среднее шумит",
+        body: `
+<p>Представим, что всех 220 пользователей мы не видим, а можем опросить 30 случайных. Выборка с возвращением — это 30 раз <code>rnd.choice(conv)</code>: один и тот же пользователь может попасться дважды, как при подбрасывании монеты.</p>
+<p>Среднее такой выборки — оценка конверсии. Одна выборка может сильно промахнуться: истинная доля 0,4727, а тридцать случайных пользователей легко дадут 0,30 или 0,60. Насколько сильно промахивается выборка в среднем — вопрос следующего шага.</p>`,
+        ba: {
+          before: { columns: ["что", "значение"], rows: [["все 220", 0.4727]] },
+          after: { columns: ["что", "значение"], rows: [["30 случайных", 0.3]] },
+          hl: ["значение"],
+          note: "Одна выборка из тридцати дала 9 покупателей — на треть меньше правды."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>rnd = random.Random(42)</code>.</li>
+<li><code>sample = [rnd.choice(conv) for _ in range(30)]</code> — выборка из 30 с возвращением.</li>
+<li><code>print(sum(sample), f"{mean(sample):.4f}")</code> — сколько в ней покупателей и какая доля.</li>
+</ol>
+<p><strong>Задание.</strong> Возьмите одну случайную выборку из 30 пользователей и посчитайте конверсию в ней.</p>`,
+        starter: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+`,
+        expected: { stdout: `9 0.3000` },
+        hint: "Три строки из «Порядка действий» подряд, под заготовкой. Зерно — ровно 42, иначе выборка будет другой.",
+        solution: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+rnd = random.Random(42)
+sample = [rnd.choice(conv) for _ in range(30)]
+print(sum(sample), f"{mean(sample):.4f}")`
+      },
+      {
+        title: "Две тысячи выборок: разброс средних и √n",
+        body: `
+<p>Повторим выборку из 30 две тысячи раз и сложим все средние в список. Внешний цикл повторяет эксперимент, внутри — та же строка, что в прошлом шаге. <code>means.append(x)</code> добавляет число в конец списка.</p>
+<p>Дальше два числа. Среднее средних — около истинной доли: выборка не врёт систематически, только шумит. А разброс средних ЦПТ предсказывает заранее: стандартное отклонение исходных данных, делённое на корень из размера выборки, — <code>math.sqrt(p * (1 - p) / 30)</code>. Это и есть стандартная ошибка.</p>
+<pre><code>means = []
+for _ in range(2000):
+    sample = [rnd.choice(conv) for _ in range(30)]
+    means.append(mean(sample))</code></pre>`,
+        ba: {
+          before: { columns: ["выборка", "доля"], rows: [["1-я", 0.3], ["2-я", "…"], ["2000-я", "…"]] },
+          after: { columns: ["что", "значение"], rows: [["среднее средних", 0.4721], ["sd средних", 0.093], ["теория", 0.0912]] },
+          hl: ["значение"],
+          note: "Разброс двух тысяч средних почти совпал с формулой: 0,093 против 0,091."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>p = mean(conv)</code> и <code>rnd = random.Random(42)</code>.</li>
+<li>Цикл из примера выше — две тысячи средних в <code>means</code>.</li>
+<li>После цикла, без отступа: <code>print(f"{mean(means):.4f} {sd(means):.4f} {math.sqrt(p * (1 - p) / 30):.4f}")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Соберите средние двух тысяч выборок по 30 пользователей и сравните их разброс с предсказанием ЦПТ.</p>`,
+        starter: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+`,
+        expected: { stdout: `0.4721 0.0930 0.0912` },
+        hint: "Генератор создаётся один раз, до цикла, — иначе все две тысячи выборок будут одинаковыми. <code>print</code> стоит после цикла без отступа: печатаем один раз, когда все средние собраны.",
+        solution: `buyers = set(orders.loc[orders["status"] == "paid", "user_id"])
+conv = [1 if u in buyers else 0 for u in users["user_id"]]
+p = mean(conv)
+rnd = random.Random(42)
+means = []
+for _ in range(2000):
+    sample = [rnd.choice(conv) for _ in range(30)]
+    means.append(mean(sample))
+print(f"{mean(means):.4f} {sd(means):.4f} {math.sqrt(p * (1 - p) / 30):.4f}")`
+      }
+    ]
+  },
 
   starter: `# Центральная предельная теорема на реальных чеках
 rev = [float(x) for x in orders.loc[orders["status"] == "paid", "revenue"]]
