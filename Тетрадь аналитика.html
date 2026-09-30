@@ -10155,9 +10155,10 @@ for ch, n, med, avg, avg_trim, p90 in rows:
 
 window.CONTENT.m2l4 = {
   intro: "Дневные данные шумят, недельные читаются. Учимся менять шаг времени, сглаживать пилу и не терять пустые периоды, из-за которых графики врут.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: DatetimeIndex, resample, rolling" },
+    { m: "30 мин", w: "Практикум: семь шагов от даты в индексе до лучшего месяца" },
     { m: "40 мин", w: "Основная задача: недельная динамика со сглаживанием" },
     { m: "35 мин", w: "Тренажёр: 5 задач на время" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -10169,7 +10170,8 @@ window.CONTENT.m2l4 = {
 
 <h3>Индекс из дат: с чего всё начинается</h3>
 <p>Чтобы pandas умел работать со временем, дата должна быть <em>индексом</em>, а не обычным столбцом:</p>
-<pre><code>ts = paid.set_index("order_date")["revenue"]</code></pre>
+<pre><code>ts = paid.set_index("order_date")["revenue"].sort_index()</code></pre>
+<p><code>.sort_index()</code> выстраивает строки по дате. В нашей базе заказы лежат не по порядку, а срез от даты до даты на неотсортированном индексе pandas выполнять отказывается.</p>
 <p>После этого появляются вещи, которых больше нигде нет: срезы по датам, автоматическое достраивание пропущенных периодов, ресемплинг.</p>
 <pre><code>ts["2024-03"]                 # весь март
 ts["2024-03":"2024-05"]       # три месяца, обе границы включены
@@ -10278,6 +10280,270 @@ w.tail(8).iterrows()                  # последние 8 строк</code></
   data: window.SH.pyData,
   packages: ["pandas"],
   prelude: window.SH.pyPrelude,
+
+  /* Практикум — семь шагов на тех же оплаченных заказах, но по месяцам
+     ("MS") и по дням августа: основная задача считает недели ("W-MON"),
+     её числа здесь не появляются. Шаг 1 учит sort_index: заказы в базе
+     лежат не по дате, и срез "2024-03":"2024-05" без сортировки падает
+     с KeyError. Решения: node инструменты/checksteps.js m2l4 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. Данные те же — оплаченные заказы, но считаем по месяцам: девять строк целиком помещаются на экран, и каждое число можно проверить глазами. В основной задаче те же конструкции вы примените к неделям.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas"],
+    prelude: window.SH.pyPrelude,
+    done: "Все семь шагов решены. Основная задача собирает их на неделях: дата в индекс → <code>resample(\"W-MON\")</code> с двумя итогами → <code>rolling(4, min_periods=1)</code> → лучшая неделя через <code>idxmax</code> → последние восемь строк циклом. Новое там одно — счёт недель без заказов: <code>(w[\"orders_cnt\"] == 0).sum()</code>, тот же приём, что с пустыми днями в шаге 4.",
+    steps: [
+      {
+        title: "Дата в индекс: set_index и sort_index",
+        body: `
+<p>Пока дата — обычный столбец, pandas видит в ней просто значения. Чтобы работать со временем, дату делают индексом — подписью строки: <code>paid.set_index("order_date")</code>. Квадратные скобки после этого берут один столбец, как обычно: <code>["revenue"]</code>. Получается ряд: слева дата, справа сумма.</p>
+<p>Заказы в базе лежат по номеру, а не по дате: первый — от 20 июня, второй — от 22 июля. <code>.sort_index()</code> выстраивает строки по индексу, то есть по дате. Без этого срезы «от даты до даты» из следующего шага не сработают.</p>
+<p>У ряда с датами в индексе появляется срез по периоду: <code>ts["2024-03"]</code> — все заказы марта. Не нужно писать два условия «с первого по тридцать первое».</p>`,
+        ba: {
+          before: { columns: ["order_id", "order_date", "revenue"], rows: [[1, "2024-06-20", 2997.2], [2, "2024-07-22", 4968.24], [3, "2024-08-18", 1994.76]] },
+          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-07", 3007.92], ["2024-01-17", 3646.74], ["2024-01-21", 7196.22]] },
+          hl: ["order_date (индекс)"],
+          note: "«Было» — первые три оплаченных заказа, как они лежат в таблице. «Стало» — первые три строки ряда: дата в индексе, строки по порядку дат."
+        },
+        task: `<p><strong>Порядок действий</strong> в <code>paid.set_index("order_date")["revenue"].sort_index()</code>:</p>
+<ol class="order">
+<li><code>.set_index("order_date")</code> — дата становится индексом.</li>
+<li><code>["revenue"]</code> — взять столбец выручки.</li>
+<li><code>.sort_index()</code> — выстроить по дате. Результат положить в <code>ts</code>.</li>
+<li><code>mar = ts["2024-03"]</code> — заказы марта.</li>
+<li><code>print(len(mar), round(mar.sum(), 2))</code> — сколько их и на какую сумму.</li>
+</ol>
+<p><strong>Задание.</strong> Сделайте ряд выручки с датой в индексе. Сколько оплаченных заказов было в марте и на какую сумму?</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+`,
+        expected: { stdout: `27 85621.79` },
+        hint: "<code>ts = paid.set_index(\"order_date\")[\"revenue\"].sort_index()</code>, потом <code>mar = ts[\"2024-03\"]</code> и <code>print(len(mar), round(mar.sum(), 2))</code>. Месяц пишут текстом в кавычках: год, дефис, две цифры месяца.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+mar = ts["2024-03"]
+print(len(mar), round(mar.sum(), 2))`
+      },
+      {
+        title: "Срез от и до: обе границы входят",
+        body: `
+<p>Несколько периодов подряд берут через двоеточие: <code>ts["2024-03":"2024-05"]</code> — с марта по май. В отличие от срезов списка, правая граница здесь входит целиком: в срез попадёт и 31 мая.</p>
+<p>Если забыть <code>.sort_index()</code>, эта строка упадёт с ошибкой <code>KeyError</code> и словами про <code>non-monotonic</code> — «индекс не по порядку». Один месяц, <code>ts["2024-03"]</code>, pandas найдёт и в неотсортированном ряду, а срез от и до — нет.</p>
+<p>У индекса из дат есть <code>.min()</code> и <code>.max()</code> — самая ранняя и самая поздняя дата. <code>.date()</code> в конце убирает из печати время <code>00:00:00</code>.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-07", 3007.92], ["…", "…"], ["2024-09-11", 10177.29]] },
+          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-03-01", 2216.4], ["…", "…"], ["2024-05-31", "…"]] },
+          hl: ["order_date (индекс)"],
+          note: "Из 189 заказов с 7 января по 11 сентября остались заказы с 1 марта по 31 мая — обе границы внутри."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>part = ts["2024-03":"2024-05"]</code> — заказы с марта по май.</li>
+<li><code>print(part.index.min().date(), part.index.max().date())</code> — первая и последняя дата среза.</li>
+<li><code>print(len(part), round(part.sum(), 2))</code> — сколько заказов и на какую сумму.</li>
+</ol>
+<p><strong>Задание.</strong> Возьмите весну целиком. Какими датами начинается и кончается срез, сколько в нём заказов и на какую сумму?</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+`,
+        expected: { stdout: `2024-03-01 2024-05-31
+96 319280.38` },
+        hint: "<code>part = ts[\"2024-03\":\"2024-05\"]</code> — в скобках два текста через двоеточие. Дальше два <code>print</code> из «Порядка действий».",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+part = ts["2024-03":"2024-05"]
+print(part.index.min().date(), part.index.max().date())
+print(len(part), round(part.sum(), 2))`
+      },
+      {
+        title: "resample: сменить шаг времени",
+        body: `
+<p><code>ts.resample("MS")</code> — это <code>groupby</code> по календарю: все заказы одного месяца попадают в одну группу. Дальше, как после <code>groupby</code>, говорят, что считать: <code>.sum()</code>.</p>
+<p><code>"MS"</code> — month start: шаг в месяц, метка периода — первое число. Строка <code>2024-03-01</code> в ответе — это весь март, а не один день. Другие шаги: <code>"D"</code> — день, <code>"W-MON"</code> — неделя с меткой в понедельник.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-07", 3007.92], ["2024-01-17", 3646.74], ["…", "…"], ["2024-02-03", "…"]] },
+          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-01", 25563.37], ["2024-02-01", 67477.28]] },
+          hl: ["revenue"],
+          note: "Шесть январских заказов свернулись в одну строку с меткой 1 января, семнадцать февральских — в строку 1 февраля."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>m = ts.resample("MS").sum()</code> — выручка по месяцам.</li>
+<li><code>print(m.round(2))</code> — напечатать с двумя знаками.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте выручку по месяцам. В каком месяце она наибольшая?</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+`,
+        expected: { stdout: `order_date
+2024-01-01     25563.37
+2024-02-01     67477.28
+2024-03-01     85621.79
+2024-04-01    119150.19
+2024-05-01    114508.40
+2024-06-01    103461.97
+2024-07-01    102708.78
+2024-08-01     24759.71
+2024-09-01     10177.29
+Freq: MS, Name: revenue, dtype: float64` },
+        hint: "<code>m = ts.resample(\"MS\").sum()</code> и <code>print(m.round(2))</code>. Шаг пишут в кавычках большими буквами: <code>\"MS\"</code>.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").sum()
+print(m.round(2))`
+      },
+      {
+        title: "Пустые периоды: resample достраивает календарь",
+        body: `
+<p>Главное отличие <code>resample</code> от <code>groupby</code>: он строит все периоды подряд, от первой даты ряда до последней. Если в какой-то день заказов не было, строка для этого дня всё равно появится — с нулём. <code>groupby</code> такой день просто пропустил бы, и на графике соседние точки соединились бы прямой, спрятав провал.</p>
+<p>Посмотрим на августе по дням. <code>aug.index.nunique()</code> — сколько разных дат в индексе, то есть дней с заказами. <code>len(d)</code> после <code>resample("D")</code> — сколько дней в календаре ряда. <code>(d == 0).sum()</code> — сколько из них пустых: сравнение даёт <code>True</code> и <code>False</code>, сумма считает <code>True</code>.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-08-03", 2797.06], ["2024-08-08", 6578.38], ["2024-08-13", 3430.19]] },
+          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-08-03", 2797.06], ["2024-08-04", 0.0], ["…", "…"], ["2024-08-07", 0.0], ["2024-08-08", 6578.38]] },
+          hl: ["revenue"],
+          note: "Между заказами 3 и 8 августа четыре дня без продаж. <code>resample</code> поставил на них нули."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>aug = ts["2024-08"]</code> — заказы августа.</li>
+<li><code>d = aug.resample("D").sum()</code> — выручка по дням.</li>
+<li><code>print(aug.index.nunique(), len(d), (d == 0).sum())</code> — дней с заказами, дней в календаре, пустых дней.</li>
+</ol>
+<p><strong>Задание.</strong> Сколько в августе дней с заказами, сколько дней в дневном ряду и сколько из них без заказов?</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+`,
+        expected: { stdout: `8 23 15` },
+        hint: "Три строки из «Порядка действий» подряд. Дней в ряду 23, а не 31: календарь строится от первого августовского заказа, 3-го числа, до последнего, 25-го.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+aug = ts["2024-08"]
+d = aug.resample("D").sum()
+print(aug.index.nunique(), len(d), (d == 0).sum())`
+      },
+      {
+        title: "Два итога на период: agg со списком",
+        body: `
+<p>В отчёте по периодам нужны сразу и число заказов, и выручка. После <code>resample</code> это пишут так: <code>.agg(["count", "sum"])</code> — список способов посчитать. Получится таблица с двумя столбцами, названными по способам: <code>count</code> и <code>sum</code>.</p>
+<p>Такие имена в отчёт не годятся. Переименовать все столбцы разом можно, положив в <code>m.columns</code> список новых имён в том же порядке: <code>m.columns = ["orders_cnt", "revenue"]</code>.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "count", "sum"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28]] },
+          after: { columns: ["order_date (индекс)", "orders_cnt", "revenue"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28]] },
+          hl: ["orders_cnt", "revenue"],
+          note: "Числа те же, столбцы названы по смыслу."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>m = ts.resample("MS").agg(["count", "sum"])</code> — два итога по месяцам.</li>
+<li><code>m.columns = ["orders_cnt", "revenue"]</code> — имена столбцов.</li>
+<li><code>print(m.round(2))</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Соберите таблицу по месяцам: число оплаченных заказов и выручка.</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+`,
+        expected: { stdout: `            orders_cnt    revenue
+order_date
+2024-01-01           6   25563.37
+2024-02-01          17   67477.28
+2024-03-01          27   85621.79
+2024-04-01          36  119150.19
+2024-05-01          33  114508.40
+2024-06-01          32  103461.97
+2024-07-01          29  102708.78
+2024-08-01           8   24759.71
+2024-09-01           1   10177.29` },
+        hint: "<code>m = ts.resample(\"MS\").agg([\"count\", \"sum\"])</code> — внутри <code>agg</code> квадратные скобки: это список. Потом <code>m.columns = [\"orders_cnt\", \"revenue\"]</code> и <code>print(m.round(2))</code>.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").agg(["count", "sum"])
+m.columns = ["orders_cnt", "revenue"]
+print(m.round(2))`
+      },
+      {
+        title: "rolling: скользящее среднее и начало ряда",
+        body: `
+<p><code>m["revenue"].rolling(3).mean()</code> — скользящее среднее: для каждой строки берутся она сама и две предыдущие, и по этим трём считается среднее. Окно едет вниз по ряду, отсюда название. Сглаженный ряд показывает направление, а не скачки отдельных месяцев.</p>
+<p>У первых двух строк трёх значений ещё нет, и <code>rolling(3)</code> ставит там <code>NaN</code>. Настройка <code>min_periods=1</code> разрешает считать по тому, что есть: первая строка — по одному значению, вторая — по двум. Ряд получается без дыр, но первые точки посчитаны по неполному окну — в отчёте об этом помнят.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, "NaN"], ["2024-02-01", 67477.28, "NaN"], ["2024-03-01", 85621.79, 59554.15]] },
+          after: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, 25563.37], ["2024-02-01", 67477.28, 46520.32], ["2024-03-01", 85621.79, 59554.15]] },
+          hl: ["ma3"],
+          note: "«Было» — <code>rolling(3)</code>, «стало» — с <code>min_periods=1</code>. Мартовское значение одно и то же: там окно уже полное."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустите заготовку: в <code>ma3</code> у января и февраля — <code>NaN</code>.</li>
+<li>В скобки <code>rolling</code> после тройки добавить <code>min_periods=1</code>.</li>
+<li>Запустить ещё раз и проверить.</li>
+</ol>
+<p><strong>Задание.</strong> Сделайте так, чтобы скользящее среднее по трём месяцам считалось с первой строки.</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").sum().to_frame("revenue")
+m["ma3"] = m["revenue"].rolling(3).mean()
+print(m.round(2))`,
+        expected: { stdout: `              revenue        ma3
+order_date
+2024-01-01   25563.37   25563.37
+2024-02-01   67477.28   46520.32
+2024-03-01   85621.79   59554.15
+2024-04-01  119150.19   90749.75
+2024-05-01  114508.40  106426.79
+2024-06-01  103461.97  112373.52
+2024-07-01  102708.78  106893.05
+2024-08-01   24759.71   76976.82
+2024-09-01   10177.29   45881.93` },
+        hint: "<code>m[\"ma3\"] = m[\"revenue\"].rolling(3, min_periods=1).mean()</code> — через запятую после тройки. <code>.to_frame(\"revenue\")</code> в заготовке превращает ряд в таблицу с одним столбцом, чтобы было куда добавить второй.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").sum().to_frame("revenue")
+m["ma3"] = m["revenue"].rolling(3, min_periods=1).mean()
+print(m.round(2))`
+      },
+      {
+        title: "Лучший период и хвост ряда: idxmax, .date(), tail",
+        body: `
+<p><code>m["revenue"].max()</code> — наибольшая выручка. <code>m["revenue"].idxmax()</code> — метка строки, где она стоит, то есть сам месяц. Метка — это дата со временем, и печатается она как <code>2024-04-01 00:00:00</code>. <code>.date()</code> оставляет только дату.</p>
+<p><code>m.tail(3)</code> — последние три строки, как <code>head</code>, только с конца. По ним идут знакомым циклом: в <code>for d, row in m.tail(3).iterrows():</code> метка строки попадает в <code>d</code>, и у неё тоже есть <code>.date()</code>.</p>
+<p>На последнюю строку любого ряда смотрят с недоверием. Заказы в базе кончаются 11 сентября, так что сентябрь — это треть месяца, а не обвал. Такой период в отчёте либо отрезают, либо подписывают.</p>`,
+        ba: {
+          before: { columns: ["order_date (индекс)", "orders_cnt", "revenue"], rows: [["2024-07-01", 29, 102708.78], ["2024-08-01", 8, 24759.71], ["2024-09-01", 1, 10177.29]] },
+          after: { columns: ["напечатано"], rows: [["2024-07-01 29 102708.78"], ["2024-08-01 8 24759.71"], ["2024-09-01 1 10177.29"]] },
+          hl: ["напечатано"],
+          note: "Три последние строки таблицы стали тремя строками текста: дата без времени, число заказов, выручка."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>best = m["revenue"].idxmax()</code> — метка лучшего месяца.</li>
+<li><code>top = m["revenue"].max()</code> — его выручка.</li>
+<li><code>print(f"лучший месяц {best.date()} {top:.2f}")</code>.</li>
+<li><code>for d, row in m.tail(3).iterrows():</code> — пройти по трём последним месяцам.</li>
+<li>Под ним с отступом: <code>print(f"{d.date()} {int(row.orders_cnt)} {row.revenue:.2f}")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте лучший месяц с выручкой, а под ним — три последних месяца строками: дата, число заказов, выручка.</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").agg(["count", "sum"])
+m.columns = ["orders_cnt", "revenue"]
+`,
+        expected: { stdout: `лучший месяц 2024-04-01 119150.19
+2024-07-01 29 102708.78
+2024-08-01 8 24759.71
+2024-09-01 1 10177.29` },
+        hint: "Пять строк из «Порядка действий» подряд. У <code>idxmax</code> и <code>max</code> скобки пустые. Строка с <code>print</code> внутри цикла начинается с четырёх пробелов.",
+        solution: `paid = orders[orders["status"] == "paid"]
+ts = paid.set_index("order_date")["revenue"].sort_index()
+m = ts.resample("MS").agg(["count", "sum"])
+m.columns = ["orders_cnt", "revenue"]
+best = m["revenue"].idxmax()
+top = m["revenue"].max()
+print(f"лучший месяц {best.date()} {top:.2f}")
+for d, row in m.tail(3).iterrows():
+    print(f"{d.date()} {int(row.orders_cnt)} {row.revenue:.2f}")`
+      }
+    ]
+  },
 
   starter: `# Недельная динамика выручки
 paid = orders[orders["status"] == "paid"]
@@ -66217,6 +66483,8 @@ const Check = {
       return "Python не понял строку — похоже, пропущена запятая между значениями.";
     if (/IndentationError/.test(last))
       return "Строка начинается с лишних пробелов. В Python отступ в начале строки что-то значит — уберите его.";
+    if (/KeyError: .*non-monotonic/.test(last))
+      return "Даты в индексе стоят не по порядку, а срез от даты до даты работает только на отсортированном ряду. Добавьте .sort_index() после set_index.";
     if (/KeyError: \('/.test(last))
       return "Несколько столбцов берут двойными скобками: таблица[[\"a\", \"b\"]] — внутренние скобки делают из имён список.";
     if ((m = /KeyError: '?([^']+)'?/.exec(last)))
