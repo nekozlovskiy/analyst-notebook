@@ -3468,7 +3468,9 @@ const Steps = {
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
-    let editor = null, last = null, lastOut = null, helped = false;
+    let editor = null, last = null, lastOut = null, lastFigs = [], helped = false;
+    const plots = Plots.on(S);       /* практикум 2.5: шаги рисуют графики */
+    const refFigs = {};              /* графики решения шага — эталон для Check.plot */
 
     /* у урока 0.2 таблиц ещё нет — нет и справки о них */
     box.innerHTML = (S.schema ?
@@ -3579,6 +3581,48 @@ const Steps = {
           plural(last.values.length, "строка", "строки", "строк") + "</div>";
       }
 
+      /* Шаг с matplotlib идёт через общий Run.python: он снимает фигуры —
+         картинку для вывода и «паспорт» графика для проверки. */
+      async function runPlot(code) {
+        let r;
+        try { r = await Run.python(code, S); }
+        catch (e) {
+          lastOut = null; lastFigs = [];
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+          status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
+          return false;
+        }
+        if (open !== n || !document.body.contains(li)) return false;
+        if (r.err) {
+          lastOut = null; lastFigs = [];
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
+          status("bad", "Код упал с ошибкой",
+            esc(Check.pyErr(r.err) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
+          return false;
+        }
+        lastOut = r.out; lastFigs = r.figs || [];
+        q(".st-res").innerHTML = (lastOut.trim() ? "<pre>" + esc(lastOut) + "</pre>" : "") + Plots.html(lastFigs) ||
+          '<div class="empty">Код отработал без ошибок, но ничего не нарисовал и не напечатал.</div>';
+        return true;
+      }
+      /* Шаг-график сверяется с графиком своего решения: тип, данные,
+         подписи — теми же правилами, что основная задача урока 2.5. */
+      async function checkPlot() {
+        let want;
+        try { want = refFigs[n] || (refFigs[n] = await Run.python(S.steps[n].solution, S)); }
+        catch (e) { want = null; }
+        if (open !== n || !document.body.contains(li)) return;
+        if (!want || want.err) {
+          delete refFigs[n];
+          status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз.");
+          return;
+        }
+        const c = Check.plot(lastFigs, want.figs || []);
+        if (c.ok) { pass(n); return; }
+        status("bad", "Пока не совпадает", esc(c.why.replace(/^./, function (x) { return x.toUpperCase(); })) +
+          (c.hint ? '<br><span class="s-hint">' + esc(c.hint) + "</span>" : ""));
+      }
+
       /* true — код выполнен (вывода может и не быть), false — пусто или ошибка */
       async function run() {
         if (open !== n || !document.body.contains(li)) return false;
@@ -3626,6 +3670,7 @@ const Steps = {
       async function runPy(code) {
         q(".st-res").innerHTML = '<div class="empty">' + (Engine.py ? "Выполняю…"
           : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
+        if (plots) return runPlot(code);
         let pyi;
         try {
           const got = await Promise.all([Engine.python(S.packages || []), Lazy.data()]);
@@ -3675,6 +3720,7 @@ const Steps = {
         if (!ran || open !== n) return;
         /* у шага нет окна «ожидаемый результат», поэтому строку эталона
            показываем в причине — как значения в SQL-шагах */
+        if (py && S.steps[n].expected.plot) { await checkPlot(); return; }
         if (py) {
           const want = S.steps[n].expected.stdout;
           const rp = Check.python(lastOut, want);
