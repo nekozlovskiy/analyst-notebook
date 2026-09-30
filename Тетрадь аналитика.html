@@ -18427,9 +18427,10 @@ ORDER BY MIN(days);
 window.CONTENT.m4l3 = {
   intro: "Удержание — единственная метрика, которую нельзя купить за деньги. Всё остальное в продукте можно нагнать рекламой, а вернувшихся пользователей нет.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: три определения удержания и как читать когорты" },
+    { m: "30 мин", w: "Практикум: шесть шагов — удержание одной когорты" },
     { m: "30 мин", w: "Задача: когортная таблица удержания" },
     { m: "40 мин", w: "Тренажёр: 5 разборов, включая расследование" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -18529,6 +18530,109 @@ window.CONTENT.m4l3 = {
 <p><strong>Важно про знаменатель.</strong> Размер когорты — это число строк в <code>app_users</code>, а не число уникальных пользователей после соединения с активностью. Формально они здесь совпадают (у каждого есть хотя бы день установки), но привычку считать знаменатель отдельным CTE стоит выработать сразу: в реальных данных всегда найдутся пользователи вообще без событий, и они обязаны попасть в знаменатель.</p>
 <p><strong>Про цензурирование.</strong> Наблюдение идёт до 30 сентября. Для недель с первой по четвёртую все шесть когорт наблюдаются полностью, поэтому в этой задаче поправка не нужна. Она понадобится в четвёртом тренажёре.</p>
 `,
+
+  /* Практикум — шесть шагов на одной когорте: пользователи Android,
+     установившие приложение в марте (338 человек). Основная задача строит
+     таблицу по шести месячным когортам всех платформ — её числа здесь не
+     появляются. Каналы, три определения удержания и цензурирование — в
+     тренажёре. Решения: node инструменты/checksteps.js m4l3 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей на одной когорте — пользователях Android, установивших приложение в марте. Запросы начинаются с одного и того же <code>WITH c AS (…)</code>: это и есть когорта. Основная задача сделает то же для шести месяцев сразу.",
+    schema: window.SH.appSchema,
+    done: "Все шесть шагов решены. Основная задача — та же таблица, но для шести месячных когорт всех платформ сразу: когорт несколько, и размер каждой нужно соединить с её активностью по месяцу когорты.",
+    steps: [
+      {
+        title: "Когорта и её размер",
+        body: `
+<p>Когорта — люди, объединённые моментом входа: здесь все, кто поставил приложение на Android в марте. Размер когорты — знаменатель всех долей удержания, поэтому его считают по таблице пользователей <code>app_users</code>: одна строка — один человек.</p>
+<p>Когорту удобно положить в <code>WITH c AS (…)</code> и дальше обращаться к ней, как к таблице.</p>`,
+        task: "<p><strong>Задание.</strong> Посчитайте <code>users</code> — сколько пользователей в когорте из заготовки.</p>",
+        starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n)\nSELECT *\nFROM c;",
+        expected: { ordered: false, columns: ["users"], rows: [[338]] },
+        hint: "<code>SELECT COUNT(*) AS users FROM c</code>.",
+        solution: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n)\nSELECT COUNT(*) AS users\nFROM c;"
+      },
+      {
+        title: "После JOIN знаменатель размножается",
+        body: `
+<p>Чтобы узнать, кто возвращался, когорту соединяют с журналом <code>app_activity</code>: одна строка — один день, когда человек заходил. После соединения пользователь с десятью днями активности превращается в десять строк.</p>
+<p>Поэтому размер когорты никогда не считают после соединения через <code>COUNT(*)</code> — выйдет число дней, а не людей. Людей даёт <code>COUNT(DISTINCT c.user_id)</code>, а надёжнее всего — отдельный подсчёт по <code>app_users</code>, как в прошлом шаге.</p>`,
+        ba: {
+          before: { columns: ["что считаем", "как"], rows: [["строки после JOIN", "COUNT(*)"], ["людей", "COUNT(DISTINCT c.user_id)"]] },
+          after: { columns: ["что считаем", "значение"], rows: [["строки после JOIN", 2516], ["людей", 338]] },
+          hl: ["значение"],
+          note: "2516 дней активности у 338 человек — в семь с лишним раз больше."
+        },
+        task: "<p><strong>Задание.</strong> Соедините когорту с <code>app_activity</code> и посчитайте <code>rows_cnt</code> — строк после соединения и <code>users_cnt</code> — разных пользователей.</p>",
+        starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n)\nSELECT COUNT(*) AS rows_cnt\nFROM c;",
+        expected: { ordered: false, columns: ["rows_cnt", "users_cnt"], rows: [[2516, 338]] },
+        hint: "<code>FROM c JOIN app_activity a ON a.user_id = c.user_id</code>, в <code>SELECT</code> — <code>COUNT(*) AS rows_cnt, COUNT(DISTINCT c.user_id) AS users_cnt</code>.",
+        solution: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n)\nSELECT COUNT(*) AS rows_cnt,\n       COUNT(DISTINCT c.user_id) AS users_cnt\nFROM c\nJOIN app_activity a ON a.user_id = c.user_id;"
+      },
+      {
+        title: "Неделя жизни: дни от установки, делённые на 7",
+        body: `
+<p>Удержание считают не по календарю, а по возрасту пользователя: неделя 0 — дни 0–6 после установки, неделя 1 — дни 7–13 и так далее. Разница дат в днях — <code>julianday(a.activity_date) - julianday(c.signup_date)</code>, неделя — эта разница, делённая на 7, без дробной части: <code>CAST(… / 7 AS INTEGER)</code>.</p>
+<p>Пользователь 2254 поставил приложение 8 марта и заходил четыре раза: на 0-й и 3-й день — неделя 0, на 16-й — неделя 2, на 25-й — неделя 3. На неделе 1 его не было.</p>`,
+        ba: {
+          before: { columns: ["activity_date", "день"], rows: [["2024-03-08", 0], ["2024-03-11", 3], ["2024-03-24", 16], ["2024-04-02", 25]] },
+          after: { columns: ["activity_date", "wk"], rows: [["2024-03-08", 0], ["2024-03-11", 0], ["2024-03-24", 2], ["2024-04-02", 3]] },
+          hl: ["wk"],
+          note: "Разница в днях, делённая на 7 с отбрасыванием остатка."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователя 2254 выведите <code>activity_date</code> и <code>wk</code> — неделю жизни, по порядку дат.</p>",
+        starter: "SELECT u.signup_date, a.activity_date\nFROM app_users u\nJOIN app_activity a ON a.user_id = u.user_id\nWHERE u.user_id = 2254\nORDER BY a.activity_date;",
+        expected: { ordered: true, columns: ["activity_date", "wk"], rows: [["2024-03-08", 0], ["2024-03-11", 0], ["2024-03-24", 2], ["2024-04-02", 3]] },
+        hint: "В <code>SELECT</code> вместо <code>u.signup_date</code> — <code>CAST((julianday(a.activity_date) - julianday(u.signup_date)) / 7 AS INTEGER) AS wk</code>, и он должен стоять вторым столбцом.",
+        solution: "SELECT a.activity_date,\n       CAST((julianday(a.activity_date) - julianday(u.signup_date)) / 7 AS INTEGER) AS wk\nFROM app_users u\nJOIN app_activity a ON a.user_id = u.user_id\nWHERE u.user_id = 2254\nORDER BY a.activity_date;"
+      },
+      {
+        title: "Сколько людей было на каждой неделе",
+        body: `
+<p>Теперь сгруппируем по неделе жизни и посчитаем людей: <code>COUNT(DISTINCT user_id)</code>. <code>DISTINCT</code> обязателен: за неделю человек заходит не один раз, а удержание спрашивает, был ли он вообще.</p>
+<p>Заготовка кладёт «пользователь — неделя» для каждого дня активности в <code>act</code>. Берём недели с нулевой по четвёртую.</p>`,
+        ba: {
+          before: { columns: ["user_id", "wk"], rows: [[2254, 0], [2254, 0], [2254, 2], [2254, 3]] },
+          after: { columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99]] },
+          hl: ["users"],
+          note: "Пользователь 2254 посчитается один раз на неделе 0 — хотя заходил дважды."
+        },
+        task: "<p><strong>Задание.</strong> Выведите <code>wk</code> и <code>users</code> — сколько пользователей когорты заходили на неделе 0, 1, 2, 3 и 4.</p>",
+        starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk\nFROM act\nWHERE wk BETWEEN 0 AND 4\nGROUP BY wk\nORDER BY wk;",
+        expected: { ordered: true, columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99], [3, 74], [4, 52]] },
+        hint: "Второй столбец: <code>COUNT(DISTINCT user_id) AS users</code>.",
+        solution: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk, COUNT(DISTINCT user_id) AS users\nFROM act\nWHERE wk BETWEEN 0 AND 4\nGROUP BY wk\nORDER BY wk;"
+      },
+      {
+        title: "Удержание — доля от когорты",
+        body: `
+<p>Удержание недели — доля когорты, заходившая в эту неделю: люди недели, делённые на размер когорты. Размер берём подзапросом прямо по <code>c</code>: <code>(SELECT COUNT(*) FROM c)</code> — скаляр из урока 1.5.</p>
+<p>У недели 0 удержание 100 % по построению: в день установки заходят все. Поэтому в отчётах её обычно не показывают.</p>`,
+        ba: {
+          before: { columns: ["wk", "users"], rows: [[1, 134], [4, 52]] },
+          after: { columns: ["wk", "retention"], rows: [[1, 39.6], [4, 15.4]] },
+          hl: ["retention"],
+          note: "Через неделю возвращаются четыре из десяти, через четыре — полтора."
+        },
+        task: "<p><strong>Задание.</strong> Для недель 1–4 выведите <code>wk</code> и <code>retention</code> — долю когорты в процентах с одним знаком.</p>",
+        starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk, COUNT(DISTINCT user_id) AS users\nFROM act\nWHERE wk BETWEEN 1 AND 4\nGROUP BY wk\nORDER BY wk;",
+        expected: { ordered: true, columns: ["wk", "retention"], rows: [[1, 39.6], [2, 29.3], [3, 21.9], [4, 15.4]] },
+        hint: "Вместо <code>users</code>: <code>ROUND(100.0 * COUNT(DISTINCT user_id) / (SELECT COUNT(*) FROM c), 1) AS retention</code>.",
+        solution: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk,\n       ROUND(100.0 * COUNT(DISTINCT user_id) / (SELECT COUNT(*) FROM c), 1) AS retention\nFROM act\nWHERE wk BETWEEN 1 AND 4\nGROUP BY wk\nORDER BY wk;"
+      },
+      {
+        title: "Недели в столбцы: строка когортной таблицы",
+        body: `
+<p>В когортной таблице одна строка — одна когорта, а недели идут столбцами. Развернуть недели в столбцы помогает приём из урока 4.2: <code>COUNT(DISTINCT CASE WHEN wk = 1 THEN user_id END)</code> считает людей только первой недели, и так для каждой.</p>
+<p>Получится строка когортной таблицы для одной когорты. Основная задача соберёт такие строки для шести месяцев.</p>`,
+        task: "<p><strong>Задание.</strong> Одной строкой выведите <code>users</code> — размер когорты и <code>w1</code>–<code>w4</code> — удержание недель 1–4 в процентах с одним знаком.</p>",
+        starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT (SELECT COUNT(*) FROM c) AS users\nFROM act\nLIMIT 1;",
+        expected: { ordered: false, columns: ["users", "w1", "w2", "w3", "w4"], rows: [[338, 39.6, 29.3, 21.9, 15.4]] },
+        hint: "Уберите <code>LIMIT 1</code> — агрегаты и так дадут одну строку — и добавьте четыре столбца вида <code>ROUND(100.0 * COUNT(DISTINCT CASE WHEN wk = 1 THEN user_id END) / (SELECT COUNT(*) FROM c), 1) AS w1</code>.",
+        solution: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT (SELECT COUNT(*) FROM c) AS users,\n       ROUND(100.0 * COUNT(DISTINCT CASE WHEN wk = 1 THEN user_id END) / (SELECT COUNT(*) FROM c), 1) AS w1,\n       ROUND(100.0 * COUNT(DISTINCT CASE WHEN wk = 2 THEN user_id END) / (SELECT COUNT(*) FROM c), 1) AS w2,\n       ROUND(100.0 * COUNT(DISTINCT CASE WHEN wk = 3 THEN user_id END) / (SELECT COUNT(*) FROM c), 1) AS w3,\n       ROUND(100.0 * COUNT(DISTINCT CASE WHEN wk = 4 THEN user_id END) / (SELECT COUNT(*) FROM c), 1) AS w4\nFROM act;"
+      }
+    ]
+  },
 
   starter: `-- Когортная таблица удержания по неделям
 -- Шаг 1: CTE с размером каждой когорты
