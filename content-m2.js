@@ -3501,9 +3501,10 @@ plt.show()`,
 
 window.CONTENT.m2l6 = {
   intro: "Ноутбук, который не стыдно показать: функции вместо копипасты, понятные имена, проверки на входе. Это то, что смотрят в тестовом задании внимательнее самих цифр.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: функции, имена, структура ноутбука" },
+    { m: "30 мин", w: "Практикум: семь шагов от def до assert" },
     { m: "40 мин", w: "Основная задача: превратить расчёт в функцию" },
     { m: "35 мин", w: "Тренажёр: 5 задач на рефакторинг" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -3644,6 +3645,272 @@ assert not df["user_id"].duplicated().any(), "дубли по user_id"</code></p
   data: window.SH.pyData,
   packages: ["pandas"],
   prelude: window.SH.pyPrelude,
+
+  /* Практикум — семь шагов: до этого урока ученик функции только вызывал,
+     def здесь впервые. Функции другие, чем в основной задаче (share,
+     paid_revenue, revenue_by, users_by_channel): channel_report остаётся ей.
+     Решения: node инструменты/checksteps.js m2l6 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. До сих пор вы функции только вызывали — <code>round</code>, <code>len</code>, <code>print</code>. Здесь пишете свои: от двух строк с числами до функции, которая принимает таблицы и проверяет сама себя.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas"],
+    prelude: window.SH.pyPrelude,
+    done: "Все семь шагов решены. Основная задача — функция <code>channel_report</code>: таблицы аргументами, значение по умолчанию у <code>status</code>, docstring, <code>return</code> вместо печати. Расчёт внутри знаком по уроку 2.1, печать строками — по уроку 2.2.",
+    steps: [
+      {
+        title: "Своя функция: def, аргументы, return",
+        body: `
+<p>Функция — это расчёт, которому дали имя, чтобы вызывать его много раз с разными числами.</p>
+<pre><code>def share(part, total):
+    return round(part / total * 100, 1)</code></pre>
+<p>Первая строка: слово <code>def</code>, имя функции, в скобках аргументы — имена для значений, которые придут при вызове, в конце двоеточие. Ниже, с отступом в четыре пробела, — тело. <code>return</code> говорит, что функция отдаёт наружу.</p>
+<p>Сама по себе эта запись ничего не считает — она только объясняет Python, что такое <code>share</code>. Расчёт происходит при вызове: <code>share(104, 220)</code> — здесь <code>part</code> становится 104, <code>total</code> — 220.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Написать функцию <code>share</code> — как в примере выше.</li>
+<li>Пустая строка, дальше без отступа: <code>print(share(104, 220))</code> — доля покупателей среди 220 пользователей.</li>
+<li><code>print(share(49, 104))</code> — доля повторных среди 104 покупателей.</li>
+</ol>
+<p><strong>Задание.</strong> Напишите функцию <code>share(part, total)</code>, которая возвращает долю в процентах с одним знаком, и вызовите её дважды.</p>`,
+        starter: `# share(part, total) -> доля в процентах, один знак
+`,
+        expected: { stdout: `47.3
+47.1` },
+        hint: "Две строки функции: <code>def share(part, total):</code> и под ней с четырьмя пробелами <code>return round(part / total * 100, 1)</code>. Потом два <code>print</code> — уже без отступа, иначе они окажутся внутри функции.",
+        solution: `def share(part, total):
+    return round(part / total * 100, 1)
+
+print(share(104, 220))
+print(share(49, 104))`
+      },
+      {
+        title: "return, а не print",
+        body: `
+<p>В заготовке функция не возвращает долю, а печатает её. Запустите: число на экране есть, но в переменной <code>cr</code> оказалось <code>None</code> — «ничего». Функция без <code>return</code> наружу ничего не отдаёт.</p>
+<p>С таким результатом ничего нельзя сделать: ни сложить, ни сравнить, ни положить в таблицу, ни передать в график. Поэтому правило: функция считает и возвращает, а печатает тот, кто её вызвал.</p>`,
+        ba: {
+          before: { columns: ["в функции", "что в cr"], rows: [["print(…)", "None"]] },
+          after: { columns: ["в функции", "что в cr"], rows: [["return …", "47.3"]] },
+          hl: ["что в cr"],
+          note: "Напечатанное остаётся на экране. Возвращённое попадает в переменную и идёт дальше."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустить заготовку и посмотреть на вторую строку вывода.</li>
+<li>Внутри функции заменить <code>print(…)</code> на <code>return …</code> — без скобок вокруг всего выражения.</li>
+<li>Запустить ещё раз.</li>
+</ol>
+<p><strong>Задание.</strong> Исправьте функцию так, чтобы в <code>cr</code> попало число.</p>`,
+        starter: `def share(part, total):
+    print(round(part / total * 100, 1))
+
+cr = share(104, 220)
+print("конверсия", cr)`,
+        expected: { stdout: `конверсия 47.3` },
+        hint: "Вторая строка должна стать <code>return round(part / total * 100, 1)</code>. После этого функция сама ничего не печатает, и в выводе остаётся одна строка.",
+        solution: `def share(part, total):
+    return round(part / total * 100, 1)
+
+cr = share(104, 220)
+print("конверсия", cr)`
+      },
+      {
+        title: "Значение по умолчанию",
+        body: `
+<p>Аргументу можно заранее дать значение: <code>def share(part, total, digits=1):</code>. Если при вызове его не указать, возьмётся значение по умолчанию; если указать — то, что передали.</p>
+<p>Так делают с настройками, которые почти всегда одни и те же. Обычный вызов остаётся коротким: <code>share(104, 220)</code>. А когда нужно иначе, пишут настройку по имени: <code>share(104, 220, digits=3)</code>. Вы уже много раз пользовались этим с чужими функциями: <code>ascending=False</code>, <code>how="left"</code>.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>В скобки после <code>total</code> добавить <code>digits=1</code>.</li>
+<li>В <code>round</code> заменить единицу на <code>digits</code>.</li>
+<li><code>print(share(104, 220), share(104, 220, digits=3))</code> — два вызова в одной строке.</li>
+</ol>
+<p><strong>Задание.</strong> Добавьте функции настройку <code>digits</code> — число знаков, по умолчанию один. Напечатайте долю с одним знаком и с тремя.</p>`,
+        starter: `def share(part, total):
+    return round(part / total * 100, 1)
+`,
+        expected: { stdout: `47.3 47.273` },
+        hint: "<code>def share(part, total, digits=1):</code> и <code>return round(part / total * 100, digits)</code>. Аргументы со значением по умолчанию стоят в скобках последними.",
+        solution: `def share(part, total, digits=1):
+    return round(part / total * 100, digits)
+
+print(share(104, 220), share(104, 220, digits=3))`
+      },
+      {
+        title: "Таблица — тоже аргумент",
+        body: `
+<p>В функцию можно передать что угодно, в том числе таблицу. И это лучше, чем брать <code>orders</code> прямо изнутри: функция, которая читает переменную снаружи, сломается, как только её перенесут в другой ноутбук, где таблица названа иначе.</p>
+<p>Поэтому таблица приходит аргументом под своим именем — например <code>orders_df</code>, — и внутри функции работают только с ним. А статус заказов — настройка с умолчанием: почти всегда нужны оплаченные.</p>
+<pre><code>def paid_revenue(orders_df, status="paid"):
+    sel = orders_df[orders_df["status"] == status]
+    return round(sel["revenue"].sum(), 2)</code></pre>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Написать функцию <code>paid_revenue</code> — как в примере выше. Внутри — только <code>orders_df</code>, не <code>orders</code>.</li>
+<li><code>print(paid_revenue(orders))</code> — выручка оплаченных заказов.</li>
+<li><code>print(paid_revenue(orders, status="refunded"))</code> — сумма возвратов той же функцией.</li>
+</ol>
+<p><strong>Задание.</strong> Напишите функцию, которая считает сумму заказов с нужным статусом, и вызовите её для оплаченных и для возвращённых.</p>`,
+        starter: `# orders: order_id, user_id, order_date, revenue, status
+`,
+        expected: { stdout: `653428.78
+56018.96` },
+        hint: "Три строки функции из примера, потом два <code>print</code> без отступа. В сравнении внутри функции справа стоит <code>status</code> без кавычек — это аргумент, а не текст.",
+        solution: `def paid_revenue(orders_df, status="paid"):
+    sel = orders_df[orders_df["status"] == status]
+    return round(sel["revenue"].sum(), 2)
+
+print(paid_revenue(orders))
+print(paid_revenue(orders, status="refunded"))`
+      },
+      {
+        title: "Функция вместо копипасты",
+        body: `
+<p>В заготовке один и тот же расчёт написан дважды: выручка по платформам и выручка по городам. Отличается одно слово — по чему группировать. Правило простое: блок появился второй раз — пора делать функцию.</p>
+<p>То, что отличается, становится аргументом: <code>dim</code> — имя столбца для группировки. Всё остальное переезжает в тело функции один раз. Функция возвращает готовый ряд, а печатают его снаружи.</p>`,
+        ba: {
+          before: { columns: ["копия", "что отличается"], rows: [["первая", "groupby(\"platform\")"], ["вторая", "groupby(\"city\")"]] },
+          after: { columns: ["вызов", "что передаём"], rows: [["revenue_by(users, orders, \"platform\")", "dim = \"platform\""], ["revenue_by(users, orders, \"city\")", "dim = \"city\""]] },
+          hl: ["что передаём"],
+          note: "Два блока по три строки стали одной функцией и двумя вызовами. Третий разрез добавляется ещё одной строкой."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>def revenue_by(users_df, orders_df, dim):</code> — заголовок функции.</li>
+<li>В тело перенести три строки расчёта: вместо <code>orders</code> и <code>users</code> — <code>orders_df</code> и <code>users_df</code>, в <code>groupby</code> — <code>dim</code>.</li>
+<li>Последняя строка тела — <code>return</code> с рядом, округлённым <code>.round(2)</code>.</li>
+<li>Снаружи: <code>print(revenue_by(users, orders, "platform"))</code> и то же для <code>"city"</code>.</li>
+<li>Третий вызов — для <code>"channel"</code>: новый разрез теперь стоит одну строку, а не три.</li>
+</ol>
+<p><strong>Задание.</strong> Замените два одинаковых блока одной функцией <code>revenue_by</code> и напечатайте выручку по платформам, городам и каналам — тремя вызовами.</p>`,
+        starter: `paid = orders[orders["status"] == "paid"]
+m = users.merge(paid, on="user_id")
+print(m.groupby("platform")["revenue"].sum().round(2))
+
+paid2 = orders[orders["status"] == "paid"]
+m2 = users.merge(paid2, on="user_id")
+print(m2.groupby("city")["revenue"].sum().round(2))`,
+        expected: { stdout: `platform
+android    277332.79
+ios        236652.83
+web        139443.16
+Name: revenue, dtype: float64
+city
+Екатеринбург       131257.62
+Казань             123531.13
+Москва             191578.82
+Новосибирск         84698.61
+Санкт-Петербург    122362.60
+Name: revenue, dtype: float64
+channel
+email          122017.95
+organic        271926.54
+paid_search    141330.95
+referral        56377.23
+social          61776.11
+Name: revenue, dtype: float64` },
+        hint: "Тело функции: <code>paid = orders_df[orders_df[\"status\"] == \"paid\"]</code>, <code>m = users_df.merge(paid, on=\"user_id\")</code>, <code>return m.groupby(dim)[\"revenue\"].sum().round(2)</code>. Снаружи три <code>print</code> с вызовами. Проверка сверяет только вывод, поэтому посмотрите сами: в коде не должно остаться копий расчёта.",
+        solution: `def revenue_by(users_df, orders_df, dim):
+    paid = orders_df[orders_df["status"] == "paid"]
+    m = users_df.merge(paid, on="user_id")
+    return m.groupby(dim)["revenue"].sum().round(2)
+
+print(revenue_by(users, orders, "platform"))
+print(revenue_by(users, orders, "city"))
+print(revenue_by(users, orders, "channel"))`
+      },
+      {
+        title: "Docstring: что делает, что принимает, что возвращает",
+        body: `
+<p>Через месяц по заголовку <code>revenue_by(users_df, orders_df, dim)</code> уже не вспомнить, считает ли функция все заказы или только оплаченные. Это записывают в docstring — текст в тройных кавычках сразу под строкой <code>def</code>.</p>
+<pre><code>def revenue_by(users_df, orders_df, dim):
+    """Выручка оплаченных заказов по разрезу dim.
+
+    users_df, orders_df — таблицы пользователей и заказов
+    dim — столбец users_df, по которому группируем
+
+    Возвращает ряд: индекс — значения dim, значения — выручка.
+    """</code></pre>
+<p>Это не комментарий: Python хранит docstring вместе с функцией. Его показывает <code>help(revenue_by)</code> и всплывающая подсказка в редакторе, а сам текст лежит в <code>revenue_by.__doc__</code>.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Сразу под строкой <code>def</code>, с тем же отступом, что тело, вставить docstring. Первая строка — ровно такая: <code>"""Выручка оплаченных заказов по разрезу dim.</code></li>
+<li>Ниже дописать, что функция принимает и что возвращает, и закрыть тройные кавычки.</li>
+<li>Запустить: заготовка печатает первую строку docstring.</li>
+</ol>
+<p><strong>Задание.</strong> Добавьте функции docstring. Проверка смотрит на его первую строку, остальное — для читателя.</p>`,
+        starter: `def revenue_by(users_df, orders_df, dim):
+    paid = orders_df[orders_df["status"] == "paid"]
+    m = users_df.merge(paid, on="user_id")
+    return m.groupby(dim)["revenue"].sum().round(2)
+
+print(str(revenue_by.__doc__).strip().splitlines()[0])`,
+        expected: { stdout: `Выручка оплаченных заказов по разрезу dim.` },
+        hint: "Между строкой <code>def</code> и строкой <code>paid = …</code> вставьте текст в тройных кавычках из примера выше — с отступом в четыре пробела, как у всего тела. Кавычки открываются и закрываются тремя знаками <code>\"\"\"</code>.",
+        solution: `def revenue_by(users_df, orders_df, dim):
+    """Выручка оплаченных заказов по разрезу dim.
+
+    users_df, orders_df — таблицы пользователей и заказов
+    dim — столбец users_df, по которому группируем
+
+    Возвращает ряд: индекс — значения dim, значения — выручка.
+    """
+    paid = orders_df[orders_df["status"] == "paid"]
+    m = users_df.merge(paid, on="user_id")
+    return m.groupby(dim)["revenue"].sum().round(2)
+
+print(str(revenue_by.__doc__).strip().splitlines()[0])`
+      },
+      {
+        title: "assert: функция проверяет сама себя",
+        body: `
+<p><code>assert условие, "сообщение"</code> — проверка в одну строку. Если условие верно, ничего не происходит. Если нет — код останавливается с ошибкой <code>AssertionError</code> и вашим сообщением, ровно в том месте, где что-то пошло не так.</p>
+<p>Функция в заготовке считает пользователей по каналам и перед тем, как вернуть результат, проверяет: в сводке должно быть столько же людей, сколько в таблице. Запустите её — проверка сработает: из 220 пользователей в сводке осталось 104.</p>
+<p>Без <code>assert</code> функция молча вернула бы таблицу без канала <code>partner</code> и с заниженными числами, и ошибка всплыла бы через двадцать ячеек в виде странной цифры в отчёте. Причина знакома по уроку 2.1: <code>merge</code> без <code>how</code> оставляет только тех, у кого есть заказ.</p>`,
+        ba: {
+          before: { columns: ["merge", "людей в сводке", "assert"], rows: [["по умолчанию (inner)", 104, "AssertionError"]] },
+          after: { columns: ["merge", "людей в сводке", "assert"], rows: [["how=\"left\"", 220, "молчит"]] },
+          hl: ["людей в сводке", "assert"],
+          note: "Проверку не трогаем: чинить нужно расчёт, а не сторожа."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустить заготовку и прочитать последнюю строку ошибки.</li>
+<li>В <code>merge</code> добавить <code>how="left"</code>.</li>
+<li>Запустить ещё раз: проверка пройдёт молча, напечатается сводка.</li>
+</ol>
+<p><strong>Задание.</strong> Исправьте функцию так, чтобы её собственная проверка проходила. Строку с <code>assert</code> не меняйте.</p>`,
+        starter: `def users_by_channel(users_df, orders_df):
+    paid = orders_df[orders_df["status"] == "paid"]
+    m = users_df.merge(paid, on="user_id")
+    rep = m.groupby("channel").agg(users_cnt=("user_id", "nunique"))
+    total = rep["users_cnt"].sum()
+    assert total == len(users_df), f"потеряли пользователей: {len(users_df)} -> {total}"
+    return rep
+
+print(users_by_channel(users, orders))`,
+        expected: { stdout: `             users_cnt
+channel
+email               28
+organic             75
+paid_search         55
+partner              6
+referral            14
+social              42` },
+        hint: "Третья строка функции: <code>m = users_df.merge(paid, on=\"user_id\", how=\"left\")</code>. Больше ничего менять не нужно.",
+        solution: `def users_by_channel(users_df, orders_df):
+    paid = orders_df[orders_df["status"] == "paid"]
+    m = users_df.merge(paid, on="user_id", how="left")
+    rep = m.groupby("channel").agg(users_cnt=("user_id", "nunique"))
+    total = rep["users_cnt"].sum()
+    assert total == len(users_df), f"потеряли пользователей: {len(users_df)} -> {total}"
+    return rep
+
+print(users_by_channel(users, orders))`
+      }
+    ]
+  },
 
   starter: `# Отчёт по каналам, оформленный функцией
 

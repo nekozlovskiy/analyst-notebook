@@ -1901,6 +1901,12 @@ const Check = {
       return "Текст начат кавычкой, но не закрыт. У текста кавычка и в начале, и в конце.";
     if (/forgot a comma/.test(last))
       return "Python не понял строку — похоже, пропущена запятая между значениями.";
+    if (/expected ':'/.test(last))
+      return "В конце строки с def, for или if нужно двоеточие.";
+    if (/IndentationError: expected an indented block/.test(last))
+      return "После строки с двоеточием (def, for, if) следующая строка должна начинаться с отступа — четыре пробела.";
+    if (/^AssertionError/.test(last))
+      return "Сработала проверка assert: её условие не выполнилось. Текст после «AssertionError:» — сообщение самой проверки, оно говорит, что не так с данными.";
     if (/IndentationError/.test(last))
       return "Строка начинается с лишних пробелов. В Python отступ в начале строки что-то значит — уберите его.";
     if (/KeyError: .*non-monotonic/.test(last))
