@@ -583,7 +583,7 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
           before: { columns: ["event_name", "user_id"], rows: [["view_product", 1], ["add_to_cart", 1], ["checkout", 1]] },
           after: { columns: ["event_name", "CASE … 'add_to_cart'"], rows: [["view_product", null], ["add_to_cart", 1], ["checkout", null]] },
           hl: ["CASE … 'add_to_cart'"],
-          note: "События пользователя 1 с iOS: CASE оставляет user_id только в строке нужного шага, COUNT считает непустые."
+          note: "Три события пользователя 1 с iOS за один день (всего у него их десять): CASE оставляет user_id только в строке нужного шага, COUNT считает непустые."
         },
         task: "<p><strong>Задание.</strong> Одним запросом посчитайте для iOS три шага: <code>visit</code> — всех пользователей с событиями, <code>cart</code> — добавивших в корзину, <code>purchase</code> — купивших.</p>",
         starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n)\nSELECT COUNT(DISTINCT user_id) AS visit\nFROM ios_events;",
