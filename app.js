@@ -156,7 +156,7 @@ const Course = (function () {
     });
   });
   /* Порядок прохождения: урок с полем before встаёт прямо перед
-     указанным уроком (0.2–0.4 «Python с нуля» — перед 2.1). Карта курса и
+     указанным уроком (0.2–0.5 «Python с нуля» — перед 2.1). Карта курса и
      номера уроков остаются по местам в модулях. */
   const order = flat.filter(function (l) { return !l.before; });
   flat.forEach(function (l) {
@@ -1429,7 +1429,7 @@ const Route = {
     const out = [];
     Course.data.modules.forEach(function (m) {
       if (m.num === 0) {
-        /* уроки с route: "id" рисуются одним узлом с уроком id (0.2–0.4 —
+        /* уроки с route: "id" рисуются одним узлом с уроком id (0.2–0.5 —
            один блок «Python с нуля»); ссылка ведёт в первый непройденный */
         m.lessons.forEach(function (l) {
           if (l.route) return;
@@ -3470,7 +3470,7 @@ const Steps = {
      только что, а не уже при открытии. */
   render: function (L, S, box, onFinish, tag) {
     const id = L.id, total = S.steps.length;
-    const py = L.kind === "python";  /* уроки 0.2–0.4: шаги на Python, проверка по напечатанному */
+    const py = L.kind === "python";  /* уроки 0.2–0.5: шаги на Python, проверка по напечатанному */
     const peek = {};                 /* пройденные шаги, раскрытые для перечитывания */
     let open = Steps.firstOpen(id, S, tag);
     let justPassed = -1;
