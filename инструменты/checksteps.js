@@ -12,6 +12,10 @@
    правилам Check.python — построчно, без пробелов по краям. Локальный
    pandas новее браузерного, поэтому окончательная проверка — в браузере.
 
+   Шаги-графики (2.5) — те, у кого expected.plot: решение должно
+   выполниться и нарисовать хотя бы один график с данными. Если
+   matplotlib локально не стоит (как в CI), проверяется только синтаксис.
+
      node инструменты/checksteps.js m0l1                     — все шаги
      node инструменты/checksteps.js m0l1 --try 3 "SELECT 1"  — что увидит
                                                                ученик на шаге 3
@@ -34,19 +38,29 @@ const id = args[0];
 const L = ctx.window.CONTENT[id];
 const C = L && (L.steps ? L : L.practicum);
 if (!C || !Array.isArray(C.steps)) { console.error(id + ": нет урока с шагами"); process.exit(1); }
-const isPy = C.steps.some(function (s) { return s.expected && s.expected.stdout !== undefined; });
+const isPy = C.steps.some(function (s) { return s.expected && (s.expected.stdout !== undefined || s.expected.plot); });
+const hasPlots = C.steps.some(function (s) { return s.expected && s.expected.plot; });
+const mpl = hasPlots && spawnSync("python3", ["-c", "import matplotlib"], { encoding: "utf8" }).status === 0;
+if (hasPlots && !mpl) console.log("matplotlib локально нет — шаги-графики проверяются только на синтаксис");
 if (isPy) {
   const v = spawnSync("python3", ["-c", "import pandas; print(pandas.__version__)"], { encoding: "utf8" });
   console.log("локально pandas " + (v.stdout || "?").trim() + ", в браузере 2.2 — окончательная проверка там");
 }
 
 /* ---- Python: данные и пролог урока, потом код; как runPy в Steps ---- */
-function runPy(code) {
+/* как PLOT_PY в app.js: рисуем в память, plt.show() ничего не делает */
+const PLOT_HEAD = "import matplotlib\nmatplotlib.use('Agg')\nimport matplotlib.pyplot as plt\nplt.show = lambda *a, **k: None\n";
+const PLOT_TAIL = "\nprint('__axes__', sum(1 for n in plt.get_fignums() for a in plt.figure(n).axes if a.has_data()))";
+function runPy(code, plot) {
   const head = (C.data || []).map(function (k) {
     return k + " = " + JSON.stringify(ctx.window.DATA[k]);
   }).join("\n");
+  if (plot && !mpl) {
+    const a = spawnSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"], { input: code, encoding: "utf8" });
+    return a.status !== 0 ? { err: (a.stderr || "").trim().split("\n").pop() } : { out: "__axes__ ?" };
+  }
   const r = spawnSync("python3", ["-"], {
-    input: head + "\n" + (C.prelude || "") + "\n" + code,
+    input: head + "\n" + (plot ? PLOT_HEAD : "") + (C.prelude || "") + "\n" + code + (plot ? PLOT_TAIL : ""),
     encoding: "utf8", maxBuffer: 1 << 26
   });
   if (r.status !== 0) return { err: (r.stderr || "").trim().split("\n").pop() };
@@ -129,6 +143,15 @@ function checkBa(n, ba) {
 }
 function report(n, sql) {
   const label = "шаг " + (n + 1);
+  if (isPy && C.steps[n].expected.plot) {
+    const p = runPy(sql, true);
+    if (p.err) { console.log(label + "  ОШИБКА  " + p.err); bad++; return; }
+    const m = /__axes__ (\S+)/.exec(p.out), k = m ? m[1] : "0";
+    const ok = k === "?" || +k >= 1;
+    console.log(label + "  " + (ok ? "ок  (график" + (k === "?" ? ", только синтаксис" : "ов: " + k) + ")" : "НЕТ ГРАФИКА"));
+    if (!ok) bad++;
+    return;
+  }
   if (isPy) {
     const p = runPy(sql);
     if (p.err) { console.log(label + "  ОШИБКА  " + p.err); bad++; return; }
