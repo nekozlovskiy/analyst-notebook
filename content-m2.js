@@ -650,11 +650,40 @@ print(rep.to_string())`,
 /* 2.2 — очистка данных                                         */
 /* ---------------------------------------------------------- */
 
+/* Описание выгрузки и пролог — общие для основной задачи, тренажёра
+   и практикума урока 2.2. */
+window.SH.leadsSchema = `
+<p>Доступен один DataFrame <code>leads</code> — выгрузка из CRM, 63 строки. <strong>Все столбцы прочитаны как текст</strong> и пустые строки оставлены как есть: pandas ничего не угадывал за вас.</p>
+<pre><code>leads (63, 7)
+  lead_id   строка
+  created   дата, два формата: '2024-06-26' и '16.04.2024'
+  source    organic | paid_search | social | email | referral
+            встречается в разном регистре, с пробелами,
+            пустой строкой и как 'n/a'
+  city      Москва | Санкт-Петербург | Новосибирск | Екатеринбург | Казань
+            плюс 'СПб', разный регистр и пробелы по краям
+  deal_sum  сумма сделки: '54546.00', '22 250,28', пусто, встречаются минусы
+  status    новый | в работе | закрыт | отказ, в разном регистре
+  manager   фамилия менеджера или пусто</code></pre>
+`;
+window.SH.leadsPrelude = `import io
+import warnings
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+import numpy as np
+
+# читаем всё текстом и без автоматических пропусков:
+# чистка должна быть осознанной, а не побочным эффектом read_csv
+leads = pd.read_csv(io.StringIO(leadsCSV), dtype=str, keep_default_na=False)
+`;
+
 window.CONTENT.m2l2 = {
   intro: "Настоящая выгрузка из CRM: дубли, пропуски, деньги текстом, даты в двух форматах и один и тот же город четырьмя способами. Это восемьдесят процентов работы аналитика.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: виды грязи и почему dropna опасен" },
+    { m: "40 мин", w: "Практикум: девять шагов от дублей до отчёта строками" },
     { m: "45 мин", w: "Основная задача: привести выгрузку в порядок" },
     { m: "30 мин", w: "Тренажёр: 5 задач на чистку" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -763,19 +792,7 @@ df["created"] = d1.fillna(d2)</code></pre>
 `
   },
 
-  schema: `
-<p>Доступен один DataFrame <code>leads</code> — выгрузка из CRM, 63 строки. <strong>Все столбцы прочитаны как текст</strong> и пустые строки оставлены как есть: pandas ничего не угадывал за вас.</p>
-<pre><code>leads (63, 7)
-  lead_id   строка
-  created   дата, два формата: '2024-06-26' и '16.04.2024'
-  source    organic | paid_search | social | email | referral
-            встречается в разном регистре, с пробелами,
-            пустой строкой и как 'n/a'
-  city      Москва | Санкт-Петербург | Новосибирск | Екатеринбург | Казань
-            плюс 'СПб', разный регистр и пробелы по краям
-  deal_sum  сумма сделки: '54546.00', '22 250,28', пусто, встречаются минусы
-  status    новый | в работе | закрыт | отказ, в разном регистре
-  manager   фамилия менеджера или пусто</code></pre>
+  schema: window.SH.leadsSchema + `
 <p>Полезные инструменты для этой задачи:</p>
 <pre><code>df.drop_duplicates()                       # полные дубли
 df.replace(["", "n/a"], np.nan)             # пустые строки в настоящие пропуски
@@ -788,17 +805,357 @@ df.groupby("source", dropna=False)          # dropna=False оставит гру
 
   data: ["leadsCSV"],
   packages: ["pandas"],
-  prelude: `import io
-import warnings
-warnings.filterwarnings("ignore")
+  prelude: window.SH.leadsPrelude,
 
-import pandas as pd
-import numpy as np
-
-# читаем всё текстом и без автоматических пропусков:
-# чистка должна быть осознанной, а не побочным эффектом read_csv
-leads = pd.read_csv(io.StringIO(leadsCSV), dtype=str, keep_default_na=False)
+  /* Практикум — девять шагов перед основной задачей, в её же порядке:
+     дубли, пропуски, деньги, минусы, справочники, даты, группа без
+     источника, печать строками. Каждый шаг запускается в чистом
+     пространстве имён, поэтому заготовка повторяет нужную чистку.
+     В печать не выводим текстовые Series: у них в pandas 2 и 3 разная
+     подпись dtype. Решения: node инструменты/checksteps.js m2l2 */
+  practicum: {
+    intro: "Девять коротких шагов перед основной задачей, в том же порядке, в каком чистят выгрузку: дубли, пропуски, деньги, справочники, даты, сводка. В каждом — одна новая конструкция, таблица «было → стало» на настоящих строках выгрузки и маленький код, который курс проверит сам. Текст в таблицах стоит в кавычках, чтобы были видны пробелы по краям.",
+    schema: window.SH.leadsSchema,
+    data: ["leadsCSV"],
+    packages: ["pandas"],
+    prelude: window.SH.leadsPrelude,
+    done: "Все девять шагов решены. Основная задача собирает их вместе в том же порядке: дубли → пропуски → деньги и минусы → справочники → даты → сводка и печать. Нового там два места: шесть строк диагностики печатают по ходу чистки, а группу без источника называют «не указан» уже при печати — о них подсказки к задаче.",
+    steps: [
+      {
+        title: "Полные дубли: duplicated и drop_duplicates",
+        body: `
+<p>Дима пишет, что, похоже, выгрузил дважды и склеил. Проверяют это первым делом: всё, что вы почистите до удаления дублей, будет почищено дважды.</p>
+<p><code>leads.duplicated()</code> ставит у каждой строки <code>True</code> или <code>False</code>: <code>True</code> получает строка, которая целиком — во всех столбцах — повторяет одну из строк выше. Первое появление остаётся <code>False</code>. <code>.sum()</code> считает, сколько получилось <code>True</code>, — как в уроке 0.4.</p>
+<p><code>leads.drop_duplicates()</code> возвращает таблицу без таких строк. Сама <code>leads</code> при этом не меняется, поэтому результат кладут обратно: <code>leads = leads.drop_duplicates()</code>.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "created", "deal_sum"], rows: [["1004", "2024-04-04", "54546.00"], ["1005", "2024-01-17", "26 104,11"], ["1004", "2024-04-04", "54546.00"]] },
+          after: { columns: ["lead_id", "created", "deal_sum"], rows: [["1004", "2024-04-04", "54546.00"], ["1005", "2024-01-17", "26 104,11"]] },
+          keep: [0, 1],
+          note: "Лид 1004 записан дважды: в четвёртой строке выгрузки и ещё раз в конце. Остаётся первое появление."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>print(len(leads), leads.duplicated().sum())</code> — сколько строк и сколько из них дубли.</li>
+<li><code>leads = leads.drop_duplicates()</code> — убрать дубли.</li>
+<li><code>print(len(leads))</code> — сколько строк осталось.</li>
+</ol>
+<p><strong>Задание.</strong> Сколько в выгрузке полных дублей и сколько строк останется без них?</p>`,
+        starter: `# leads уже загружен: 63 строки, все столбцы — текст
 `,
+        expected: { stdout: `63 5
+58` },
+        hint: "Три строки: <code>print(len(leads), leads.duplicated().sum())</code>, <code>leads = leads.drop_duplicates()</code>, <code>print(len(leads))</code>.",
+        solution: `print(len(leads), leads.duplicated().sum())
+leads = leads.drop_duplicates()
+print(len(leads))`
+      },
+      {
+        title: "Пустая строка — ещё не пропуск",
+        body: `
+<p>Пропуски считает <code>isna()</code>: <code>leads["source"].isna().sum()</code> — у скольких лидов нет источника. На нашей выгрузке ответ будет 0, хотя пустые источники видно глазами.</p>
+<p>Причина в том, что для pandas пропуск — это особое значение <code>NaN</code>, а в выгрузке стоят тексты: пустой <code>""</code> и заглушка <code>"n/a"</code>. Это обычные строки, и <code>isna</code>, <code>count</code>, <code>nunique</code> считают их настоящими значениями.</p>
+<p><code>leads.replace(["", "n/a"], np.nan)</code> заменяет во всей таблице каждое значение из списка на настоящий пропуск. <code>np.nan</code> — так пишется <code>NaN</code> в коде; <code>np</code> уже подключён.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "source", "deal_sum"], rows: [["1002", "' Organic'", "''"], ["1007", "'n/a'", "'55855.00'"], ["1013", "''", "''"]] },
+          after: { columns: ["lead_id", "source", "deal_sum"], rows: [["1002", "' Organic'", "NaN"], ["1007", "NaN", "'55855.00'"], ["1013", "NaN", "NaN"]] },
+          hl: ["source", "deal_sum"],
+          note: "Пустые кавычки и <code>'n/a'</code> стали <code>NaN</code>. Остальной текст не тронут — пробел у <code>' Organic'</code> на месте."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>print(leads["source"].isna().sum())</code> — сколько пропусков pandas видит сейчас.</li>
+<li><code>leads = leads.replace(["", "n/a"], np.nan)</code> — заглушки в настоящие пропуски.</li>
+<li><code>print(leads.isna().sum())</code> — пропуски по всем столбцам.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте пропуски в <code>source</code> до замены и во всех столбцах после неё.</p>`,
+        starter: `leads = leads.drop_duplicates()
+`,
+        expected: { stdout: `0
+lead_id      0
+created      0
+source       8
+city         9
+deal_sum     7
+status       0
+manager     11
+dtype: int64` },
+        hint: "Под строкой заготовки: <code>print(leads[\"source\"].isna().sum())</code>, потом <code>leads = leads.replace([\"\", \"n/a\"], np.nan)</code> и <code>print(leads.isna().sum())</code>. У <code>np.nan</code> кавычек нет — это не текст.",
+        solution: `leads = leads.drop_duplicates()
+print(leads["source"].isna().sum())
+leads = leads.replace(["", "n/a"], np.nan)
+print(leads.isna().sum())`
+      },
+      {
+        title: "Деньги текстом: .str.replace и pd.to_numeric",
+        body: `
+<p>Сумма <code>'22 250,28'</code> — текст: в ней пробел между тысячами и запятая вместо точки. Сложить такой столбец нельзя, а сортировка пойдёт по алфавиту.</p>
+<p>У текстового столбца методы работы с текстом вызывают через <code>.str</code>. <code>.str.replace(" ", "", regex=False)</code> в каждой ячейке заменяет пробел на пустоту, то есть убирает его. <code>regex=False</code> значит «искать ровно этот знак, без шаблонов».</p>
+<p>После двух замен получится <code>'22250.28'</code> — всё ещё текст, но уже записанный как число. В число его превращает <code>pd.to_numeric(money, errors="coerce")</code>. Настройка <code>errors="coerce"</code> — страховка: всё, что числом не читается, станет <code>NaN</code>, а код не упадёт.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "deal_sum"], rows: [["1001", "'22 250,28'"], ["1002", "NaN"], ["1004", "'54546.00'"]] },
+          after: { columns: ["lead_id", "deal_sum"], rows: [["1001", 22250.28], ["1002", "NaN"], ["1004", 54546.0]] },
+          hl: ["deal_sum"],
+          note: "Текст в кавычках стал числом. Пропуск остался пропуском."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>money = leads["deal_sum"].str.replace(" ", "", regex=False)</code> — убрать пробелы.</li>
+<li><code>money = money.str.replace(",", ".", regex=False)</code> — запятую в точку.</li>
+<li><code>leads["deal_sum"] = pd.to_numeric(money, errors="coerce")</code> — текст в число, результат обратно в столбец.</li>
+<li>Напечатать первые пять строк столбцов <code>lead_id</code> и <code>deal_sum</code>.</li>
+<li><code>print(leads["deal_sum"].count(), leads["deal_sum"].min())</code> — сколько сумм распозналось и какая из них наименьшая.</li>
+</ol>
+<p><strong>Задание.</strong> Превратите <code>deal_sum</code> в числа. Сколько сумм получилось и какая наименьшая?</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+`,
+        expected: { stdout: `  lead_id  deal_sum
+0    1001  22250.28
+1    1002       NaN
+2    1003       NaN
+3    1004  54546.00
+4    1005  26104.11
+51 -8811.0` },
+        hint: "После трёх строк из «Порядка действий»: <code>print(leads[[\"lead_id\", \"deal_sum\"]].head(5))</code> и <code>print(leads[\"deal_sum\"].count(), leads[\"deal_sum\"].min())</code>. Если первая сумма напечаталась как <code>NaN</code>, проверьте, что обе замены идут через <code>.str</code>.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+money = leads["deal_sum"].str.replace(" ", "", regex=False)
+money = money.str.replace(",", ".", regex=False)
+leads["deal_sum"] = pd.to_numeric(money, errors="coerce")
+print(leads[["lead_id", "deal_sum"]].head(5))
+print(leads["deal_sum"].count(), leads["deal_sum"].min())`
+      },
+      {
+        title: "Невозможные значения: условие и .loc",
+        body: `
+<p>Наименьшая сумма вышла −8 811. Сделки с минусом не бывает — это ошибка ввода. По типу столбец уже чистый, а по смыслу ещё нет.</p>
+<p>Условие <code>leads["deal_sum"] &lt; 0</code> даёт столбец из <code>True</code> и <code>False</code>, как в уроке 0.4. Его удобно положить в переменную: <code>bad = leads["deal_sum"] &lt; 0</code>. Тогда <code>bad.sum()</code> — сколько таких строк, а <code>leads[bad]</code> — сами строки.</p>
+<p>Заменить значение только в отобранных строках помогает <code>.loc</code>: <code>leads.loc[bad, "deal_sum"] = np.nan</code> читается как «в строках, где <code>bad</code>, в столбце <code>deal_sum</code> поставить пропуск». Строки при этом остаются в таблице — лид был, неизвестна только сумма.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "deal_sum"], rows: [["1021", 24861.81], ["1022", -8811.0], ["1025", -5322.0]] },
+          after: { columns: ["lead_id", "deal_sum"], rows: [["1021", 24861.81], ["1022", "NaN"], ["1025", "NaN"]] },
+          hl: ["deal_sum"],
+          note: "Минусы стали пропусками, положительная сумма не тронута, все три лида на месте."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>bad = leads["deal_sum"] &lt; 0</code> — отметить строки с минусом.</li>
+<li><code>print(bad.sum())</code> — сколько их.</li>
+<li><code>print(leads[bad][["lead_id", "deal_sum"]])</code> — посмотреть на них глазами.</li>
+<li><code>leads.loc[bad, "deal_sum"] = np.nan</code> — заменить на пропуск.</li>
+<li><code>print(leads["deal_sum"].isna().sum())</code> — сколько лидов теперь без суммы.</li>
+</ol>
+<p><strong>Задание.</strong> Сколько в выгрузке отрицательных сумм и сколько лидов останется без суммы, если считать минус ошибкой?</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+money = leads["deal_sum"].str.replace(" ", "", regex=False).str.replace(",", ".", regex=False)
+leads["deal_sum"] = pd.to_numeric(money, errors="coerce")
+`,
+        expected: { stdout: `3
+   lead_id  deal_sum
+21    1022   -8811.0
+24    1025   -5322.0
+34    1035   -4789.0
+10` },
+        hint: "Пять строк из «Порядка действий» подряд, под заготовкой. В <code>.loc</code> скобки квадратные, внутри сначала строки, потом столбец: <code>leads.loc[bad, \"deal_sum\"] = np.nan</code>.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+money = leads["deal_sum"].str.replace(" ", "", regex=False).str.replace(",", ".", regex=False)
+leads["deal_sum"] = pd.to_numeric(money, errors="coerce")
+bad = leads["deal_sum"] < 0
+print(bad.sum())
+print(leads[bad][["lead_id", "deal_sum"]])
+leads.loc[bad, "deal_sum"] = np.nan
+print(leads["deal_sum"].isna().sum())`
+      },
+      {
+        title: "Справочник: .str.strip и .str.lower",
+        body: `
+<p>Источников в компании пять, а разных значений в столбце <code>source</code> — девять: <code>'ORGANIC'</code>, <code>' Organic'</code> и <code>'organic'</code> для pandas три разных текста. Группировка по такому столбцу даст девять строк вместо пяти.</p>
+<p><code>.str.strip()</code> убирает пробелы по краям, <code>.str.lower()</code> делает все буквы строчными. Методы пишут цепочкой, и перед каждым стоит своё <code>.str</code>: <code>leads["source"].str.strip().str.lower()</code>.</p>
+<p><code>.nunique()</code> — число разных значений, <code>.value_counts()</code> — сколько раз встречается каждое. Оба пропуски не считают.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "source"], rows: [["1001", "'ORGANIC'"], ["1002", "' Organic'"], ["1004", "'organic'"], ["1005", "' social '"]] },
+          after: { columns: ["lead_id", "source"], rows: [["1001", "'organic'"], ["1002", "'organic'"], ["1004", "'organic'"], ["1005", "'social'"]] },
+          hl: ["source"],
+          note: "Три написания одного источника стали одним."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>print(leads["source"].nunique())</code> — сколько разных значений сейчас.</li>
+<li><code>leads["source"] = leads["source"].str.strip().str.lower()</code> — пробелы и регистр.</li>
+<li><code>print(leads["source"].nunique())</code> — сколько стало.</li>
+<li><code>print(leads["source"].value_counts())</code> — сколько лидов у каждого источника.</li>
+</ol>
+<p><strong>Задание.</strong> Приведите <code>source</code> к одному виду. Сколько разных значений было и сколько осталось?</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+`,
+        expected: { stdout: `9
+5
+source
+paid_search    15
+social         11
+organic        10
+referral        8
+email           6
+Name: count, dtype: int64` },
+        hint: "Между двумя одинаковыми <code>print(leads[\"source\"].nunique())</code> — строка <code>leads[\"source\"] = leads[\"source\"].str.strip().str.lower()</code>, в конце <code>print(leads[\"source\"].value_counts())</code>. Без <code>leads[\"source\"] =</code> слева столбец не изменится.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+print(leads["source"].nunique())
+leads["source"] = leads["source"].str.strip().str.lower()
+print(leads["source"].nunique())
+print(leads["source"].value_counts())`
+      },
+      {
+        title: "Синонимы: .replace со словарём",
+        body: `
+<p>С городами одного регистра мало: <code>'СПб'</code> и <code>'Санкт-Петербург'</code> — один город, и никакой <code>lower</code> их не склеит. Синонимы заменяют словарём «что → на что»: <code>.replace({"москва": "Москва", "СПб": "Санкт-Петербург"})</code>.</p>
+<p>Здесь <code>.replace</code> без <code>.str</code>, и разница существенная. <code>.str.replace</code> меняет кусок внутри текста — так убирали пробел из суммы. <code>.replace</code> без <code>.str</code> меняет значение целиком и только при полном совпадении. Поэтому сначала <code>.str.strip()</code>: <code>' Москва '</code> с пробелами ни с чем в словаре не совпадёт.</p>
+<p>В теории последним шагом стоит <code>.str.capitalize()</code>. Он делает заглавной только первую букву, и «Санкт-Петербург» превращается в «Санкт-петербург»: для подсчёта городов это не важно, в отчёте выглядит опечаткой. Словарь с точными названиями надёжнее.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "city"], rows: [["1001", "'москва'"], ["1004", "' Москва '"], ["1011", "'СПб'"], ["1012", "'Москва'"]] },
+          after: { columns: ["lead_id", "city"], rows: [["1001", "'Москва'"], ["1004", "'Москва'"], ["1011", "'Санкт-Петербург'"], ["1012", "'Москва'"]] },
+          hl: ["city"],
+          note: "Три написания Москвы стали одним, «СПб» — полным названием."
+        },
+        task: `<p><strong>Порядок действий</strong> в <code>leads["city"].str.strip().replace({…})</code>:</p>
+<ol class="order">
+<li><code>.str.strip()</code> — убрать пробелы по краям.</li>
+<li><code>.replace({"москва": "Москва", "СПб": "Санкт-Петербург"})</code> — синонимы по словарю.</li>
+<li>Положить результат обратно в <code>leads["city"]</code>.</li>
+<li>Напечатать <code>leads["city"].value_counts()</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Заготовка печатает, сколько разных значений в <code>city</code> сейчас. Приведите города к одному виду и напечатайте, сколько лидов в каждом.</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+print(leads["city"].nunique())
+`,
+        expected: { stdout: `8
+city
+Москва             19
+Санкт-Петербург    15
+Екатеринбург        7
+Новосибирск         4
+Казань              4
+Name: count, dtype: int64` },
+        hint: "<code>leads[\"city\"] = leads[\"city\"].str.strip().replace({\"москва\": \"Москва\", \"СПб\": \"Санкт-Петербург\"})</code>, потом <code>print(leads[\"city\"].value_counts())</code>. Словарь пишут в фигурных скобках, пары — через двоеточие.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+print(leads["city"].nunique())
+leads["city"] = leads["city"].str.strip().replace({"москва": "Москва", "СПб": "Санкт-Петербург"})
+print(leads["city"].value_counts())`
+      },
+      {
+        title: "Даты в двух форматах: to_datetime и fillna",
+        body: `
+<p>В <code>created</code> две записи даты: <code>'2024-06-26'</code> и <code>'25.05.2024'</code>. <code>pd.to_datetime(столбец, format="%Y-%m-%d", errors="coerce")</code> разбирает текст по заданному образцу: <code>%Y</code> — год из четырёх цифр, <code>%m</code> — месяц, <code>%d</code> — день, между ними те же знаки, что в данных. Всё, что под образец не подошло, с <code>errors="coerce"</code> становится пропуском; у дат он печатается как <code>NaT</code>.</p>
+<p>Поэтому столбец разбирают дважды, каждым образцом, и получают две половины: в <code>d1</code> пусто там, где дата с точками, в <code>d2</code> — наоборот. <code>d1.fillna(d2)</code> склеивает их: где в <code>d1</code> пропуск, берётся значение из <code>d2</code>. В уроке 2.1 <code>fillna</code> подставлял ноль, здесь — значение из той же строки другого столбца.</p>`,
+        ba: {
+          before: { columns: ["lead_id", "created"], rows: [["1001", "'25.05.2024'"], ["1002", "'2024-06-26'"], ["1006", "'16.04.2024'"]] },
+          after: { columns: ["lead_id", "d1", "d2", "created"], rows: [["1001", "NaT", "2024-05-25", "2024-05-25"], ["1002", "2024-06-26", "NaT", "2024-06-26"], ["1006", "NaT", "2024-04-16", "2024-04-16"]] },
+          hl: ["d1", "d2", "created"],
+          note: "Каждый образец разобрал свои строки, <code>fillna</code> собрал из двух половин один столбец без пропусков."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>d1</code> уже в заготовке. Так же получить <code>d2</code> — с образцом <code>"%d.%m.%Y"</code>.</li>
+<li><code>print(d1.isna().sum(), d2.isna().sum())</code> — сколько дат не разобрал каждый образец.</li>
+<li><code>leads["created"] = d1.fillna(d2)</code> — склеить.</li>
+<li><code>print(leads["created"].isna().sum())</code> — сколько дат не разобрано вообще.</li>
+<li><code>print(leads["created"].min(), leads["created"].max())</code> — самая ранняя и самая поздняя дата.</li>
+</ol>
+<p><strong>Задание.</strong> Разберите даты обоими образцами и склейте. За какой период выгрузка?</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+d1 = pd.to_datetime(leads["created"], format="%Y-%m-%d", errors="coerce")
+`,
+        expected: { stdout: `12 46
+0
+2024-01-01 00:00:00 2024-08-24 00:00:00` },
+        hint: "<code>d2 = pd.to_datetime(leads[\"created\"], format=\"%d.%m.%Y\", errors=\"coerce\")</code> — день, месяц, год через точки. Дальше четыре строки из «Порядка действий». Сумма двух первых чисел — 58: каждую дату разобрал ровно один образец.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+d1 = pd.to_datetime(leads["created"], format="%Y-%m-%d", errors="coerce")
+d2 = pd.to_datetime(leads["created"], format="%d.%m.%Y", errors="coerce")
+print(d1.isna().sum(), d2.isna().sum())
+leads["created"] = d1.fillna(d2)
+print(leads["created"].isna().sum())
+print(leads["created"].min(), leads["created"].max())`
+      },
+      {
+        title: "groupby теряет пропуски: dropna=False",
+        body: `
+<p>У восьми лидов источника нет. <code>groupby("source")</code> такие строки молча выбрасывает: группы для <code>NaN</code> не будет, и в сводке окажется 50 лидов из 58. Ни ошибки, ни предупреждения — как с <code>inner</code> у <code>merge</code> в уроке 2.1.</p>
+<p>Настройка <code>dropna=False</code> оставляет пропуски отдельной группой: <code>leads.groupby("source", dropna=False)</code>. Проверка та же, что после <code>merge</code>: сумма по сводке должна совпасть с числом строк в таблице.</p>
+<p>Второй способ — заранее дать пропуску имя: <code>leads["source"].fillna("не указан")</code>. Тогда это обычное значение, и <code>groupby</code> его не потеряет. Им воспользуемся в следующем шаге.</p>`,
+        ba: {
+          before: { columns: ["source", "leads_cnt"], rows: [["email", 6], ["…", "…"], ["social", 11]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["email", 6], ["…", "…"], ["social", 11], ["NaN", 8]] },
+          hl: ["leads_cnt"],
+          note: "«Было» — обычный <code>groupby</code>, пять групп. «Стало» — с <code>dropna=False</code>: шестой группой встали лиды без источника."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Заготовка считает сводку обычным <code>groupby</code> и печатает сумму по ней. Запустите и посмотрите на число.</li>
+<li>В скобки <code>groupby</code> после <code>"source"</code> добавить <code>dropna=False</code>.</li>
+<li>Перед суммой напечатать саму сводку: <code>print(rep)</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Сделайте так, чтобы в сводке были все 58 лидов. Напечатайте сводку и сумму по ней.</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+leads["source"] = leads["source"].str.strip().str.lower()
+rep = leads.groupby("source").agg(leads_cnt=("lead_id", "count"))
+print(rep["leads_cnt"].sum())
+`,
+        expected: { stdout: `             leads_cnt
+source
+email                6
+organic             10
+paid_search         15
+referral             8
+social              11
+NaN                  8
+58` },
+        hint: "<code>rep = leads.groupby(\"source\", dropna=False).agg(leads_cnt=(\"lead_id\", \"count\"))</code>, потом <code>print(rep)</code> и <code>print(rep[\"leads_cnt\"].sum())</code>. У <code>False</code> большая буква и нет кавычек.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+leads["source"] = leads["source"].str.strip().str.lower()
+rep = leads.groupby("source", dropna=False).agg(leads_cnt=("lead_id", "count"))
+print(rep)
+print(rep["leads_cnt"].sum())`
+      },
+      {
+        title: "Отчёт строками: for и f-строка",
+        body: `
+<p>Дима просит не таблицу, а строки «источник, число, число» через пробел. Для этого таблицу проходят по одной строке и печатают каждую сами.</p>
+<p><code>for src, r in rep.iterrows():</code> — цикл: «для каждой строки таблицы <code>rep</code> сделай то, что написано ниже с отступом». На каждом круге в <code>src</code> лежит метка из индекса (источник), в <code>r</code> — сама строка. Значение из неё берут по имени столбца через точку: <code>r.leads_cnt</code>. В конце строки с <code>for</code> — двоеточие, строка под ней сдвинута на четыре пробела.</p>
+<p>f-строка — текст с буквой <code>f</code> перед кавычками. Всё, что внутри фигурных скобок, Python заменит значением: <code>f"{src} {r.leads_cnt}"</code>. После двоеточия задают вид числа: <code>{r.share:.1f}</code> — один знак после точки, <code>:.2f</code> — два.</p>
+<p>Одна тонкость. Если в таблице есть хоть один дробный столбец, <code>iterrows</code> отдаёт всю строку дробной, и 15 лидов напечатаются как <code>15.0</code>. Целое возвращает <code>int(…)</code>.</p>`,
+        ba: {
+          before: { columns: ["source", "leads_cnt", "share"], rows: [["email", 6, "10.344828"], ["organic", 10, "17.241379"], ["paid_search", 15, "25.862069"]] },
+          after: { columns: ["напечатано"], rows: [["email 6 10.3"], ["organic 10 17.2"], ["paid_search 15 25.9"]] },
+          hl: ["напечатано"],
+          note: "Каждая строка таблицы стала строкой текста: источник, число лидов, доля в процентах."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Заготовка уже назвала пропуски «не указан», собрала сводку и досчитала <code>share</code> — долю источника в процентах.</li>
+<li><code>for src, r in rep.iterrows():</code> — пройти по строкам сводки.</li>
+<li>Под ним с отступом в четыре пробела: <code>print(f"{src} {int(r.leads_cnt)} {r.share:.1f}")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Вместо таблицы напечатайте по строке на источник: название, число лидов и доля с одним знаком, через пробел.</p>`,
+        starter: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+leads["source"] = leads["source"].str.strip().str.lower().fillna("не указан")
+rep = leads.groupby("source").agg(leads_cnt=("lead_id", "count"))
+rep["share"] = rep["leads_cnt"] / len(leads) * 100
+print(rep)
+`,
+        expected: { stdout: `email 6 10.3
+organic 10 17.2
+paid_search 15 25.9
+referral 8 13.8
+social 11 19.0
+не указан 8 13.8` },
+        hint: "Замените <code>print(rep)</code> на две строки: <code>for src, r in rep.iterrows():</code> и под ней, с четырьмя пробелами в начале, <code>print(f\"{src} {int(r.leads_cnt)} {r.share:.1f}\")</code>. Если числа лидов вышли с <code>.0</code> — не хватает <code>int(…)</code>.",
+        solution: `leads = leads.drop_duplicates().replace(["", "n/a"], np.nan)
+leads["source"] = leads["source"].str.strip().str.lower().fillna("не указан")
+rep = leads.groupby("source").agg(leads_cnt=("lead_id", "count"))
+rep["share"] = rep["leads_cnt"] / len(leads) * 100
+for src, r in rep.iterrows():
+    print(f"{src} {int(r.leads_cnt)} {r.share:.1f}")`
+      }
+    ]
+  },
 
   starter: `# Очистка выгрузки лидов
 # leads уже загружен, все столбцы — текст
