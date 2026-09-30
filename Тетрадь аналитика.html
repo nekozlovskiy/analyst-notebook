@@ -14372,10 +14372,11 @@ print(f"недооценка шума в {sd(boot) / se_naive:.2f} раза")`,
 
 window.CONTENT.m3l3 = {
   intro: "Три критерия закрывают девять из десяти задач аналитика. Урок про то, как выбрать нужный за десять секунд и не выбрать неверный.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   math: true,
   plan: [
     { m: "40 мин", w: "Теория и карточки: три критерия и правило выбора" },
+    { m: "35 мин", w: "Практикум: шесть шагов — t Уэлча, ранги, хи-квадрат" },
     { m: "40 мин", w: "Основная задача: сравнить каналы тремя способами" },
     { m: "35 мин", w: "Тренажёр: 5 задач на критерии" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -14497,6 +14498,146 @@ ios A/N=X% android A/N=X%
   data: window.SH.pyData,
   packages: ["pandas"],
   prelude: window.SH.statsDataPrelude,
+
+  /* Практикум — шесть шагов: t-тест Уэлча на чеках email против social,
+     ранги Манна-Уитни на игрушечных списках из шести чеков, хи-квадрат
+     на конверсии Москвы и Екатеринбурга. Основная задача сравнивает
+     organic с paid_search и ios с android — её числа здесь не появляются.
+     Решения: node инструменты/checksteps.js m3l3 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей — по кусочку каждого критерия. t-тест Уэлча считаем на чеках email и social, ранги Манна-Уитни — на игрушечных списках из шести чеков, чтобы каждый ранг было видно глазами, хи-квадрат — на конверсии двух городов.",
+    schema: window.SH.pySchema,
+    data: window.SH.pyData,
+    packages: ["pandas"],
+    prelude: window.SH.statsDataPrelude,
+    done: "Все шесть шагов решены. Основная задача — те же три критерия на других парах: чеки organic против paid_search и конверсия ios против android. Новое там одно — z для Манна-Уитни с поправкой на связки; формула в третьей подсказке.",
+    steps: [
+      {
+        title: "Сначала описать группы",
+        body: `
+<p>Критерий считают после того, как посмотрели на данные. Для двух групп чеков — четыре числа: сколько наблюдений, среднее, медиана и стандартное отклонение. Если среднее заметно выше медианы, у данных длинный правый хвост; если группы маленькие — p-value будет неустойчивым.</p>
+<p>Заготовка соединяет оплаченные заказы с пользователями и даёт функцию <code>revenue_of(channel)</code> — список чеков одного канала. <code>mean</code>, <code>median</code> и <code>sd</code> — из пролога урока.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>for name, v in (("email", x), ("social", y)):</code> — пройти по двум группам.</li>
+<li>Внутри: <code>print(f"{name} n={len(v)} среднее={mean(v):.2f} медиана={median(v):.2f} sd={sd(v):.2f}")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Опишите чеки каналов email и social.</p>`,
+        starter: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\n",
+        expected: { stdout: `email n=28 среднее=4357.78 медиана=3692.82 sd=2263.13
+social n=24 среднее=2574.00 медиана=2356.01 sd=957.86` },
+        hint: "Цикл по парам «имя — список»: <code>for name, v in ((\"email\", x), (\"social\", y)):</code>, внутри одна строка <code>print</code> из «Порядка действий».",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\nfor name, v in ((\"email\", x), (\"social\", y)):\n    print(f\"{name} n={len(v)} среднее={mean(v):.2f} медиана={median(v):.2f} sd={sd(v):.2f}\")"
+      },
+      {
+        title: "t Уэлча: эффект, делённый на шум",
+        body: `
+<p>t — во сколько раз разница средних больше своей стандартной ошибки. Шум у каждой группы свой: дисперсия, делённая на размер группы. У Уэлча они складываются без предположения, что разбросы групп равны:</p>
+<pre><code>vx, vy = var(x) / len(x), var(y) / len(y)
+t = (mean(x) - mean(y)) / math.sqrt(vx + vy)</code></pre>
+<p>p-value — как в уроке 3.2: <code>2 * (1 - norm_cdf(abs(t)))</code>. Это нормальное приближение. На группах в два-три десятка человек оно занижает p-value в несколько раз, но при t около 3,8 и точное значение намного меньше 0,05 — вывод тот же. Где приближение законно, а где нет, — в таблице теории урока.</p>`,
+        ba: {
+          before: { columns: ["группа", "среднее", "шум var/n"], rows: [["email", 4357.78, "182 920"], ["social", 2574.0, "38 229"]] },
+          after: { columns: ["разница", "√(vx + vy)", "t"], rows: [[1783.78, 470.26, 3.793]] },
+          hl: ["t"],
+          note: "Разница средних почти в четыре раза больше своего шума."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте t Уэлча и p-value для email против social. Напечатайте <code>t=3.793 p=0.0001</code>.</p>",
+        starter: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\n",
+        expected: { stdout: "t=3.793 p=0.0001" },
+        hint: "Две строки из примера, потом <code>p = 2 * (1 - norm_cdf(abs(t)))</code> и <code>print(f\"t={t:.3f} p={p:.4f}\")</code>.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\nvx, vy = var(x) / len(x), var(y) / len(y)\nt = (mean(x) - mean(y)) / math.sqrt(vx + vy)\np = 2 * (1 - norm_cdf(abs(t)))\nprint(f\"t={t:.3f} p={p:.4f}\")"
+      },
+      {
+        title: "Степени свободы Уэлча",
+        body: `
+<p>Плата за разные дисперсии — дробное число степеней свободы. Формула Уэлча-Саттертуэйта громоздкая, но с <code>vx</code> и <code>vy</code> из прошлого шага пишется в одну строку:</p>
+<pre><code>df = (vx + vy) ** 2 / (vx ** 2 / (len(x) - 1) + vy ** 2 / (len(y) - 1))</code></pre>
+<p><code>**</code> — возведение в степень. Число степеней свободы говорит, можно ли доверять нормальному приближению: по таблице в теории урока при df больше сотни оно ошибается лишь в третьем знаке, а при df меньше тридцати заметно занижает p-value — там берут распределение Стьюдента.</p>`,
+        task: "<p><strong>Задание.</strong> Посчитайте степени свободы для email против social и напечатайте <code>df=37.5</code>.</p>",
+        starter: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\nvx, vy = var(x) / len(x), var(y) / len(y)\n",
+        expected: { stdout: "df=37.5" },
+        hint: "Строка из примера и <code>print(f\"df={df:.1f}\")</code>. Проверьте скобки: весь знаменатель в круглых скобках.",
+        solution: "paid = orders[orders[\"status\"] == \"paid\"].merge(users, on=\"user_id\")\n\n\ndef revenue_of(channel):\n    return [float(x) for x in paid.loc[paid[\"channel\"] == channel, \"revenue\"]]\n\n\nx, y = revenue_of(\"email\"), revenue_of(\"social\")\nvx, vy = var(x) / len(x), var(y) / len(y)\ndf = (vx + vy) ** 2 / (vx ** 2 / (len(x) - 1) + vy ** 2 / (len(y) - 1))\nprint(f\"df={df:.1f}\")"
+      },
+      {
+        title: "Ранги: место в общем ряду",
+        body: `
+<p>Манна-Уитни не смотрит на сами суммы. Обе группы сливают в один ряд, сортируют и дают каждому значению номер — ранг: самому маленькому 1, следующему 2 и так далее. Дальше складывают ранги первой группы.</p>
+<p>На игрушечном примере: <code>x = [2800, 5200, 3900]</code>, <code>y = [2400, 3100, 4100]</code>. Словарь «значение → ранг» собирается в одну строку: <code>rank = {v: i + 1 for i, v in enumerate(pool)}</code> — <code>enumerate</code> даёт номер с нуля, поэтому <code>+ 1</code>.</p>
+<p>Из суммы рангов первой группы <code>R1</code> получают статистику <code>U = R1 - n1 * (n1 + 1) / 2</code>. Если бы группы не различались, <code>U</code> была бы около <code>n1 * n2 / 2</code> — здесь 4,5.</p>`,
+        ba: {
+          before: { columns: ["значение", "группа"], rows: [[2400, "y"], [2800, "x"], [3100, "y"], [3900, "x"], [4100, "y"], [5200, "x"]] },
+          after: { columns: ["значение", "ранг"], rows: [[2400, 1], [2800, 2], [3100, 3], [3900, 4], [4100, 5], [5200, 6]] },
+          hl: ["ранг"],
+          note: "Ранги группы x — 2, 4 и 6: в сумме 12."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>pool = sorted(x + y)</code> — общий ряд по возрастанию; напечатать его.</li>
+<li><code>rank = {v: i + 1 for i, v in enumerate(pool)}</code>.</li>
+<li><code>r1 = sum(rank[v] for v in x)</code> — сумма рангов первой группы.</li>
+<li><code>print(f"R1={r1} U={r1 - 3 * 4 / 2}")</code> — у первой группы три значения.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте ранги, их сумму у группы x и статистику U.</p>`,
+        starter: "x = [2800, 5200, 3900]\ny = [2400, 3100, 4100]\n",
+        expected: { stdout: "[2400, 2800, 3100, 3900, 4100, 5200]\nR1=12 U=6.0" },
+        hint: "Четыре строки из «Порядка действий» по очереди, первой — <code>pool = sorted(x + y)</code> и <code>print(pool)</code>. <code>x + y</code> склеивает два списка в один.",
+        solution: "x = [2800, 5200, 3900]\ny = [2400, 3100, 4100]\npool = sorted(x + y)\nprint(pool)\nrank = {v: i + 1 for i, v in enumerate(pool)}\nr1 = sum(rank[v] for v in x)\nprint(f\"R1={r1} U={r1 - 3 * 4 / 2}\")"
+      },
+      {
+        title: "Одинаковые значения: средний ранг",
+        body: `
+<p>Если одно и то же значение встречается дважды, делить места между ними честно поровну: два чека по 3 100 стоят на третьем и четвёртом местах, и оба получают ранг 3,5.</p>
+<p>Прямой счёт по порядку этого не умеет, поэтому ряд проходят группами одинаковых значений. Цикл <code>while</code> повторяется, пока условие верно, — удобно, когда шаг заранее неизвестен: <code>i</code> — начало группы, <code>j</code> — её конец.</p>
+<pre><code>rank, i = {}, 0
+while i &lt; len(pool):
+    j = i
+    while j + 1 &lt; len(pool) and pool[j + 1] == pool[i]:
+        j += 1
+    rank[pool[i]] = (i + j) / 2 + 1
+    i = j + 1</code></pre>
+<p><code>pool[j + 1]</code> — элемент списка по номеру: первый имеет номер 0.</p>`,
+        ba: {
+          before: { columns: ["значение", "место"], rows: [[2400, 1], [2800, 2], [3100, 3], [3100, 4], [4100, 5], [5200, 6]] },
+          after: { columns: ["значение", "ранг"], rows: [[2400, 1], [2800, 2], [3100, 3.5], [4100, 5], [5200, 6]] },
+          hl: ["ранг"],
+          note: "Два одинаковых чека поделили третье и четвёртое места."
+        },
+        task: "<p><strong>Задание.</strong> Для <code>x = [2800, 3100, 5200]</code> и <code>y = [2400, 3100, 4100]</code> посчитайте средние ранги циклом из примера, напечатайте словарь <code>rank</code> и строку <code>U=…</code>.</p>",
+        starter: "x = [2800, 3100, 5200]\ny = [2400, 3100, 4100]\npool = sorted(x + y)\n",
+        expected: { stdout: "{2400: 1.0, 2800: 2.0, 3100: 3.5, 4100: 5.0, 5200: 6.0}\nU=5.5" },
+        hint: "Цикл из примера, после него <code>print(rank)</code> и <code>print(f\"U={sum(rank[v] for v in x) - 3 * 4 / 2}\")</code>. Если программа не завершается, проверьте последнюю строку внутри цикла: <code>i = j + 1</code> — без неё <code>i</code> не растёт.",
+        solution: "x = [2800, 3100, 5200]\ny = [2400, 3100, 4100]\npool = sorted(x + y)\nrank, i = {}, 0\nwhile i < len(pool):\n    j = i\n    while j + 1 < len(pool) and pool[j + 1] == pool[i]:\n        j += 1\n    rank[pool[i]] = (i + j) / 2 + 1\n    i = j + 1\nprint(rank)\nprint(f\"U={sum(rank[v] for v in x) - 3 * 4 / 2}\")"
+      },
+      {
+        title: "Хи-квадрат для таблицы два на два",
+        body: `
+<p>Для долей — хи-квадрат. Таблица два на два: в строках группы, в столбцах «купил» и «не купил». Обозначим <code>a1</code> и <code>b1</code> — купивших и не купивших в первой группе, <code>a2</code> и <code>b2</code> — во второй, <code>n</code> — всех людей. Короткая формула:</p>
+<pre><code>chi2 = n * (a1 * b2 - b1 * a2) ** 2 / ((a1 + a2) * (b1 + b2) * n1 * n2)</code></pre>
+<p>Для таблицы два на два одна степень свободы, и p-value считается через нормальное распределение: <code>2 * (1 - norm_cdf(math.sqrt(chi2)))</code>.</p>
+<p>Покупатель — пользователь хотя бы с одним оплаченным заказом. В Москве таких 25 из 53, в Екатеринбурге — 24 из 43. Разница в 8,6 пункта выглядит заметной, но на таких группах она неотличима от случая.</p>`,
+        ba: {
+          before: { columns: ["город", "купил", "не купил"], rows: [["Москва", 25, 28], ["Екатеринбург", 24, 19]] },
+          after: { columns: ["chi2", "p"], rows: [[0.71, 0.3995]] },
+          hl: ["chi2", "p"],
+          note: "В каждой ожидаемой клетке больше пяти человек — приближение законно."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>b1, b2 = n1 - a1, n2 - a2</code> и <code>n = n1 + n2</code>.</li>
+<li><code>chi2</code> — по формуле выше.</li>
+<li>Напечатать доли двух городов строкой <code>Москва 25/53=47.2% Екатеринбург 24/43=55.8%</code>.</li>
+<li>Напечатать <code>chi2=… p=…</code>: chi2 — три знака, p — четыре.</li>
+</ol>
+<p><strong>Задание.</strong> Проверьте хи-квадратом, различается ли конверсия в покупку в Москве и Екатеринбурге.</p>`,
+        starter: "a1, n1 = 25, 53   # Москва: покупателей, пользователей\na2, n2 = 24, 43   # Екатеринбург\n",
+        expected: { stdout: "Москва 25/53=47.2% Екатеринбург 24/43=55.8%\nchi2=0.710 p=0.3995" },
+        hint: "После расчёта: <code>print(f\"Москва {a1}/{n1}={a1/n1*100:.1f}% Екатеринбург {a2}/{n2}={a2/n2*100:.1f}%\")</code> и <code>print(f\"chi2={chi2:.3f} p={2 * (1 - norm_cdf(math.sqrt(chi2))):.4f}\")</code>.",
+        solution: "a1, n1 = 25, 53   # Москва: покупателей, пользователей\na2, n2 = 24, 43   # Екатеринбург\nb1, b2 = n1 - a1, n2 - a2\nn = n1 + n2\nchi2 = n * (a1 * b2 - b1 * a2) ** 2 / ((a1 + a2) * (b1 + b2) * n1 * n2)\nprint(f\"Москва {a1}/{n1}={a1/n1*100:.1f}% Екатеринбург {a2}/{n2}={a2/n2*100:.1f}%\")\nprint(f\"chi2={chi2:.3f} p={2 * (1 - norm_cdf(math.sqrt(chi2))):.4f}\")"
+      }
+    ]
+  },
 
   starter: `# Три критерия на одних данных
 paid = orders[orders["status"] == "paid"].merge(users, on="user_id")
