@@ -415,9 +415,10 @@ window.CONTENT.m4l1 = {
 window.CONTENT.m4l2 = {
   intro: "Воронка отвечает не на вопрос «сколько купили», а на вопрос «где именно мы их теряем». Разница в том, что второе можно чинить.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: как устроена воронка и чем её ломают" },
+    { m: "30 мин", w: "Практикум: шесть шагов — воронка пользователей iOS" },
     { m: "30 мин", w: "Задача: воронка с потерями и двумя конверсиями" },
     { m: "40 мин", w: "Тренажёр: 5 запросов и расчётов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -546,6 +547,114 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
 <p><strong>Подсказка по порядку шагов.</strong> В таблице <code>events</code> порядка шагов нет — там только названия событий. Справочник придётся задать в самом запросе, и удобнее всего это делается через <code>VALUES</code> внутри <code>WITH</code>.</p>
 <p><strong>Про округление.</strong> Проценты считайте как <code>ROUND(100.0 * a / b, 1)</code>. Умножение на <code>100.0</code>, а не на <code>100</code>, обязательно: целочисленное деление в SQLite отбросит дробную часть и все конверсии станут нулями.</p>
 `,
+
+  /* Практикум — шесть шагов на той же воронке, но только для пользователей
+     iOS (75 человек): основная задача строит воронку по всем 220, её числа
+     здесь не появляются. Окно по времени и воронку по каналам не трогаем —
+     они в тренажёре. Решения: node инструменты/checksteps.js m4l2 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. Строим ту же воронку, но только для пользователей iOS — их 75. В каждом шаге одна новая конструкция и маленький запрос, который курс проверит сам. Все запросы начинаются с одного и того же <code>WITH ios_events AS (…)</code> — это просто события пользователей iOS.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача — та же воронка по всем пользователям в одном запросе: справочник шагов, <code>LEFT JOIN</code> к событиям, <code>COUNT(DISTINCT)</code>, а снаружи <code>LAG</code> для потерь и конверсии шага и <code>FIRST_VALUE</code> для сквозной.",
+    steps: [
+      {
+        title: "Люди, а не события",
+        body: `
+<p>В журнале <code>events</code> одна строка — одно действие. Пользователь, который трижды клал товары в корзину, даёт три строки <code>add_to_cart</code>. Для воронки нужны люди: <code>COUNT(DISTINCT user_id)</code>, а не <code>COUNT(*)</code>.</p>
+<p>Заготовка берёт события пользователей iOS в промежуточную таблицу <code>ios_events</code> — дальше с ней работают, как с обычной.</p>`,
+        ba: {
+          before: { columns: ["что считаем", "как"], rows: [["события", "COUNT(*)"], ["людей", "COUNT(DISTINCT user_id)"]] },
+          after: { columns: ["что считаем", "add_to_cart на iOS"], rows: [["события", 85], ["людей", 56]] },
+          hl: ["add_to_cart на iOS"],
+          note: "85 добавлений в корзину сделали 56 человек. Смешать эти числа в одной воронке — получить абсурд."
+        },
+        task: "<p><strong>Задание.</strong> Для события <code>add_to_cart</code> у пользователей iOS посчитайте <code>events_cnt</code> — событий и <code>users_cnt</code> — людей.</p>",
+        starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n)\nSELECT COUNT(*) AS events_cnt\nFROM ios_events;",
+        expected: { ordered: false, columns: ["events_cnt", "users_cnt"], rows: [[85, 56]] },
+        hint: "Добавьте второй столбец <code>COUNT(DISTINCT user_id) AS users_cnt</code> и условие <code>WHERE event_name = 'add_to_cart'</code>.",
+        solution: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n)\nSELECT COUNT(*) AS events_cnt,\n       COUNT(DISTINCT user_id) AS users_cnt\nFROM ios_events\nWHERE event_name = 'add_to_cart';"
+      },
+      {
+        title: "Несколько шагов одним проходом: CASE внутри COUNT",
+        body: `
+<p>Можно написать по запросу на шаг, но проще — один проход по таблице. <code>CASE WHEN event_name = 'add_to_cart' THEN user_id END</code> возвращает <code>user_id</code> для строк корзины и <code>NULL</code> для остальных, а <code>COUNT(DISTINCT …)</code> пропускает <code>NULL</code>. Так в одном <code>SELECT</code> получается несколько шагов рядом.</p>
+<p>Покупка здесь — событие <code>purchase</code> в журнале. Покупателей по оплаченным заказам из <code>orders</code> у iOS больше: журнал событий и заказы ведут разные системы, их расхождение разбирали в проекте 2.7.</p>`,
+        ba: {
+          before: { columns: ["event_name", "user_id"], rows: [["view_product", 1], ["add_to_cart", 1], ["checkout", 1]] },
+          after: { columns: ["event_name", "CASE … 'add_to_cart'"], rows: [["view_product", null], ["add_to_cart", 1], ["checkout", null]] },
+          hl: ["CASE … 'add_to_cart'"],
+          note: "События пользователя 1 с iOS: CASE оставляет user_id только в строке нужного шага, COUNT считает непустые."
+        },
+        task: "<p><strong>Задание.</strong> Одним запросом посчитайте для iOS три шага: <code>visit</code> — всех пользователей с событиями, <code>cart</code> — добавивших в корзину, <code>purchase</code> — купивших.</p>",
+        starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n)\nSELECT COUNT(DISTINCT user_id) AS visit\nFROM ios_events;",
+        expected: { ordered: false, columns: ["visit", "cart", "purchase"], rows: [[75, 56, 19]] },
+        hint: "Ещё два столбца: <code>COUNT(DISTINCT CASE WHEN event_name = 'add_to_cart' THEN user_id END) AS cart</code> и такой же с <code>'purchase'</code>.",
+        solution: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n)\nSELECT COUNT(DISTINCT user_id) AS visit,\n       COUNT(DISTINCT CASE WHEN event_name = 'add_to_cart' THEN user_id END) AS cart,\n       COUNT(DISTINCT CASE WHEN event_name = 'purchase' THEN user_id END) AS purchase\nFROM ios_events;"
+      },
+      {
+        title: "Справочник шагов: VALUES",
+        body: `
+<p>В <code>events</code> нет порядка шагов — только названия. Справочник задают прямо в запросе: <code>steps(step_no, step_name) AS (VALUES (1,'visit'), …)</code> — маленькая таблица из перечисленных строк. Столбцы называются так, как написано в скобках после имени.</p>
+<p>Справочник нужен по двум причинам: шаги встанут в правильном порядке, и шаг, до которого никто не дошёл, не пропадёт из отчёта.</p>`,
+        task: "<p><strong>Задание.</strong> Допишите в справочник остальные четыре шага воронки — <code>view_product</code>, <code>add_to_cart</code>, <code>checkout</code>, <code>purchase</code> — и выведите его целиком по порядку.</p>",
+        starter: "WITH steps(step_no, step_name) AS (\n    VALUES (1,'visit')\n)\nSELECT * FROM steps\nORDER BY step_no;",
+        expected: { ordered: true, columns: ["step_no", "step_name"], rows: [[1, "visit"], [2, "view_product"], [3, "add_to_cart"], [4, "checkout"], [5, "purchase"]] },
+        hint: "После <code>(1,'visit')</code> через запятую: <code>(2,'view_product'), (3,'add_to_cart'), (4,'checkout'), (5,'purchase')</code>.",
+        solution: "WITH steps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n)\nSELECT * FROM steps\nORDER BY step_no;"
+      },
+      {
+        title: "Люди на каждом шаге: LEFT JOIN справочника",
+        body: `
+<p>Теперь соединим справочник с событиями: <code>steps s LEFT JOIN ios_events e ON e.event_name = s.step_name</code> — к каждому шагу приклеиваются его события. <code>LEFT</code> — чтобы шаг без единого события остался в отчёте с нулём, как канал без заказов в уроке 1.2.</p>
+<p>Дальше группировка по шагу и <code>COUNT(DISTINCT e.user_id)</code> — сколько людей дошло.</p>`,
+        ba: {
+          before: { columns: ["step_no", "step_name"], rows: [[1, "visit"], [2, "view_product"], ["…", "…"]] },
+          after: { columns: ["step_no", "step_name", "users"], rows: [[1, "visit", 75], [2, "view_product", 68], ["…", "…", "…"]] },
+          hl: ["users"],
+          note: "Шаг за шагом людей становится меньше — отсюда и название «воронка»."
+        },
+        task: "<p><strong>Задание.</strong> Выведите воронку iOS: <code>step_no</code>, <code>step_name</code> и <code>users</code> — сколько уникальных пользователей дошло до шага. Сортировка по номеру шага.</p>",
+        starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n)\nSELECT s.step_no, s.step_name\nFROM steps s\nORDER BY s.step_no;",
+        expected: { ordered: true, columns: ["step_no", "step_name", "users"], rows: [[1, "visit", 75], [2, "view_product", 68], [3, "add_to_cart", 56], [4, "checkout", 34], [5, "purchase", 19]] },
+        hint: "<code>SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users FROM steps s LEFT JOIN ios_events e ON e.event_name = s.step_name GROUP BY s.step_no, s.step_name ORDER BY s.step_no</code>.",
+        solution: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n)\nSELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\nFROM steps s\nLEFT JOIN ios_events e ON e.event_name = s.step_name\nGROUP BY s.step_no, s.step_name\nORDER BY s.step_no;"
+      },
+      {
+        title: "Потери и конверсия шага: LAG",
+        body: `
+<p>Конверсия шага — доля от предыдущего шага, потери — разница с ним. Значение прошлой строки даёт <code>LAG(users) OVER (ORDER BY step_no)</code>.</p>
+<p>Окна считаются по готовым строкам, поэтому таблицу «шаг — люди» кладут в <code>reached</code>, а <code>LAG</code> пишут во внешнем запросе. У первого шага прошлой строки нет — <code>NULL</code>, и это честно: конверсии «из ничего» не бывает. <code>100.0</code> с точкой — чтобы деление было дробным.</p>`,
+        ba: {
+          before: { columns: ["step_no", "users"], rows: [[3, 56], [4, 34]] },
+          after: { columns: ["step_no", "users", "lost", "from_prev"], rows: [[3, 56, 12, 82.4], [4, 34, 22, 60.7]] },
+          hl: ["lost", "from_prev"],
+          note: "Из корзины в оформление доходит 60,7 %, а самый слабый переход на iOS — из оформления в оплату, 55,9 %."
+        },
+        task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code>, <code>lost</code> — потери относительно прошлого шага и <code>from_prev</code> — конверсию из прошлого шага в процентах с одним знаком.</p>",
+        starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
+        expected: { ordered: true, columns: ["step_no", "users", "lost", "from_prev"], rows: [[1, 75, null, null], [2, 68, 7, 90.7], [3, 56, 12, 82.4], [4, 34, 22, 60.7], [5, 19, 15, 55.9]] },
+        hint: "Два столбца: <code>LAG(users) OVER (ORDER BY step_no) - users AS lost</code> и <code>ROUND(100.0 * users / LAG(users) OVER (ORDER BY step_no), 1) AS from_prev</code>.",
+        solution: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users,\n       LAG(users) OVER (ORDER BY step_no) - users AS lost,\n       ROUND(100.0 * users / LAG(users) OVER (ORDER BY step_no), 1) AS from_prev\nFROM reached\nORDER BY step_no;"
+      },
+      {
+        title: "Сквозная конверсия: FIRST_VALUE",
+        body: `
+<p>Сквозная конверсия — доля от первого шага. Значение первой строки даёт <code>FIRST_VALUE(users) OVER (ORDER BY step_no)</code>. У первого шага сквозная — ровно 100 %: он сам и есть начало.</p>
+<p>Сквозная равна произведению конверсий шагов: 90,7 % × 82,4 % × 60,7 % × 55,9 % — около 25 %, с точностью до округления. Поэтому улучшение любого шага умножается на все остальные.</p>`,
+        ba: {
+          before: { columns: ["step_no", "users"], rows: [[1, 75], [5, 19]] },
+          after: { columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], [5, 19, 25.3]] },
+          hl: ["from_top"],
+          note: "До покупки доходит четверть пользователей iOS с событиями."
+        },
+        task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code> и <code>from_top</code> — сквозную конверсию от первого шага в процентах с одним знаком.</p>",
+        starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
+        expected: { ordered: true, columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], [2, 68, 90.7], [3, 56, 74.7], [4, 34, 45.3], [5, 19, 25.3]] },
+        hint: "Третий столбец: <code>ROUND(100.0 * users / FIRST_VALUE(users) OVER (ORDER BY step_no), 1) AS from_top</code>.",
+        solution: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users,\n       ROUND(100.0 * users / FIRST_VALUE(users) OVER (ORDER BY step_no), 1) AS from_top\nFROM reached\nORDER BY step_no;"
+      }
+    ]
+  },
 
   starter: `-- Воронка: пять шагов, потери и две конверсии
 -- Шаг 1: задайте справочник шагов через VALUES
