@@ -2145,9 +2145,10 @@ ORDER BY revenue DESC;`,
 
 window.CONTENT.m1l5 = {
   intro: "IN, EXISTS, скалярный и коррелированный подзапросы. Разбираем, где подзапрос — единственное решение, а где он просто медленнее джойна.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: четыре вида подзапросов и NOT IN с NULL" },
+    { m: "30 мин", w: "Практикум: шесть шагов от скалярного подзапроса до подзапроса в FROM" },
     { m: "40 мин", w: "Основная задача: клиенты выше среднего" },
     { m: "35 мин", w: "Тренажёр: EXISTS, коррелированные, скалярные" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -2265,6 +2266,141 @@ GROUP BY u.user_id;</code></pre>
   },
 
   schema: window.SH.sqlSchema,
+
+  /* Практикум — шесть шагов: по одному на каждое место подзапроса и на
+     NOT EXISTS. Считаем заказы, платформы и каналы — основная задача
+     сравнивает покупателей со средним по покупателям, её числа здесь не
+     появляются. Решения: node инструменты/checksteps.js m1l5 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей — по одному на каждое место, где живёт подзапрос: в <code>WHERE</code>, в <code>SELECT</code>, в <code>IN</code> и <code>EXISTS</code>, коррелированный и в <code>FROM</code>. В каждом одна новая конструкция и маленький запрос, который курс проверит сам.",
+    schema: window.SH.sqlSchema,
+    done: "Все шесть шагов решены. Основная задача соединяет два из них: порог — подзапрос в <code>FROM</code>, как в шаге 6 (среднее по покупателям), а сравнение с ним — скалярный подзапрос, как в шаге 1. Новое одно: сравнивать нужно сумму по группе, поэтому сравнение идёт в <code>HAVING</code>, а не в <code>WHERE</code>.",
+    steps: [
+      {
+        title: "Скалярный подзапрос: сравнить со средним",
+        body: `
+<p>Средний чек оплаченных заказов — 3 457,30 ₽. Сколько заказов дороже? Число можно подставить руками, но завтра оно изменится. Надёжнее посчитать его в том же запросе:</p>
+<pre><code>WHERE revenue &gt; (SELECT AVG(revenue) FROM orders WHERE status = 'paid')</code></pre>
+<p>Запрос в скобках возвращает одно значение — поэтому его называют скалярным — и база подставляет его, как обычное число. Внутренний запрос выполняется первым и сам по себе: у него свой <code>FROM</code> и свой <code>WHERE</code>.</p>`,
+        ba: {
+          before: { columns: ["что", "значение"], rows: [["(SELECT AVG(revenue) …)", "подзапрос"]] },
+          after: { columns: ["что", "значение"], rows: [["порог", 3457.3]] },
+          hl: ["значение"],
+          note: "Подзапрос в скобках превращается в одно число, и сравнение идёт с ним."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте <code>orders_cnt</code> — сколько оплаченных заказов дороже среднего чека оплаченных заказов.</p>",
+        starter: "SELECT COUNT(*) AS orders_cnt\nFROM orders\nWHERE status = 'paid';",
+        expected: { ordered: false, columns: ["orders_cnt"], rows: [[77]] },
+        hint: "Допишите к условию: <code>AND revenue &gt; (SELECT AVG(revenue) FROM orders WHERE status = 'paid')</code>. Скобки вокруг подзапроса обязательны.",
+        solution: "SELECT COUNT(*) AS orders_cnt\nFROM orders\nWHERE status = 'paid'\n  AND revenue > (SELECT AVG(revenue) FROM orders WHERE status = 'paid');"
+      },
+      {
+        title: "Подзапрос в SELECT: фильтры снаружи на него не действуют",
+        body: `
+<p>Доля платформы в выручке — это её выручка, делённая на всю выручку. Всю выручку даёт скалярный подзапрос прямо в <code>SELECT</code>. <code>* 100.0</code> с точкой нужен, чтобы деление было дробным: целое на целое в SQLite даёт целое.</p>
+<p>Заготовка считает доли, но они не сходятся к ста процентам: 36,2 + 30,9 + 18,2 = 85,3. Внешний запрос берёт только оплаченные заказы — условие стоит в <code>ON</code>. А подзапрос о нём ничего не знает и складывает все заказы, вместе с возвратами и неоплаченными.</p>
+<p>Правило: условия внешнего запроса на подзапрос не распространяются. Нужен тот же фильтр — пишите его внутри ещё раз.</p>`,
+        ba: {
+          before: { columns: ["platform", "share_pct"], rows: [["android", 36.2], ["ios", 30.9], ["web", 18.2]] },
+          after: { columns: ["platform", "share_pct"], rows: [["android", 42.4], ["ios", 36.2], ["web", 21.3]] },
+          hl: ["share_pct"],
+          note: "«Было» — подзапрос по всем заказам, «стало» — только по оплаченным. Сумма долей: 85,3 против 99,9 — десятая часть теряется на округлении."
+        },
+        task: "<p><strong>Задание.</strong> Исправьте подзапрос так, чтобы доли платформ считались от выручки оплаченных заказов.</p>",
+        starter: "SELECT u.platform,\n       ROUND(SUM(o.revenue), 2) AS revenue,\n       ROUND(SUM(o.revenue) * 100.0 / (SELECT SUM(revenue) FROM orders), 1) AS share_pct\nFROM users u\nJOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nGROUP BY u.platform\nORDER BY revenue DESC;",
+        expected: { ordered: true, columns: ["platform", "revenue", "share_pct"],
+          rows: [["android", 277332.79, 42.4], ["ios", 236652.83, 36.2], ["web", 139443.16, 21.3]] },
+        hint: "Внутри скобок допишите условие: <code>(SELECT SUM(revenue) FROM orders WHERE status = 'paid')</code>.",
+        solution: "SELECT u.platform,\n       ROUND(SUM(o.revenue), 2) AS revenue,\n       ROUND(SUM(o.revenue) * 100.0 / (SELECT SUM(revenue) FROM orders WHERE status = 'paid'), 1) AS share_pct\nFROM users u\nJOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nGROUP BY u.platform\nORDER BY revenue DESC;"
+      },
+      {
+        title: "IN: только те, кто есть в списке",
+        body: `
+<p>Подзапрос может вернуть не одно число, а столбец значений. Тогда с ним сравнивают через <code>IN</code>: <code>WHERE user_id IN (SELECT user_id FROM orders WHERE status = 'refunded')</code> — «пользователи, чей номер есть в списке тех, кто хоть раз оформил возврат».</p>
+<p>Джойн с заказами здесь размножил бы строки: у кого два возврата, тот посчитался бы дважды. <code>IN</code> только проверяет, есть ли пользователь в списке, и каждый пользователь остаётся одной строкой.</p>`,
+        ba: {
+          before: { columns: ["подзапрос", "вернул"], rows: [["SELECT user_id … 'refunded'", "12 номеров"]] },
+          after: { columns: ["channel", "users_cnt"], rows: [["email", 2], ["organic", 7], ["paid_search", 3]] },
+          hl: ["users_cnt"],
+          note: "Тринадцать возвращённых заказов — это двенадцать разных пользователей: у одного возвратов два."
+        },
+        task: "<p><strong>Задание.</strong> По каналам посчитайте <code>users_cnt</code> — сколько пользователей хоть раз оформили возврат (<code>status = 'refunded'</code>).</p>",
+        starter: "SELECT channel, COUNT(*) AS users_cnt\nFROM users\nGROUP BY channel;",
+        expected: { ordered: false, columns: ["channel", "users_cnt"], rows: [["email", 2], ["organic", 7], ["paid_search", 3]] },
+        hint: "Между <code>FROM users</code> и <code>GROUP BY</code> вставьте <code>WHERE user_id IN (SELECT user_id FROM orders WHERE status = 'refunded')</code>.",
+        solution: "SELECT channel, COUNT(*) AS users_cnt\nFROM users\nWHERE user_id IN (SELECT user_id FROM orders WHERE status = 'refunded')\nGROUP BY channel;"
+      },
+      {
+        title: "Кого нет: NOT EXISTS вместо NOT IN",
+        body: `
+<p>Обратный вопрос — кто ни разу не оплатил заказ. Напрашивается <code>NOT IN</code>, но у него есть ловушка: если в списке окажется хотя бы один <code>NULL</code>, результат будет пустым. Проверьте сами: <code>SELECT COUNT(*) FROM users WHERE user_id NOT IN (1, 2, NULL)</code> вернёт 0, хотя пользователей 220. Сравнение с <code>NULL</code> даёт «неизвестно», и ни одна строка не проходит.</p>
+<p>Надёжнее <code>NOT EXISTS</code>. Подзапрос внутри ссылается на внешнюю строку и отвечает на вопрос «есть ли у этого пользователя оплаченный заказ»:</p>
+<pre><code>WHERE NOT EXISTS (
+    SELECT 1 FROM orders o
+    WHERE o.user_id = u.user_id AND o.status = 'paid'
+)</code></pre>
+<p><code>SELECT 1</code> — неважно, что выбирать: <code>EXISTS</code> смотрит только, нашлась ли хоть одна строка.</p>`,
+        ba: {
+          before: { columns: ["user_id", "оплаченных заказов"], rows: [[16, 1], [19, 0], [21, 1]] },
+          after: { columns: ["user_id", "NOT EXISTS"], rows: [[16, "нет"], [19, "да"], [21, "нет"]] },
+          hl: ["NOT EXISTS"],
+          note: "Остаются только пользователи, для которых подзапрос не нашёл ни одной строки."
+        },
+        task: "<p><strong>Задание.</strong> По каналам посчитайте <code>users_cnt</code> — сколько пользователей не оплатили ни одного заказа.</p>",
+        starter: "SELECT u.channel, COUNT(*) AS users_cnt\nFROM users u\nGROUP BY u.channel;",
+        expected: { ordered: false, columns: ["channel", "users_cnt"],
+          rows: [["email", 12], ["organic", 35], ["paid_search", 27], ["partner", 6], ["referral", 6], ["social", 30]] },
+        hint: "Между <code>FROM users u</code> и <code>GROUP BY</code> вставьте условие <code>WHERE NOT EXISTS (…)</code> из примера выше. Внутри подзапроса у заказов своё имя <code>o</code>, а <code>u.user_id</code> — ссылка на внешнюю строку.",
+        solution: "SELECT u.channel, COUNT(*) AS users_cnt\nFROM users u\nWHERE NOT EXISTS (\n    SELECT 1 FROM orders o\n    WHERE o.user_id = u.user_id AND o.status = 'paid'\n)\nGROUP BY u.channel;"
+      },
+      {
+        title: "Коррелированный подзапрос: своё значение для каждой строки",
+        body: `
+<p>В прошлом шаге подзапрос ссылался на внешнюю строку — такой подзапрос называют коррелированным. Он выполняется заново для каждой строки снаружи.</p>
+<p>Так можно найти последний заказ каждого пользователя: для каждой строки <code>orders o</code> подзапрос считает самую позднюю дату заказов этого же пользователя, и строка остаётся, если её дата с ней совпадает.</p>
+<pre><code>WHERE o.order_date = (
+    SELECT MAX(o2.order_date) FROM orders o2
+    WHERE o2.user_id = o.user_id
+)</code></pre>
+<p>Внутри таблица та же, поэтому у неё другое имя — <code>o2</code>. На больших данных такой запрос медленный: подзапрос выполняется столько раз, сколько строк. Ту же задачу окно из урока 1.3 решает за один проход.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_id", "order_date"], rows: [[65, 51, "2024-03-27"], [65, 52, "2024-04-05"], [65, 53, "2024-04-27"], [76, 69, "2024-05-02"], [76, 70, "2024-06-12"], [76, 71, "2024-07-03"]] },
+          after: { columns: ["user_id", "order_id", "order_date"], rows: [[65, 53, "2024-04-27"], [76, 71, "2024-07-03"]] },
+          keep: [2, 5],
+          note: "Для каждой строки подзапрос нашёл последнюю дату её пользователя. Совпали две строки."
+        },
+        task: "<p><strong>Задание.</strong> Для пользователей 65 и 76 выведите <code>user_id</code>, <code>order_id</code> и <code>order_date</code> их последнего заказа.</p>",
+        starter: "SELECT o.user_id, o.order_id, o.order_date\nFROM orders o\nWHERE o.user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_id", "order_date"], rows: [[65, 53, "2024-04-27"], [76, 71, "2024-07-03"]] },
+        hint: "Допишите к условию <code>AND o.order_date = (SELECT MAX(o2.order_date) FROM orders o2 WHERE o2.user_id = o.user_id)</code>.",
+        solution: "SELECT o.user_id, o.order_id, o.order_date\nFROM orders o\nWHERE o.user_id IN (65, 76)\n  AND o.order_date = (\n    SELECT MAX(o2.order_date) FROM orders o2\n    WHERE o2.user_id = o.user_id\n  );"
+      },
+      {
+        title: "Подзапрос в FROM: сначала свернуть, потом усреднить",
+        body: `
+<p>Сколько оплаченных заказов в среднем делает покупатель? <code>AVG</code> по таблице заказов здесь не поможет: в ней одна строка — один заказ, а нужно среднее по людям. Считают в два уровня.</p>
+<p>Внутренний запрос сворачивает заказы до покупателей: <code>SELECT COUNT(*) AS cnt FROM orders WHERE status = 'paid' GROUP BY user_id</code> — по строке на человека. Его результат ставят в <code>FROM</code>, как обычную таблицу, и внешний запрос усредняет уже эти числа.</p>
+<pre><code>SELECT AVG(cnt)
+FROM (
+    SELECT COUNT(*) AS cnt
+    FROM orders
+    WHERE status = 'paid'
+    GROUP BY user_id
+)</code></pre>`,
+        ba: {
+          before: { columns: ["order_id", "user_id"], rows: [[51, 65], [52, 65], [53, 65], [69, 76], ["…", "…"]] },
+          after: { columns: ["user_id", "cnt"], rows: [[65, 3], [76, 3], ["…", "…"]] },
+          hl: ["cnt"],
+          note: "Внутренний запрос: 189 заказов свернулись в 104 строки — по одной на покупателя. Внешний усредняет столбец <code>cnt</code>."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте <code>avg_orders</code> — сколько оплаченных заказов в среднем приходится на покупателя (2 знака), и <code>max_orders</code> — сколько заказов у самого активного.</p>",
+        starter: "SELECT COUNT(*) AS cnt\nFROM orders\nWHERE status = 'paid'\nGROUP BY user_id;",
+        expected: { ordered: false, columns: ["avg_orders", "max_orders"], rows: [[1.82, 5]] },
+        hint: "Оберните заготовку в скобки и поставьте в <code>FROM</code>: <code>SELECT ROUND(AVG(cnt), 2) AS avg_orders, MAX(cnt) AS max_orders FROM ( …заготовка без точки с запятой… )</code>.",
+        solution: "SELECT ROUND(AVG(cnt), 2) AS avg_orders,\n       MAX(cnt) AS max_orders\nFROM (\n    SELECT COUNT(*) AS cnt\n    FROM orders\n    WHERE status = 'paid'\n    GROUP BY user_id\n);"
+      }
+    ]
+  },
 
   starter: `-- Клиенты, потратившие больше среднего покупателя
 -- Подумайте: среднее чего вам нужно и на каком уровне его считать
