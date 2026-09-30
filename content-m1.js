@@ -2703,9 +2703,10 @@ ORDER BY cr DESC;`,
 
 window.CONTENT.m1l6 = {
   intro: "Месяц, неделя, разница дат, «сколько дней от регистрации до покупки». Работа с датами — половина рабочего времени аналитика и главный источник расхождений в отчётах.",
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: усечение, разница дат, границы периодов" },
+    { m: "25 мин", w: "Практикум: пять шагов от месяца до прошлого периода" },
     { m: "40 мин", w: "Основная задача: помесячная динамика с приростом" },
     { m: "35 мин", w: "Тренажёр: когорты, дни недели, время до покупки" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -2829,6 +2830,109 @@ GROUP BY u.channel;</code></pre>
   },
 
   schema: window.SH.sqlSchema + window.SH.sqlDates,
+
+  /* Практикум — пять шагов на регистрациях, одном месяце заказов и двух
+     пользователях: основная задача считает выручку по месяцам, её числа
+     здесь не появляются. Когорты за 30 дней, дни недели и время до первой
+     покупки не повторяем — они в тренажёре.
+     Решения: node инструменты/checksteps.js m1l6 */
+  practicum: {
+    intro: "Пять коротких шагов перед основной задачей: месяц из даты, граница периода, разница дат, окно после регистрации и значение прошлого месяца. В каждом одна новая конструкция и маленький запрос, который курс проверит сам.",
+    schema: window.SH.sqlSchema + window.SH.sqlDates,
+    done: "Все пять шагов решены. Основная задача — помесячная таблица заказов: месяц через <code>strftime</code>, как в шаге 1, и <code>LAG</code> от суммы, как в шаге 5. Новое одно: из текущего и прошлого значения посчитать прирост в процентах.",
+    steps: [
+      {
+        title: "Месяц из даты: strftime",
+        body: `
+<p>Даты в нашей базе — текст вида <code>'2024-03-21'</code>. Чтобы сгруппировать по месяцам, дату сначала превращают в месяц: <code>strftime('%Y-%m', signup_date)</code> вернёт <code>'2024-03'</code>. <code>%Y</code> — год, <code>%m</code> — месяц; остальное из даты отбрасывается.</p>
+<p>Дальше обычный <code>GROUP BY</code> — по новому столбцу. Имя, данное в <code>SELECT</code>, в SQLite можно использовать и в <code>GROUP BY</code>, и в <code>ORDER BY</code>.</p>`,
+        ba: {
+          before: { columns: ["user_id", "signup_date"], rows: [[65, "2024-03-21"], [76, "2024-04-04"]] },
+          after: { columns: ["user_id", "ym"], rows: [[65, "2024-03"], [76, "2024-04"]] },
+          hl: ["ym"],
+          note: "День отброшен — осталось то, по чему группируем."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте регистрации по месяцам: <code>ym</code> — месяц регистрации, <code>users_cnt</code> — сколько пользователей. Сортировка по месяцу.</p>",
+        starter: "SELECT signup_date, COUNT(*) AS users_cnt\nFROM users\nGROUP BY signup_date\nORDER BY signup_date;",
+        expected: { ordered: true, columns: ["ym", "users_cnt"],
+          rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49], ["2024-04", 34], ["2024-05", 44], ["2024-06", 26]] },
+        hint: "Замените <code>signup_date</code> в <code>SELECT</code> на <code>strftime('%Y-%m', signup_date) AS ym</code>, а в <code>GROUP BY</code> и <code>ORDER BY</code> — на <code>ym</code>.",
+        solution: "SELECT strftime('%Y-%m', signup_date) AS ym, COUNT(*) AS users_cnt\nFROM users\nGROUP BY ym\nORDER BY ym;"
+      },
+      {
+        title: "Граница периода: «от» включительно, «до» — нет",
+        body: `
+<p>Заказы за апрель можно отобрать через <code>BETWEEN '2024-04-01' AND '2024-04-30'</code>, и на нашей базе это сработает: здесь хранятся только даты. Но в рабочих базах часто лежит дата со временем, и заказ <code>'2024-04-30 14:30'</code> окажется больше строки <code>'2024-04-30'</code> — последний день месяца молча потеряется. Проверьте сами: <code>SELECT '2024-03-31 14:30' &lt;= '2024-03-31'</code> вернёт 0, «ложь».</p>
+<p>Безопасный шаблон — полуинтервал: <code>order_date &gt;= '2024-04-01' AND order_date &lt; '2024-05-01'</code>. Левая граница включена, правая — первое число следующего месяца — нет. Шаблон одинаково работает для дат и для дат со временем, и в нём не надо помнить, сколько дней в месяце.</p>`,
+        ba: {
+          before: { columns: ["граница", "условие"], rows: [["от", ">= '2024-04-01'"], ["до", "< '2024-05-01'"]] },
+          after: { columns: ["orders_cnt", "revenue"], rows: [[36, 119150.19]] },
+          hl: ["orders_cnt", "revenue"],
+          note: "Весь апрель, включая любое время 30-го, и ни одной минуты мая."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте оплаченные заказы за апрель 2024: <code>orders_cnt</code> и <code>revenue</code> (2 знака). Границу месяца задайте полуинтервалом.</p>",
+        starter: "SELECT COUNT(*) AS orders_cnt,\n       ROUND(SUM(revenue), 2) AS revenue\nFROM orders\nWHERE status = 'paid';",
+        expected: { ordered: false, columns: ["orders_cnt", "revenue"], rows: [[36, 119150.19]] },
+        hint: "Допишите к условию <code>AND order_date &gt;= '2024-04-01' AND order_date &lt; '2024-05-01'</code>.",
+        solution: "SELECT COUNT(*) AS orders_cnt,\n       ROUND(SUM(revenue), 2) AS revenue\nFROM orders\nWHERE status = 'paid'\n  AND order_date >= '2024-04-01' AND order_date < '2024-05-01';"
+      },
+      {
+        title: "Разница дат: julianday",
+        body: `
+<p>Вычесть одну текстовую дату из другой нельзя. <code>julianday(дата)</code> превращает дату в число дней от далёкого начала отсчёта, и такие числа уже вычитаются: <code>julianday(o.order_date) - julianday(u.signup_date)</code> — сколько дней прошло от регистрации до заказа.</p>
+<p>Результат дробный — <code>6.0</code>, потому что <code>julianday</code> умеет считать и часы. Целое число дней даёт <code>CAST(… AS INTEGER)</code>.</p>`,
+        ba: {
+          before: { columns: ["signup_date", "order_date"], rows: [["2024-03-21", "2024-03-27"], ["2024-03-21", "2024-04-05"]] },
+          after: { columns: ["signup_date", "order_date", "days"], rows: [["2024-03-21", "2024-03-27", 6], ["2024-03-21", "2024-04-05", 15]] },
+          hl: ["days"],
+          note: "Через месяц разница считается правильно: в марте 31 день, и <code>julianday</code> это знает."
+        },
+        task: "<p><strong>Задание.</strong> Для оплаченных заказов пользователей 65 и 76 выведите <code>user_id</code>, <code>order_id</code> и <code>days</code> — сколько целых дней прошло от регистрации до заказа.</p>",
+        starter: "SELECT u.user_id, o.order_id, u.signup_date, o.order_date\nFROM users u\nJOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nWHERE u.user_id IN (65, 76);",
+        expected: { ordered: false, columns: ["user_id", "order_id", "days"],
+          rows: [[65, 51, 6], [65, 52, 15], [65, 53, 37], [76, 69, 28], [76, 70, 69], [76, 71, 90]] },
+        hint: "Вместо двух дат в <code>SELECT</code> — один столбец: <code>CAST(julianday(o.order_date) - julianday(u.signup_date) AS INTEGER) AS days</code>.",
+        solution: "SELECT u.user_id, o.order_id,\n       CAST(julianday(o.order_date) - julianday(u.signup_date) AS INTEGER) AS days\nFROM users u\nJOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'\nWHERE u.user_id IN (65, 76);"
+      },
+      {
+        title: "Окно после события: date(…, '+7 day')",
+        body: `
+<p><code>date(signup_date, '+7 day')</code> сдвигает дату: для регистрации 21 марта это 28 марта. Сдвигать можно на дни, месяцы и годы: <code>'+1 month'</code>, <code>'-1 day'</code>.</p>
+<p>Так задают окно наблюдения: «купил в первую неделю после регистрации» — значит, заказ раньше, чем <code>date(u.signup_date, '+7 day')</code>. Условие стоит в <code>ON</code> — это условие на присоединяемые заказы, как <code>status = 'paid'</code>.</p>
+<p>Фиксированное окно уравнивает пользователей: у зарегистрированного в январе и в июне одинаковые семь дней, чтобы купить. Без окна ранние пользователи выглядят лучше просто потому, что у них было больше времени, — на этом приёме держится когортный анализ.</p>`,
+        ba: {
+          before: { columns: ["user_id", "signup_date", "order_date"], rows: [[65, "2024-03-21", "2024-03-27"], [76, "2024-04-04", "2024-05-02"]] },
+          after: { columns: ["user_id", "до", "в окне"], rows: [[65, "2024-03-28", "да"], [76, "2024-04-11", "нет"]] },
+          hl: ["в окне"],
+          note: "65-й купил на шестой день — попал в окно. 76-й — на двадцать восьмой."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте <code>buyers_7d</code> — сколько пользователей оплатили заказ в первые 7 дней после регистрации.</p>",
+        starter: "SELECT COUNT(DISTINCT u.user_id) AS buyers_7d\nFROM users u\nJOIN orders o ON o.user_id = u.user_id AND o.status = 'paid';",
+        expected: { ordered: false, columns: ["buyers_7d"], rows: [[14]] },
+        hint: "Допишите в <code>ON</code> третье условие: <code>AND o.order_date &lt; date(u.signup_date, '+7 day')</code>.",
+        solution: "SELECT COUNT(DISTINCT u.user_id) AS buyers_7d\nFROM users u\nJOIN orders o ON o.user_id = u.user_id\n            AND o.status = 'paid'\n            AND o.order_date < date(u.signup_date, '+7 day');"
+      },
+      {
+        title: "Прошлый месяц рядом: LAG от итога",
+        body: `
+<p>Чтобы сравнить месяц с предыдущим, значение прошлой строки ставят рядом. Это делает оконная <code>LAG</code> из урока 1.3: <code>LAG(x) OVER (ORDER BY …)</code> — «значение <code>x</code> из строки выше» при заданном порядке.</p>
+<p>Тонкость в том, что сравнивать надо итоги месяцев, а не строки таблицы. Окна выполняются после <code>GROUP BY</code>, поэтому внутри <code>LAG</code> можно поставить сам агрегат: <code>LAG(COUNT(*)) OVER (ORDER BY …)</code>. У первого месяца строки выше нет, и там будет <code>NULL</code> — это честно: сравнивать не с чем.</p>
+<p>Одна деталь SQLite: имя <code>ym</code> из <code>SELECT</code> внутри <code>OVER</code> не видно — база ответит <code>no such column: ym</code>. Поэтому в скобках окна выражение месяца пишут целиком: <code>OVER (ORDER BY strftime('%Y-%m', signup_date))</code>.</p>`,
+        ba: {
+          before: { columns: ["ym", "users_cnt"], rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49]] },
+          after: { columns: ["ym", "users_cnt", "prev_cnt", "delta"], rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15]] },
+          hl: ["prev_cnt", "delta"],
+          note: "Разница с <code>NULL</code> — тоже <code>NULL</code>: у января прироста нет."
+        },
+        task: "<p><strong>Задание.</strong> К регистрациям по месяцам добавьте <code>prev_cnt</code> — регистрации прошлого месяца — и <code>delta</code> — на сколько больше или меньше, чем в прошлом месяце.</p>",
+        starter: "SELECT strftime('%Y-%m', signup_date) AS ym, COUNT(*) AS users_cnt\nFROM users\nGROUP BY ym\nORDER BY ym;",
+        expected: { ordered: true, columns: ["ym", "users_cnt", "prev_cnt", "delta"],
+          rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15], ["2024-04", 34, 49, -15], ["2024-05", 44, 34, 10], ["2024-06", 26, 44, -18]] },
+        hint: "Два столбца после <code>users_cnt</code>: <code>LAG(COUNT(*)) OVER (ORDER BY strftime('%Y-%m', signup_date)) AS prev_cnt</code> и <code>COUNT(*) - LAG(COUNT(*)) OVER (ORDER BY strftime('%Y-%m', signup_date)) AS delta</code>.",
+        solution: "SELECT strftime('%Y-%m', signup_date) AS ym,\n       COUNT(*) AS users_cnt,\n       LAG(COUNT(*)) OVER (ORDER BY strftime('%Y-%m', signup_date)) AS prev_cnt,\n       COUNT(*) - LAG(COUNT(*)) OVER (ORDER BY strftime('%Y-%m', signup_date)) AS delta\nFROM users\nGROUP BY ym\nORDER BY ym;"
+      }
+    ]
+  },
 
   starter: `-- Помесячная динамика выручки
 -- Шаг 1: усечь дату до месяца и сгруппировать
