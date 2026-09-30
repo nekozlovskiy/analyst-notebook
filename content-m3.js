@@ -9,9 +9,10 @@
 window.CONTENT.m3l1 = {
   intro: "Почему конверсия 5% и 6% может оказаться одним и тем же числом, и как посчитать, есть ли различие на самом деле.",
   math: true,
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: стандартная ошибка, интервал, z-тест" },
+    { m: "30 мин", w: "Практикум: шесть шагов от стандартной ошибки до вывода" },
     { m: "40 мин", w: "Основная задача: сводка по результатам теста" },
     { m: "30 мин", w: "Тренажёр: 5 задач на интервалы и значимость" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -104,6 +105,152 @@ def norm_cdf(x):
     """Функция нормального распределения. Через неё считается p-value."""
     return 0.5 * (1 + math.erf(x / math.sqrt(2)))
 `,
+
+  /* Практикум — шесть шагов на конверсии пользователей в покупку по
+     каналам (organic 40 из 75, social 12 из 42, paid_search 28 из 55 —
+     числа урока 2.1), а не на лендинге: основная задача считает тест
+     A/B, её числа здесь не появляются. На малых группах интервалы
+     широкие — это тоже урок. Решения: node инструменты/checksteps.js m3l1 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. Материал — конверсия в покупку по каналам из урока 2.1: organic — 40 покупателей из 75 пользователей, social — 12 из 42, paid_search — 28 из 55. Группы маленькие, поэтому интервалы выйдут широкими — и это тоже урок.",
+    schema: `
+<p>Внешних данных нет — числа в заготовке. <code>math</code> и <code>norm_cdf</code> уже есть: пролог урока.</p>
+<pre><code>norm_cdf(x)                    # функция нормального распределения
+p_value = 2 * (1 - norm_cdf(abs(z)))   # двусторонний p-value</code></pre>
+`,
+    packages: [],
+    prelude: `import math
+
+
+def norm_cdf(x):
+    """Функция нормального распределения. Через неё считается p-value."""
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+`,
+    done: "Все шесть шагов решены. Основная задача — те же расчёты на тесте лендинга: интервалы двух групп функцией <code>ci</code>, объединённая доля, <code>z</code>, p-value и вывод. Новое одно — формат: проценты с тремя знаками и приросты со знаком, <code>{x:+.3f}</code>.",
+    steps: [
+      {
+        title: "Стандартная ошибка доли",
+        body: `
+<p>Конверсия organic — 40 из 75, то есть 53,33 %. Это оценка по одной выборке из 75 человек; другие 75 дали бы другое число. Насколько другое, говорит стандартная ошибка доли: <code>se = math.sqrt(p * (1 - p) / n)</code>.</p>
+<p>В процентных пунктах её удобно печатать, умножив на 100: SE около 6 п.п. значит, что «53 %» легко могло бы оказаться 47 % или 59 %.</p>`,
+        ba: {
+          before: { columns: ["канал", "покупателей", "пользователей"], rows: [["organic", 40, 75]] },
+          after: { columns: ["канал", "CR", "SE"], rows: [["organic", "53.33%", "5.76 п.п."]] },
+          hl: ["SE"],
+          note: "Шум на 75 пользователях — почти шесть пунктов в одну сторону."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>p = c / n</code> — конверсия.</li>
+<li><code>se = math.sqrt(p * (1 - p) / n)</code> — стандартная ошибка.</li>
+<li><code>print(f"{p*100:.2f}% SE={se*100:.2f} п.п.")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте конверсию organic и её стандартную ошибку.</p>`,
+        starter: "c, n = 40, 75   # organic: покупателей, пользователей\n",
+        expected: { stdout: "53.33% SE=5.76 п.п." },
+        hint: "Три строки из «Порядка действий» под заготовкой. <code>math</code> уже подключён.",
+        solution: "c, n = 40, 75   # organic: покупателей, пользователей\np = c / n\nse = math.sqrt(p * (1 - p) / n)\nprint(f\"{p*100:.2f}% SE={se*100:.2f} п.п.\")"
+      },
+      {
+        title: "Доверительный интервал: p ± 1,96 · SE",
+        body: `
+<p>Интервал откладывают от оценки в обе стороны на 1,96 стандартной ошибки: <code>p - 1.96 * se</code> и <code>p + 1.96 * se</code>. Число 1,96 берётся из нормального распределения: в этих пределах лежат 95 % значений.</p>
+<p>Интервал для organic выходит от 42 до 65 %. Это честный ответ на вопрос «какая у канала конверсия» при 75 пользователях: где-то посередине, точнее по этим данным не сказать.</p>`,
+        ba: {
+          before: { columns: ["CR", "SE"], rows: [["53.33%", "5.76 п.п."]] },
+          after: { columns: ["нижняя", "верхняя"], rows: [["42.04%", "64.62%"]] },
+          hl: ["нижняя", "верхняя"],
+          note: "Ширина интервала — 22,6 пункта."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте 95-процентный доверительный интервал конверсии organic и напечатайте его в процентах с двумя знаками: <code>CI95=[42.04%; 64.62%]</code>.</p>",
+        starter: "c, n = 40, 75\nZ = 1.96\np = c / n\nse = math.sqrt(p * (1 - p) / n)\n",
+        expected: { stdout: "CI95=[42.04%; 64.62%]" },
+        hint: "<code>print(f\"CI95=[{(p - Z*se)*100:.2f}%; {(p + Z*se)*100:.2f}%]\")</code>. Внутри фигурных скобок можно считать — не забудьте круглые скобки вокруг границы, прежде чем умножить на 100.",
+        solution: "c, n = 40, 75\nZ = 1.96\np = c / n\nse = math.sqrt(p * (1 - p) / n)\nprint(f\"CI95=[{(p - Z*se)*100:.2f}%; {(p + Z*se)*100:.2f}%]\")"
+      },
+      {
+        title: "Функция ci: две границы одним вызовом",
+        body: `
+<p>Интервал понадобится для каждой группы, поэтому расчёт оборачивают в функцию. Функция может вернуть несколько значений через запятую — <code>return lo, hi</code>, — а принять их можно сразу в две переменные: <code>lo, hi = ci(40, 75)</code>.</p>
+<pre><code>def ci(c, n):
+    p = c / n
+    se = math.sqrt(p * (1 - p) / n)
+    return p - Z * se, p + Z * se</code></pre>
+<p>Социальный канал: 12 покупателей из 42. Интервалы organic и social почти касаются — но делать по этому вывод нельзя, об этом следующий шаг.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Написать функцию <code>ci</code> из примера.</li>
+<li>Для organic (40, 75) и social (12, 42): <code>lo, hi = ci(c, n)</code> и печать строкой вида <code>organic: 53.3% [42.0%; 64.6%]</code> — один знак.</li>
+</ol>
+<p><strong>Задание.</strong> Напечатайте конверсию и интервал для двух каналов.</p>`,
+        starter: "Z = 1.96\n",
+        expected: { stdout: "organic: 53.3% [42.0%; 64.6%]\nsocial: 28.6% [14.9%; 42.2%]" },
+        hint: "После функции два блока по две строки: <code>lo, hi = ci(40, 75)</code> и <code>print(f\"organic: {40/75*100:.1f}% [{lo*100:.1f}%; {hi*100:.1f}%]\")</code>, затем то же для social с 12 и 42.",
+        solution: "Z = 1.96\n\n\ndef ci(c, n):\n    p = c / n\n    se = math.sqrt(p * (1 - p) / n)\n    return p - Z * se, p + Z * se\nlo, hi = ci(40, 75)\nprint(f\"organic: {40/75*100:.1f}% [{lo*100:.1f}%; {hi*100:.1f}%]\")\nlo, hi = ci(12, 42)\nprint(f\"social: {12/42*100:.1f}% [{lo*100:.1f}%; {hi*100:.1f}%]\")"
+      },
+      {
+        title: "Разница двух долей: объединённая конверсия и z",
+        body: `
+<p>Сравнивать интервалы на глаз нельзя: они могут перекрываться, а различие — быть значимым. Считают одну статистику для разницы — <code>z</code>: разницу долей делят на её стандартную ошибку.</p>
+<p>Шум в знаменателе оценивают по объединённой конверсии обеих групп: проверяем гипотезу «разницы нет», а если её нет, группы одинаковые и долю честнее считать по всем данным сразу.</p>
+<pre><code>p_pool = (c_a + c_b) / (n_a + n_b)
+se_pool = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))
+z = (p_a - p_b) / se_pool</code></pre>
+<p>Чем больше <code>z</code> по модулю, тем меньше похоже, что разница — шум.</p>`,
+        ba: {
+          before: { columns: ["группа", "c", "n"], rows: [["organic", 40, 75], ["social", 12, 42]] },
+          after: { columns: ["разница", "p_pool", "z"], rows: [["+24.8 п.п.", "44.4%", 2.586]] },
+          hl: ["z"],
+          note: "Разница в 25 пунктов — в два с половиной раза больше своего шума."
+        },
+        task: "<p><strong>Задание.</strong> Для organic (A) против social (B) посчитайте разницу конверсий, объединённую конверсию и <code>z</code>. Напечатайте строкой <code>разница +24.8 п.п. p_pool=44.4% z=2.586</code>.</p>",
+        starter: "c_a, n_a = 40, 75   # organic\nc_b, n_b = 12, 42   # social\np_a, p_b = c_a / n_a, c_b / n_b\n",
+        expected: { stdout: "разница +24.8 п.п. p_pool=44.4% z=2.586" },
+        hint: "Три строки из примера, потом <code>print(f\"разница {(p_a - p_b)*100:+.1f} п.п. p_pool={p_pool*100:.1f}% z={z:.3f}\")</code>. <code>:+.1f</code> печатает знак числа.",
+        solution: "c_a, n_a = 40, 75   # organic\nc_b, n_b = 12, 42   # social\np_a, p_b = c_a / n_a, c_b / n_b\np_pool = (c_a + c_b) / (n_a + n_b)\nse_pool = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))\nz = (p_a - p_b) / se_pool\nprint(f\"разница {(p_a - p_b)*100:+.1f} п.п. p_pool={p_pool*100:.1f}% z={z:.3f}\")"
+      },
+      {
+        title: "p-value и вывод",
+        body: `
+<p>p-value отвечает на вопрос: как часто случайность дала бы такую же или большую разницу, если на самом деле её нет. Считается через функцию нормального распределения из пролога: <code>p_value = 2 * (1 - norm_cdf(abs(z)))</code>. Двойка — потому что отклонение интересно в обе стороны.</p>
+<p>Договорённость: <code>p_value &lt; 0.05</code> — различие называют статистически значимым. Вывод печатают условием <code>if … else</code>.</p>`,
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>p_value = 2 * (1 - norm_cdf(abs(z)))</code>.</li>
+<li><code>print(f"p-value={p_value:.4f}")</code>.</li>
+<li>Если <code>p_value &lt; 0.05</code> — напечатать <code>значимо</code>, иначе — <code>не значимо</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте p-value для organic против social и напечатайте вывод.</p>`,
+        starter: "c_a, n_a = 40, 75   # organic\nc_b, n_b = 12, 42   # social\np_a, p_b = c_a / n_a, c_b / n_b\np_pool = (c_a + c_b) / (n_a + n_b)\nse_pool = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))\nz = (p_a - p_b) / se_pool\n",
+        expected: { stdout: "p-value=0.0097\nзначимо" },
+        hint: "Под заготовкой: строка с <code>p_value</code>, <code>print</code> и <code>if p_value &lt; 0.05:</code> с <code>print(\"значимо\")</code>, <code>else:</code> с <code>print(\"не значимо\")</code>.",
+        solution: "c_a, n_a = 40, 75   # organic\nc_b, n_b = 12, 42   # social\np_a, p_b = c_a / n_a, c_b / n_b\np_pool = (c_a + c_b) / (n_a + n_b)\nse_pool = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))\nz = (p_a - p_b) / se_pool\np_value = 2 * (1 - norm_cdf(abs(z)))\nprint(f\"p-value={p_value:.4f}\")\nif p_value < 0.05:\n    print(\"значимо\")\nelse:\n    print(\"не значимо\")"
+      },
+      {
+        title: "Весь тест одной функцией",
+        body: `
+<p>Сравнивать каналы придётся не один раз, поэтому весь z-тест собирают в функцию: на входе покупатели и пользователи двух групп, на выходе <code>z</code> и p-value.</p>
+<p>Сравним organic с paid_search: 53,3 % против 50,9 %. Разница в 2,4 пункта на таких маленьких группах неотличима от шума — p-value около 0,78. «Разница есть в таблице» и «разница есть на самом деле» — разные утверждения.</p>`,
+        ba: {
+          before: { columns: ["пара", "разница"], rows: [["organic — social", "+24.8 п.п."], ["organic — paid_search", "+2.4 п.п."]] },
+          after: { columns: ["пара", "p-value", "вывод"], rows: [["organic — social", 0.0097, "значимо"], ["organic — paid_search", 0.7845, "не значимо"]] },
+          hl: ["p-value", "вывод"],
+          note: "Одна функция — два ответа."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>def z_test(c_a, n_a, c_b, n_b):</code> — внутри расчёт из шагов 4–5, в конце <code>return z, p_value</code>.</li>
+<li><code>z, pv = z_test(40, 75, 12, 42)</code> и печать <code>organic—social z=… p=…</code>.</li>
+<li>То же для organic против paid_search: 28 из 55.</li>
+</ol>
+<p><strong>Задание.</strong> Соберите z-тест в функцию и сравните organic с social и с paid_search. <code>z</code> — три знака, p — четыре.</p>`,
+        starter: "# z_test(c_a, n_a, c_b, n_b) -> z, p_value\n",
+        expected: { stdout: "organic—social z=2.586 p=0.0097\norganic—paid_search z=0.273 p=0.7845" },
+        hint: "Тело функции — пять строк из шагов 4 и 5 (от <code>p_a, p_b = …</code> до <code>p_value = …</code>) и <code>return z, p_value</code>. Потом <code>z, pv = z_test(40, 75, 12, 42)</code> и <code>print(f\"organic—social z={z:.3f} p={pv:.4f}\")</code>.",
+        solution: "def z_test(c_a, n_a, c_b, n_b):\n    p_a, p_b = c_a / n_a, c_b / n_b\n    p_pool = (c_a + c_b) / (n_a + n_b)\n    se_pool = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))\n    z = (p_a - p_b) / se_pool\n    p_value = 2 * (1 - norm_cdf(abs(z)))\n    return z, p_value\n\nz, pv = z_test(40, 75, 12, 42)\nprint(f\"organic—social z={z:.3f} p={pv:.4f}\")\nz, pv = z_test(40, 75, 28, 55)\nprint(f\"organic—paid_search z={z:.3f} p={pv:.4f}\")"
+      }
+    ]
+  },
 
   starter: `# Итоги A/B-теста лендинга
 n_a, c_a = 4820, 241   # контроль
