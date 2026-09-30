@@ -87,7 +87,7 @@ db.exec(ctx.window.DATA.shopSQL);
 /* журнал мобильного приложения (модуль 4) лежит в data.js CSV-строками —
    заливаем так же, как Engine.sql в app.js */
 function fillFromCsv(csv, sql, conv) {
-  if (!csv) return;
+  if (!csv) throw new Error("нет CSV для: " + sql);
   const st = db.prepare(sql);
   db.exec("BEGIN");
   csv.split("\n").slice(1).forEach(function (line) { if (line) st.run.apply(st, conv(line.split(","))); });
