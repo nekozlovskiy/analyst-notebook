@@ -22976,9 +22976,10 @@ print("проверка: %.1f + %.1f * %.4f = %.1f"
 window.CONTENT.m5l2 = {
   intro: "R-квадрат — самая цитируемая и самая бесполезная в одиночку характеристика модели. Настоящая диагностика начинается там, где на неё перестают смотреть.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: что меряет R-квадрат и что показывают остатки" },
+    { m: "30 мин", w: "Практикум: семь шагов — мусор, утечка и остатки на платформах" },
     { m: "30 мин", w: "Задача: три способа получить высокий R-квадрат зря" },
     { m: "40 мин", w: "Тренажёр: 5 разборов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -23073,6 +23074,398 @@ window.CONTENT.m5l2 = {
   data: window.SH.appData,
   packages: ["pandas"],
   prelude: window.SH.mlPrelude,
+
+  /* Практикум — семь шагов на другом разрезе: rev90 через days7 и
+     платформу (основная задача — days7 и канал), мусорные признаки по
+     модулю 97 с другими множителями, утечка — converted. Остатки
+     группируются по days7, а не по квинтилям прогноза. Числа основной
+     задачи здесь не появляются. Решения: node инструменты/checksteps.js m5l2 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. Модель та же, что в уроке 5.1, но вместо канала — платформа: выручка за 90 дней <code>y</code> объясняется через <code>days7</code> и матрицу <code>P</code> (ios, web, база android). На ней проверим всё, что обещает теория: R² растёт от мусора, утечка его раздувает, а остатки и отрицательные прогнозы показывают, что форма модели не та.",
+    schema: window.SH.mlSchema,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.mlPrelude,
+    done: "Все семь шагов решены. Основная задача — та же диагностика для модели с каналом: пять моделей в одной таблице (мусор там — <code>user_id * m % 101</code>, не 97, поэтому числа другие; утечки — <code>rev7</code>, часть ответа, и <code>days90</code>, признак из будущего), остатки, отрицательные прогнозы и модель на платящих. Нового там одно: группы остатков — не значения <code>days7</code>, а пять групп прогноза, <code>pd.qcut(pred, 5, labels=False)</code>. Об этом — последний абзац шага 6.",
+    steps: [
+      {
+        title: "ols: прогнозы и скорректированный R²",
+        body: `
+<p>Для диагностики функции <code>ols</code> из урока 5.1 мало коэффициентов и R²: нужны ещё прогнозы — по ним считают остатки и ищут невозможные значения — и скорректированный R², который штрафует за число признаков:</p>
+<pre><code>adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)</code></pre>
+<p>Здесь <code>n</code> — число строк, <code>k</code> — число признаков без свободного члена. Его даёт форма матрицы: <code>X.shape</code> — пара «строк, столбцов», <code>X.shape[1]</code> — столбцов. Функция возвращает четыре значения, и их раскладывают по четырём переменным: <code>b, r2, adj, pred = ols(base, y)</code>.</p>`,
+        ba: {
+          before: { columns: ["возвращает", "урок 5.1"], rows: [["коэффициенты", "b"], ["R2", "r2"]] },
+          after: { columns: ["возвращает", "урок 5.2"], rows: [["коэффициенты", "b"], ["R2", "r2"], ["скорректированный R2", "adj"], ["прогнозы", "pred"]] },
+          hl: ["урок 5.2"],
+          note: "Прогнозы уже считались внутри функции — их просто отдают наружу."
+        },
+        task: "<p><strong>Задание.</strong> Допишите в функцию <code>k</code> и <code>adj</code> и запустите: напечатается <code>базовая: признаков=3 R2=0.1801 скорр.=0.1795</code>.</p>",
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n = len(y)
+    # k = число признаков, adj = скорректированный R2
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+print(f"базовая: признаков={base.shape[1]} R2={r2:.4f} скорр.={adj:.4f}")
+`,
+        expected: { stdout: "базовая: признаков=3 R2=0.1801 скорр.=0.1795" },
+        hint: "Вместо комментария две строки: <code>k = X.shape[1]</code> и <code>adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n = len(y)
+    k = X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+print(f"базовая: признаков={base.shape[1]} R2={r2:.4f} скорр.={adj:.4f}")
+`
+      },
+      {
+        title: "Мусорный признак",
+        body: `
+<p>Признак, который заведомо не связан с выручкой, строят из идентификатора: <code>user_id * 7 % 97</code>. <code>%</code> — остаток от деления, он перемешивает номера в числа от 0 до 96 без всякого смысла. <code>.astype(float)</code> делает их дробными, как остальные признаки.</p>
+<p>Добавим его к базовой модели. Решение без нового столбца по-прежнему доступно — это коэффициент ноль при нём, — поэтому сумма квадратов остатков с ним не больше, чем без него, и R² не меньше. А на конечной выборке любой столбец чуть-чуть случайно связан с <code>y</code>, и МНК этим пользуется: R² немного растёт.</p>`,
+        ba: {
+          before: { columns: ["user_id", "user_id * 7"], rows: [[1001, 7007], [1002, 7014], [1003, 7021]] },
+          after: { columns: ["user_id", "junk"], rows: [[1001, "23.0"], [1002, "30.0"], [1003, "37.0"]] },
+          hl: ["junk"],
+          note: "7007 = 72 · 97 + 23: остаток 23."
+        },
+        task: "<p><strong>Задание.</strong> Постройте <code>junk</code>, модель на <code>np.column_stack([base, junk])</code> и напечатайте <code>+ мусорный: признаков=4 R2=0.1802 скорр.=0.1793</code>.</p>",
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+uid = feat["user_id"].to_numpy()
+
+junk = ...
+`,
+        expected: { stdout: "+ мусорный: признаков=4 R2=0.1802 скорр.=0.1793" },
+        hint: "<code>junk = (uid * 7 % 97).astype(float)</code>, <code>X = np.column_stack([base, junk])</code>, <code>b, r2, adj, pred = ols(X, y)</code> и печать, как в шаге 1, с <code>X.shape[1]</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+uid = feat["user_id"].to_numpy()
+
+junk = (uid * 7 % 97).astype(float)
+X = np.column_stack([base, junk])
+b, r2, adj, pred = ols(X, y)
+print(f"+ мусорный: признаков={X.shape[1]} R2={r2:.4f} скорр.={adj:.4f}")
+`
+      },
+      {
+        title: "Таблица моделей одним циклом",
+        body: `
+<p>Когда моделей несколько, их складывают в список пар «название — матрица признаков» и проходят одним циклом. Цикл раскладывает каждую пару на две переменные: <code>for name, X in models:</code>.</p>
+<p>Пять мусорных столбцов собирают генератором списка — по столбцу на каждый множитель:</p>
+<pre><code>J5 = np.column_stack([(uid * m % 97).astype(float)
+                      for m in (7, 11, 19, 23, 29)])</code></pre>
+<p>Последний столбец — доля отрицательных прогнозов, о ней шаг 5; <code>{…:&gt;7.1f}%</code> печатает число и сразу знак процента. Посмотрите на столбец скорректированного R². Один мусорный признак скорректированный R² поймал — тот упал. А пять мусорных подняли и его: штраф за число признаков слабый, и полагаться на него одного нельзя.</p>`,
+        ba: {
+          before: { columns: ["модель", "признаков", "R2", "скорр."], rows: [["базовая", 3, "0.1801", "0.1795"]] },
+          after: { columns: ["модель", "признаков", "R2", "скорр."], rows: [["базовая", 3, "0.1801", "0.1795"], ["+ мусорный", 4, "0.1802", "0.1793"], ["+ пять мусорных", 8, "0.1821", "0.1804"]] },
+          hl: ["скорр."],
+          note: "R² растёт всегда; скорректированный — то падает, то растёт."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Соберите <code>J5</code>.</li>
+<li>Допишите в список <code>models</code> третью пару: <code>("+ пять мусорных", np.column_stack([base, J5]))</code>.</li>
+<li>Запустите: цикл напечатает строку на каждую модель.</li>
+</ol>
+<p><strong>Задание.</strong> Сведите три модели в таблицу одним циклом.</p>`,
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+uid = feat["user_id"].to_numpy()
+junk = (uid * 7 % 97).astype(float)
+
+models = [
+    ("базовая", base),
+    ("+ мусорный", np.column_stack([base, junk])),
+]
+for name, X in models:
+    b, r2, adj, pred = ols(X, y)
+    print(f"{name:<18}{X.shape[1]:>3}{r2:>8.4f}{adj:>8.4f}{(pred < 0).mean() * 100:>7.1f}%")
+`,
+        expected: { stdout: "базовая 3 0.1801 0.1795 39.3%\n+ мусорный 4 0.1802 0.1793 39.3%\n+ пять мусорных 8 0.1821 0.1804 30.3%" },
+        hint: "Генератор списка — из теории шага; <code>J5</code> должна появиться выше списка <code>models</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+uid = feat["user_id"].to_numpy()
+junk = (uid * 7 % 97).astype(float)
+J5 = np.column_stack([(uid * m % 97).astype(float)
+                      for m in (7, 11, 19, 23, 29)])
+
+models = [
+    ("базовая", base),
+    ("+ мусорный", np.column_stack([base, junk])),
+    ("+ пять мусорных", np.column_stack([base, J5])),
+]
+for name, X in models:
+    b, r2, adj, pred = ols(X, y)
+    print(f"{name:<18}{X.shape[1]:>3}{r2:>8.4f}{adj:>8.4f}{(pred < 0).mean() * 100:>7.1f}%")
+`
+      },
+      {
+        title: "Утечка: признак из будущего",
+        body: `
+<p>Столбец <code>converted</code> — купил ли человек хоть что-то за 90 дней. По сути это функция самого ответа: <code>converted</code> равен 1 ровно тогда, когда <code>rev90 &gt; 0</code>. Поэтому с выручкой он связан теснее, чем <code>days7</code> и платформа вместе.</p>
+<p>Но в момент, когда прогноз нужен — через неделю после установки, — этого столбца ещё нет: он сам из тех же 90 дней. Это утечка, и R² с ней красивый и бесполезный. Проверка перед тем, как радоваться высокому R²: <strong>будет ли признак известен в момент прогноза</strong> и <strong>не часть ли он ответа</strong>.</p>`,
+        ba: {
+          before: { columns: ["модель", "R2"], rows: [["базовая", "0.1801"]] },
+          after: { columns: ["модель", "R2"], rows: [["базовая", "0.1801"], ["+ converted", "0.4386"]] },
+          hl: ["R2"],
+          note: "Один признак из будущего — и R² вырос в 2,4 раза."
+        },
+        task: "<p><strong>Задание.</strong> Добавьте к <code>base</code> столбец <code>feat[\"converted\"]</code> как массив и напечатайте <code>+ converted: R2=0.4386</code>.</p>",
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+`,
+        expected: { stdout: "+ converted: R2=0.4386" },
+        hint: "<code>conv = feat[\"converted\"].to_numpy(float)</code>, <code>b, r2, adj, pred = ols(np.column_stack([base, conv]), y)</code>, <code>print(f\"+ converted: R2={r2:.4f}\")</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+conv = feat["converted"].to_numpy(float)
+b, r2, adj, pred = ols(np.column_stack([base, conv]), y)
+print(f"+ converted: R2={r2:.4f}")
+`
+      },
+      {
+        title: "Невозможные прогнозы",
+        body: `
+<p>Выручка не бывает отрицательной, а прямая ничем не ограничена. Доля отрицательных прогнозов считается так же, как любая доля: <code>(pred &lt; 0)</code> — массив True/False, а среднее True/False — доля True. <code>pred.min()</code> — самый низкий прогноз.</p>
+<p>Кто эти люди, видно, если взять <code>days7</code> только там, где прогноз ниже нуля: <code>x[pred &lt; 0]</code>. Массив True/False в квадратных скобках оставляет элементы, где стоит True, — как фильтр строк в pandas. <code>np.unique(…)</code> оставляет разные значения, <code>sorted(….tolist())</code> делает из них обычный отсортированный список.</p>`,
+        ba: {
+          before: { columns: ["user_id", "days7", "platform", "прогноз"], rows: [[1001, 4, "web", "3315.8"], [1002, 1, "android", "-149.1"], [1003, 4, "ios", "2912.1"]] },
+          after: { columns: ["user_id", "days7", "platform", "прогноз"], rows: [[1002, 1, "android", "-149.1"]] },
+          keep: [1],
+          note: "Пользователь 1002 заходил один день — модель обещает ему минус 149 рублей. Ниже нуля прогноз у 1571 из 1822 человек с days7 = 1: у всех, кроме пользователей web."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Напечатайте <code>ниже нуля: 39.3% (1571 из 4000), минимум -149.1</code>.</li>
+<li>Второй строкой — какие <code>days7</code> у них бывают: <code>sorted(np.unique(x[pred &lt; 0]).tolist())</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте, у скольких пользователей прогноз выручки отрицательный, и найдите, что у них общего.</p>`,
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+`,
+        expected: { stdout: "ниже нуля: 39.3% (1571 из 4000), минимум -149.1\n[1.0]" },
+        hint: "<code>neg = pred &lt; 0</code>, затем <code>print(f\"ниже нуля: {neg.mean() * 100:.1f}% ({neg.sum()} из {len(pred)}), минимум {pred.min():.1f}\")</code>. <code>np.unique</code> оставляет разные значения.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+
+neg = pred < 0
+print(f"ниже нуля: {neg.mean() * 100:.1f}% ({neg.sum()} из {len(pred)}), минимум {pred.min():.1f}")
+print(sorted(np.unique(x[neg]).tolist()))
+`
+      },
+      {
+        title: "Остатки по группам",
+        body: `
+<p>Если модель верна, остатки — шум: в любой части диапазона их среднее около нуля, а разброс одинаков. Проверяют по группам. Здесь прогноз зависит от <code>days7</code>, поэтому группы — его значения от 1 до 7.</p>
+<p>Массивы удобно сложить в <code>DataFrame</code> и сгруппировать как обычно. <code>"std"</code> в <code>agg</code> — стандартное отклонение, мера разброса:</p>
+<pre><code>pd.DataFrame({"days7": x, "resid": y - pred})   # таблица из двух массивов
+mean_resid=("resid", "mean"), sd=("resid", "std")  # пары для agg</code></pre>
+<p>Среднее остатка здесь идёт плюс, минус, минус, минус, минус, плюс, плюс — модель систематически промахивается, а не шумит. А разброс растёт с каждым днём вместе с уровнем прогноза: точность для активных и неактивных несопоставима.</p>
+<p>В основной задаче готовых групп нет — их строят из прогноза: <code>grp = pd.qcut(pred, 5, labels=False)</code>. <code>labels=False</code> вместо меток даёт номера групп от 0 до 4; их кладут в <code>DataFrame</code> третьим столбцом рядом с прогнозом и остатком, а при печати прибавляют 1. Здесь так не выйдет: прогнозов у модели на платформах всего 21 разный, и границы пятых долей совпадают, как у частоты в уроке 4.5.</p>`,
+        ba: {
+          before: { columns: ["days7", "людей", "ср. остаток", "разброс"], rows: [[1, 1822, "163.6", "787.0"], [2, 426, "-61.0", "2725.5"], ["…", "…", "…", "…"]] },
+          after: { columns: ["days7", "людей", "ср. остаток", "разброс"], rows: [["…", "…", "…", "…"], [6, 353, "495.5", "8252.4"], [7, 319, "428.6", "9335.3"]] },
+          note: "От первого дня к седьмому разброс остатков вырос с 787 до 9335 — почти в 12 раз."
+        },
+        task: "<p><strong>Задание.</strong> Соберите <code>t</code>: таблицу из двух массивов, сгруппированную по <code>days7</code>, с тремя столбцами — <code>n</code> (<code>\"size\"</code>), <code>mean_resid</code> и <code>sd</code>. Напечатайте строку на каждую группу — <code>1 1822 163.6 787.0</code> (days7, людей, средний остаток, разброс), — а последней строкой <code>разброс растёт в 12 раз</code>: отношение наибольшего <code>sd</code> к наименьшему, целым числом.</p>",
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+
+`,
+        expected: { stdout: "1 1822 163.6 787.0\n2 426 -61.0 2725.5\n3 432 -532.3 3609.2\n4 325 -634.3 5073.6\n5 323 -457.1 6170.9\n6 353 495.5 8252.4\n7 319 428.6 9335.3\nразброс растёт в 12 раз" },
+        hint: "<code>t = pd.DataFrame({\"days7\": x, \"resid\": y - pred}).groupby(\"days7\").agg(n=(\"resid\", \"size\"), mean_resid=(\"resid\", \"mean\"), sd=(\"resid\", \"std\"))</code>. Печать: <code>for d, r in t.iterrows():</code> и <code>print(f\"{d:.0f} {r['n']:.0f} {r['mean_resid']:.1f} {r['sd']:.1f}\")</code>; затем <code>print(f\"разброс растёт в {t['sd'].max() / t['sd'].min():.0f} раз\")</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+base = np.column_stack([x, P])
+b, r2, adj, pred = ols(base, y)
+
+t = pd.DataFrame({"days7": x, "resid": y - pred}).groupby("days7").agg(
+    n=("resid", "size"), mean_resid=("resid", "mean"), sd=("resid", "std"))
+for d, r in t.iterrows():
+    print(f"{d:.0f} {r['n']:.0f} {r['mean_resid']:.1f} {r['sd']:.1f}")
+print(f"разброс растёт в {t['sd'].max() / t['sd'].min():.0f} раз")
+`
+      },
+      {
+        title: "Модель только на платящих",
+        body: `
+<p>Одна из причин видна в данных: у 78% пользователей выручка ровно ноль, а у остальных — до 70 720 рублей. Прямая такую форму не опишет. Проверка — построить ту же модель только на тех, кто что-то купил.</p>
+<p>Строки массивов отбирают маской, как в прошлом шаге: <code>paid = (feat["converted"] == 1).to_numpy()</code>, затем <code>x[paid]</code>, <code>P[paid]</code>, <code>y[paid]</code>. У матрицы <code>P[paid]</code> маска отбирает строки, столбцы остаются те же.</p>`,
+        ba: {
+          before: { columns: ["модель", "R2", "прогнозов ниже нуля"], rows: [["все пользователи", "0.1801", "39.3%"]] },
+          after: { columns: ["модель", "R2", "прогнозов ниже нуля"], rows: [["только платящие", "0.0594", "0.0%"]] },
+          hl: ["R2", "прогнозов ниже нуля"],
+          note: "R² с прежним не сравнивают: выборка другая, и разброс y в ней другой. Отрицательных прогнозов нет, потому что нули ушли из данных, — а вопрос «купит или нет» эта модель уже не решает, им занимается урок 5.3."
+        },
+        task: "<p><strong>Задание.</strong> Постройте модель на платящих и напечатайте <code>только платящие: R2=0.0594 ниже нуля 0.0%</code>.</p>",
+        starter: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+paid = (feat["converted"] == 1).to_numpy()
+`,
+        expected: { stdout: "только платящие: R2=0.0594 ниже нуля 0.0%" },
+        hint: "<code>b, r2, adj, pred = ols(np.column_stack([x[paid], P[paid]]), y[paid])</code>, затем <code>print(f\"только платящие: R2={r2:.4f} ниже нуля {(pred &lt; 0).mean() * 100:.1f}%\")</code>.",
+        solution: `def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    pred = X1 @ b
+    resid = y - pred
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    n, k = len(y), X.shape[1]
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1)
+    return b, r2, adj, pred
+
+
+x = feat["days7"].to_numpy(float)
+paid = (feat["converted"] == 1).to_numpy()
+b, r2, adj, pred = ols(np.column_stack([x[paid], P[paid]]), y[paid])
+print(f"только платящие: R2={r2:.4f} ниже нуля {(pred < 0).mean() * 100:.1f}%")
+`
+      }
+    ]
+  },
 
   starter: `# Диагностика модели: R-квадрат, остатки, невозможные прогнозы
 
@@ -23254,7 +23647,8 @@ t = pd.DataFrame({"m": mon, "res": resid}).groupby("m").agg(
     n=("res", "size"), mean=("res", "mean"), sd=("res", "std"))
 print(t.round(1).to_string())`,
       body: `<p>Возьмите остатки базовой модели и посмотрите на них в разрезе месяца установки пользователя. Выведите по каждому месяцу число наблюдений, средний остаток и его разброс.</p>
-<p>Ответьте: есть ли систематическое смещение по времени и что означает то, что вы увидите в столбце разброса.</p>`,
+<p>Ответьте: есть ли систематическое смещение по времени и что означает то, что вы увидите в столбце разброса.</p>
+<p><strong>Пригодится.</strong> <code>app_users.set_index("user_id").loc[feat["user_id"], "signup_date"]</code> достаёт дату установки для каждой строки <code>feat</code> в том же порядке, но с индексом <code>user_id</code>, а не 0…3999 — поэтому в конце <code>.to_numpy()</code>: без него присваивание в <code>feat</code> выровнялось бы по индексу и дало пропуски. <code>.dt.to_period("M")</code> превращает дату в месяц (2024-03), <code>.astype(str)</code> — в текст, по которому удобно группировать.</p>`,
       solution: `b, r2, adj, pred = ols(base, y)
 resid = y - pred
 
@@ -23379,7 +23773,8 @@ for name, pred_, target in (("рубли", p_rub, y[m]),
     print(name, "R2=%.4f" % (r2_rub if name == "рубли" else r2_log),
           "sd по квартилям:", [round(v, 3) for v in sd])`,
       body: `<p>Возьмите только платящих пользователей и постройте базовую модель дважды: для выручки в рублях и для её натурального логарифма.</p>
-<p>Для каждой посчитайте <span class="m">\\(R^2\\)</span> и разброс остатков по квартилям прогноза. Сравните и объясните, почему нельзя просто сказать «у логарифма R-квадрат ниже, значит, хуже». Заодно переведите коэффициент при <code>days7</code> из логарифмической модели в проценты.</p>`,
+<p>Для каждой посчитайте <span class="m">\\(R^2\\)</span> и разброс остатков по квартилям прогноза. Сравните и объясните, почему нельзя просто сказать «у логарифма R-квадрат ниже, значит, хуже». Заодно переведите коэффициент при <code>days7</code> из логарифмической модели в проценты.</p>
+<p><strong>Пригодится.</strong> <code>np.log(a)</code> — натуральный логарифм каждого элемента массива; у платящих выручка больше нуля, поэтому он определён. Обратная операция — <code>np.exp</code>: коэффициент <code>b</code> логарифмической модели в процентах — это <code>(np.exp(b) - 1) * 100</code>.</p>`,
       solution: `m = (feat["converted"] == 1).to_numpy()
 Xm = np.column_stack([days7[m], D[m]])
 
