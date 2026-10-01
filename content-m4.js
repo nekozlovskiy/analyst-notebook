@@ -1711,9 +1711,10 @@ ORDER BY MIN(days);
 window.CONTENT.m4l4 = {
   intro: "Метрики продукта делятся на три семьи: сколько людей, сколько денег, надолго ли. Путаница внутри каждой семьи стоит компаниям кварталов работы не в ту сторону.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: аудитория, деньги, LTV и окупаемость" },
+    { m: "30 мин", w: "Практикум: семь шагов — апрель, платформа web, LTV30 по платформам" },
     { m: "30 мин", w: "Задача: сводка метрик и вердикт по каналам" },
     { m: "40 мин", w: "Тренажёр: 5 расчётов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -1832,6 +1833,314 @@ partner 700   paid_search 900   social 850</code></pre>
   data: window.SH.appData,
   packages: ["pandas"],
   prelude: window.SH.appPrelude,
+
+  /* Практикум — семь шагов на другом разрезе: апрель вместо мая, платформы
+     вместо каналов, горизонт 30 дней вместо 90. CAC по платформам выдуман
+     для практикума. Числа основной задачи здесь не появляются.
+     Решения: node инструменты/checksteps.js m4l4 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. Разрез другой: аудитория за апрель, деньги платформы web, LTV на 30 днях по платформам, а не по каналам. Каждый шаг добавляет одну конструкцию pandas, которая понадобится в сводке.",
+    schema: window.SH.appSchema + `
+<p><strong>Что доступно.</strong> Уже загружены <code>app_users</code>, <code>app_activity</code>, <code>app_orders</code>, импортированы <code>pandas as pd</code> и <code>numpy as np</code>, даты приведены к <code>datetime64</code>.</p>
+`,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.appPrelude,
+    done: "Все семь шагов решены. Основная задача — та же сводка, но аудитория за май, деньги по всей базе, а LTV на 90 днях и по каналам, а не по платформам. Нового там два места: таблица печатается с выравниванием столбцов по ширине (<code>{ch:&lt;12}</code>, <code>{x:&gt;7.0f}</code>), а вывод сравнивает долю убыточных каналов в базе и среди установок с мая.",
+    steps: [
+      {
+        title: "Месяц через .between()",
+        body: `
+<p>MAU — число разных людей, которые заходили хотя бы раз за месяц. Сначала нужны строки активности только за этот месяц. Два сравнения через <code>&amp;</code> работают, но короче <code>.between(начало, конец)</code>: он оставляет значения от начала до конца <em>включительно</em> с обеих сторон.</p>
+<pre><code>apr = app_activity[app_activity["activity_date"].between("2024-04-01", "2024-04-30")]</code></pre>
+<p>Даты можно передать строками: pandas сам сравнит их с датами столбца. В <code>app_activity</code> одна строка — один день человека, поэтому MAU — это <code>nunique()</code> по <code>user_id</code>, а не число строк.</p>`,
+        ba: {
+          before: { columns: ["user_id", "activity_date"], rows: [[1030, "2024-03-31"], [1059, "2024-04-01"], [1066, "2024-04-30"], [1274, "2024-05-01"]] },
+          after: { columns: ["user_id", "activity_date"], rows: [[1059, "2024-04-01"], [1066, "2024-04-30"]] },
+          keep: [1, 2],
+          note: "Оба края входят: 1 и 30 апреля остаются, 31 марта и 1 мая уходят."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Отберите строки за апрель 2024 через <code>.between()</code> в переменную <code>apr</code>.</li>
+<li><code>mau = apr["user_id"].nunique()</code>.</li>
+<li>Напечатайте <code>строк=N MAU=M</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте, сколько строк активности за апрель и сколько в них разных людей.</p>`,
+        starter: `# Активность за апрель 2024
+apr = app_activity
+mau = apr["user_id"].nunique()
+print(f"строк={len(apr)} MAU={mau}")
+`,
+        expected: { stdout: "строк=4988 MAU=1039" },
+        hint: "Вторая строка заготовки должна стать <code>apr = app_activity[app_activity[\"activity_date\"].between(\"2024-04-01\", \"2024-04-30\")]</code>.",
+        solution: `# Активность за апрель 2024
+apr = app_activity[app_activity["activity_date"].between("2024-04-01", "2024-04-30")]
+mau = apr["user_id"].nunique()
+print(f"строк={len(apr)} MAU={mau}")
+`
+      },
+      {
+        title: "DAU — среднее по дням",
+        body: `
+<p>DAU за месяц — это не одно число за месяц, а среднее из тридцати дневных: сначала по каждому дню считают разных людей, потом берут среднее этих тридцати чисел.</p>
+<pre><code>daily = apr.groupby("activity_date")["user_id"].nunique()</code></pre>
+<p>Липучесть DAU/MAU показывает, какая доля месячной аудитории заходит в обычный день. Это частота, а не довольство: при 20% средний активный за месяц человек появляется примерно шесть дней из тридцати.</p>`,
+        ba: {
+          before: { columns: ["activity_date", "людей"], rows: [["2024-04-01", 162], ["2024-04-02", 172], ["2024-04-03", 170]] },
+          after: { columns: ["что", "значение"], rows: [["дней", 30], ["DAU", "166.3"], ["DAU/MAU", "16.0%"]] },
+          hl: ["значение"],
+          note: "Первые три дня апреля — 162, 172 и 170 человек; среднее за все 30 дней — 166,3."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте <code>daily</code> — разных людей по дням апреля, затем <code>dau = daily.mean()</code> и напечатайте <code>дней=30 DAU=166.3 DAU/MAU=16.0%</code> (числа — ваши, с одним знаком после запятой).</p>",
+        starter: `apr = app_activity[app_activity["activity_date"].between("2024-04-01", "2024-04-30")]
+mau = apr["user_id"].nunique()
+
+daily = ...
+dau = ...
+`,
+        expected: { stdout: "дней=30 DAU=166.3 DAU/MAU=16.0%" },
+        hint: "<code>daily = apr.groupby(\"activity_date\")[\"user_id\"].nunique()</code>, <code>dau = daily.mean()</code>, затем <code>print(f\"дней={len(daily)} DAU={dau:.1f} DAU/MAU={dau / mau * 100:.1f}%\")</code>.",
+        solution: `apr = app_activity[app_activity["activity_date"].between("2024-04-01", "2024-04-30")]
+mau = apr["user_id"].nunique()
+
+daily = apr.groupby("activity_date")["user_id"].nunique()
+dau = daily.mean()
+print(f"дней={len(daily)} DAU={dau:.1f} DAU/MAU={dau / mau * 100:.1f}%")
+`
+      },
+      {
+        title: "ARPU, ARPPU и чек одной платформы",
+        body: `
+<p>Три денежные метрики делят одну и ту же выручку на три разных знаменателя: ARPU — на всех пользователей, ARPPU — на платящих, средний чек — на заказы. Для платформы web сначала берут её пользователей, потом их заказы:</p>
+<pre><code>web = app_users[app_users["platform"] == "web"]
+web_orders = app_orders[app_orders["user_id"].isin(web["user_id"])]</code></pre>
+<p>Платящие — разные <code>user_id</code> в заказах, а не число заказов. Проверка, что знаменатели не перепутаны: ARPU равен ARPPU, умноженному на долю платящих.</p>`,
+        ba: {
+          before: { columns: ["знаменатель", "сколько"], rows: [["пользователи web", 574], ["платящие", 140], ["заказы", 355]] },
+          after: { columns: ["метрика", "значение"], rows: [["ARPU", "2271.46"], ["ARPPU", "9313.00"], ["чек", "3672.73"]] },
+          hl: ["значение"],
+          note: "Выручка одна — 1 303 820 рублей; разные знаменатели дают числа, отличающиеся вчетверо."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>n</code> — пользователей web, <code>payers</code> — разных <code>user_id</code> в <code>web_orders</code>, <code>revenue</code> — сумма выручки.</li>
+<li>Первая строка: <code>web: пользователей=574 платящих=140 (24.4%)</code>.</li>
+<li>Вторая: <code>выручка=1303820 ARPU=2271.46 ARPPU=9313.00 чек=3672.73</code>.</li>
+<li>Третья: <code>проверка: ARPPU*доля=2271.46</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте деньги платформы web и проверьте соотношение ARPU и ARPPU.</p>`,
+        starter: `web = app_users[app_users["platform"] == "web"]
+web_orders = app_orders[app_orders["user_id"].isin(web["user_id"])]
+
+n = len(web)
+payers = ...
+revenue = ...
+`,
+        expected: { stdout: "web: пользователей=574 платящих=140 (24.4%)\nвыручка=1303820 ARPU=2271.46 ARPPU=9313.00 чек=3672.73\nпроверка: ARPPU*доля=2271.46" },
+        hint: "<code>payers = web_orders[\"user_id\"].nunique()</code>, <code>revenue = web_orders[\"revenue\"].sum()</code>, чек — <code>web_orders[\"revenue\"].mean()</code>. Доля платящих — <code>payers / n</code>.",
+        solution: `web = app_users[app_users["platform"] == "web"]
+web_orders = app_orders[app_orders["user_id"].isin(web["user_id"])]
+
+n = len(web)
+payers = web_orders["user_id"].nunique()
+revenue = web_orders["revenue"].sum()
+
+print(f"web: пользователей={n} платящих={payers} ({payers / n * 100:.1f}%)")
+print(f"выручка={revenue:.0f} ARPU={revenue / n:.2f} "
+      f"ARPPU={revenue / payers:.2f} чек={web_orders['revenue'].mean():.2f}")
+print(f"проверка: ARPPU*доля={revenue / payers * (payers / n):.2f}")
+`
+      },
+      {
+        title: "Возраст заказа в днях",
+        body: `
+<p>LTV считают на горизонте: сколько человек принёс за первые N дней жизни. Для этого у каждого заказа нужен его возраст — сколько дней прошло от установки. Дата установки лежит в <code>app_users</code>, поэтому заказы сначала соединяют с пользователями.</p>
+<p>Разность двух дат в pandas — не число, а промежуток времени (<code>timedelta</code>). Число дней из него достаёт <code>.dt.days</code>:</p>
+<pre><code>orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days</code></pre>
+<p>Горизонт здесь 30 дней. Он честный для всех: последняя установка — 30 июня, данные идут до 30 сентября, так что первые 30 дней видны у каждого.</p>`,
+        ba: {
+          before: { columns: ["user_id", "platform", "signup_date", "order_date"], rows: [[1003, "ios", "2024-01-01", "2024-01-09"], [1025, "web", "2024-01-02", "2024-01-31"], [1122, "web", "2024-01-10", "2024-02-26"]] },
+          after: { columns: ["user_id", "platform", "signup_date", "order_date", "age"], rows: [[1003, "ios", "2024-01-01", "2024-01-09", 8], [1025, "web", "2024-01-02", "2024-01-31", 29]] },
+          hl: ["age"],
+          keep: [0, 1],
+          note: "Заказ через 47 дней после установки в горизонт 30 дней не входит."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Добавьте в <code>orders</code> столбец <code>age</code> через <code>.dt.days</code>.</li>
+<li><code>o30 = orders[orders["age"] &lt;= 30]</code>.</li>
+<li>Напечатайте <code>заказов до 30 дней: 1373 из 2027</code> и <code>выручка до 30 дней: 4966300 из 7369360 (67.4%)</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте, какая часть заказов и выручки приходится на первые 30 дней жизни пользователя.</p>`,
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+`,
+        expected: { stdout: "заказов до 30 дней: 1373 из 2027\nвыручка до 30 дней: 4966300 из 7369360 (67.4%)" },
+        hint: "<code>r30, r_all = o30[\"revenue\"].sum(), orders[\"revenue\"].sum()</code>, затем <code>print(f\"выручка до 30 дней: {r30} из {r_all} ({r30 / r_all * 100:.1f}%)\")</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+r30, r_all = o30["revenue"].sum(), orders["revenue"].sum()
+print(f"заказов до 30 дней: {len(o30)} из {len(orders)}")
+print(f"выручка до 30 дней: {r30} из {r_all} ({r30 / r_all * 100:.1f}%)")
+`
+      },
+      {
+        title: "Таблица из трёх группировок",
+        body: `
+<p>Для LTV по платформам нужны три числа на платформу, и посчитаны они по разным таблицам: число пользователей — по <code>app_users</code>, выручка и платящие — по заказам до 30 дней. Каждая группировка даёт Series с платформой в индексе. Словарь из таких Series превращается в одну таблицу:</p>
+<pre><code>report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "payers":  o30.groupby("platform")["user_id"].nunique(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})</code></pre>
+<p>Ключи словаря становятся столбцами, а строки pandas сопоставляет по индексу — по названию платформы, а не по порядку. Новый столбец из старых считается одной строкой: <code>report["ltv30"] = report["revenue"] / report["users"]</code>. В знаменателе LTV все установившие, включая ни разу не заплативших.</p>`,
+        ba: {
+          before: { columns: ["группировка", "android", "ios", "web"], rows: [["users", 1949, 1477, 574], ["payers", 381, 277, 128], ["revenue", 2468430, 1704180, 793690]] },
+          after: { columns: ["platform", "users", "payers", "revenue", "ltv30"], rows: [["android", 1949, 381, 2468430, "1266.5"], ["ios", 1477, 277, 1704180, "1153.8"], ["web", 574, 128, 793690, "1382.7"]] },
+          hl: ["ltv30"],
+          note: "Три Series сложились в таблицу по названию платформы."
+        },
+        task: "<p><strong>Задание.</strong> Соберите <code>report</code> из трёх группировок, добавьте столбец <code>ltv30</code> и напечатайте <code>print(report.round(1))</code>.</p>",
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users": app_users.groupby("platform")["user_id"].count(),
+})
+print(report.round(1))
+`,
+        expected: { stdout: "          users  payers  revenue   ltv30\nplatform                                \nandroid    1949     381  2468430  1266.5\nios        1477     277  1704180  1153.8\nweb         574     128   793690  1382.7" },
+        hint: "Допишите в словарь ещё два ключа — <code>\"payers\"</code> и <code>\"revenue\"</code> с группировками по <code>o30</code>, а перед печатью — строку <code>report[\"ltv30\"] = report[\"revenue\"] / report[\"users\"]</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "payers":  o30.groupby("platform")["user_id"].nunique(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})
+report["ltv30"] = report["revenue"] / report["users"]
+print(report.round(1))
+`
+      },
+      {
+        title: "CAC из словаря и окупаемость",
+        body: `
+<p>Стоимость привлечения (CAC) приходит из рекламных кабинетов, в журнале приложения её нет. Для практикума возьмём такие цены установки: ios — 1300, android — 1100, web — 1500 рублей.</p>
+<p>Словарь превращается в Series через <code>pd.Series(CAC)</code>: ключи становятся индексом. Присвоенная столбцу, такая Series ложится в строки по совпадению индекса, поэтому порядок ключей в словаре неважен:</p>
+<pre><code>report["cac"] = pd.Series(CAC)
+report["roi"] = report["ltv30"] / report["cac"]</code></pre>
+<p>ROI меньше единицы значит: за 30 дней пользователь приносит меньше, чем стоил. Это не то же самое, что «не окупится никогда» — после 30 дней он может продолжить покупать.</p>`,
+        ba: {
+          before: { columns: ["platform", "ltv30"], rows: [["android", "1266.5"], ["ios", "1153.8"], ["web", "1382.7"]] },
+          after: { columns: ["platform", "ltv30", "cac", "roi"], rows: [["android", "1266.5", 1100, "1.15"], ["web", "1382.7", 1500, "0.92"], ["ios", "1153.8", 1300, "0.89"]] },
+          hl: ["cac", "roi"],
+          note: "Порядок ключей в словаре — ios, android, web, а цены всё равно встали к своим платформам."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Добавьте столбцы <code>cac</code> и <code>roi</code>.</li>
+<li>Отсортируйте <code>report</code> по <code>roi</code> по убыванию.</li>
+<li>Напечатайте по строке на платформу: <code>android LTV30=1267 CAC=1100 ROI=1.15</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Посчитайте окупаемость за 30 дней по платформам.</p>`,
+        starter: `CAC = {"ios": 1300, "android": 1100, "web": 1500}
+
+orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})
+report["ltv30"] = report["revenue"] / report["users"]
+`,
+        expected: { stdout: "android LTV30=1267 CAC=1100 ROI=1.15\nweb LTV30=1383 CAC=1500 ROI=0.92\nios LTV30=1154 CAC=1300 ROI=0.89" },
+        hint: "После <code>report = report.sort_values(\"roi\", ascending=False)</code> — цикл <code>for pl, r in report.iterrows():</code> и в нём <code>print(f\"{pl} LTV30={r['ltv30']:.0f} CAC={r['cac']:.0f} ROI={r['roi']:.2f}\")</code>.",
+        solution: `CAC = {"ios": 1300, "android": 1100, "web": 1500}
+
+orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})
+report["ltv30"] = report["revenue"] / report["users"]
+report["cac"] = pd.Series(CAC)
+report["roi"] = report["ltv30"] / report["cac"]
+report = report.sort_values("roi", ascending=False)
+
+for pl, r in report.iterrows():
+    print(f"{pl} LTV30={r['ltv30']:.0f} CAC={r['cac']:.0f} ROI={r['roi']:.2f}")
+`
+      },
+      {
+        title: "Какая доля базы не окупается",
+        body: `
+<p>Вывод отчёта — не список платформ, а масштаб: какая доля пользователей пришла туда, где деньги за 30 дней не возвращаются. Названия убыточных платформ дают строки индекса с <code>roi &lt; 1</code>:</p>
+<pre><code>bad = sorted(report.index[report["roi"] &lt; 1])</code></pre>
+<p>Доля базы — среднее от проверки <code>isin</code>: <code>True</code> считается за 1, <code>False</code> за 0, и среднее этих единиц и нулей и есть доля.</p>`,
+        ba: {
+          before: { columns: ["platform", "users", "roi"], rows: [["android", 1949, "1.15"], ["web", 574, "0.92"], ["ios", 1477, "0.89"]] },
+          after: { columns: ["что", "значение"], rows: [["не окупаются", "ios, web"], ["доля базы", "51.3%"]] },
+          hl: ["значение"],
+          note: "(1477 + 574) / 4000 = 51,3%."
+        },
+        task: "<p><strong>Задание.</strong> Напечатайте <code>не окупаются за 30 дней: ios, web</code> и <code>их доля в базе: 51.3%</code>, посчитав оба числа кодом.</p>",
+        starter: `CAC = {"ios": 1300, "android": 1100, "web": 1500}
+
+orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})
+report["ltv30"] = report["revenue"] / report["users"]
+report["cac"] = pd.Series(CAC)
+report["roi"] = report["ltv30"] / report["cac"]
+
+bad = ...
+`,
+        expected: { stdout: "не окупаются за 30 дней: ios, web\nих доля в базе: 51.3%" },
+        hint: "<code>print(\"не окупаются за 30 дней: \" + \", \".join(bad))</code> и <code>print(f\"их доля в базе: {app_users['platform'].isin(bad).mean() * 100:.1f}%\")</code>.",
+        solution: `CAC = {"ios": 1300, "android": 1100, "web": 1500}
+
+orders = app_orders.merge(app_users[["user_id", "platform", "signup_date"]],
+                          on="user_id")
+orders["age"] = (orders["order_date"] - orders["signup_date"]).dt.days
+o30 = orders[orders["age"] <= 30]
+
+report = pd.DataFrame({
+    "users":   app_users.groupby("platform")["user_id"].count(),
+    "revenue": o30.groupby("platform")["revenue"].sum(),
+})
+report["ltv30"] = report["revenue"] / report["users"]
+report["cac"] = pd.Series(CAC)
+report["roi"] = report["ltv30"] / report["cac"]
+
+bad = sorted(report.index[report["roi"] < 1])
+print("не окупаются за 30 дней: " + ", ".join(bad))
+print(f"их доля в базе: {app_users['platform'].isin(bad).mean() * 100:.1f}%")
+`
+      }
+    ]
+  },
 
   starter: `# Сводка продуктовых метрик и вердикт по каналам
 CAC = {"organic": 150, "referral": 400, "email": 120,
