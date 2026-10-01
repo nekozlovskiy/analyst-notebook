@@ -2613,9 +2613,10 @@ print(res.sort_values("share30"))
 window.CONTENT.m4l5 = {
   intro: "Сегментация нужна не чтобы красиво разложить базу, а чтобы у каждой группы появилось своё действие. Сегмент, для которого не придумано действия, — потраченный день.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: зачем сегменты и как устроен RFM" },
+    { m: "30 мин", w: "Практикум: семь шагов — RFM покупателей Android" },
     { m: "30 мин", w: "Задача: RFM-сегментация базы" },
     { m: "40 мин", w: "Тренажёр: 5 разборов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -2720,6 +2721,379 @@ R <= 2 и F <= 2  ->  спящие
   data: window.SH.appData,
   packages: ["pandas"],
   prelude: window.SH.appPrelude,
+
+  /* Практикум — семь шагов на покупателях Android (423 из 1949 установивших).
+     Основная задача строит RFM по всей базе (888 покупателей) — её числа
+     здесь не появляются. Решения: node инструменты/checksteps.js m4l5 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей на покупателях Android: три числа на человека, оценки 1–5 по квинтилям и сегменты. Код каждого шага начинается с одного и того же отбора заказов Android — это и есть разрез. Основная задача сделает то же для всей базы.",
+    schema: window.SH.appSchema + `
+<p><strong>Что доступно.</strong> Загружены <code>app_users</code>, <code>app_activity</code>, <code>app_orders</code>, импортированы <code>pandas as pd</code> и <code>numpy as np</code>, определена <code>LAST_DAY</code> — 30 сентября 2024, конец наблюдения.</p>
+`,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.appPrelude,
+    done: "Все семь шагов решены. Основная задача — тот же расчёт по всем 888 покупателям базы. Нового там три места: границы квинтилей печатаются через <code>.quantile()</code>, вывод берёт строку сегмента из таблицы через <code>rep.loc[\"уходят ценные\"]</code>, а последняя строка показывает каналы чемпионов через <code>value_counts(normalize=True)</code>.",
+    steps: [
+      {
+        title: "Три числа на покупателя",
+        body: `
+<p>RFM описывает покупателя тремя числами: сколько дней прошло с последнего заказа (recency), сколько заказов (frequency) и сколько денег (monetary). Все три получаются одной группировкой заказов по <code>user_id</code>. Внутри <code>.agg()</code> каждое новое имя столбца получает пару «откуда считать, как считать»:</p>
+<pre><code>rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)</code></pre>
+<p>Готовой функции «дней с последней даты» нет, поэтому её пишут на месте: <code>lambda s: …</code> — короткая функция без имени. В <code>s</code> приходят даты заказов одного покупателя. Отсчёт идёт от <code>LAST_DAY</code>, а не от сегодняшнего дня: иначе recency росла бы каждый день сама по себе.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date", "revenue"], rows: [[1028, "2024-01-16", 6990], [1028, "2024-01-21", 5490], ["…", "ещё 5 заказов", "…"], [1028, "2024-02-21", 1590]] },
+          after: { columns: ["user_id", "recency", "frequency", "monetary"], rows: [[1028, 222, 8, 29320]] },
+          hl: ["recency", "frequency", "monetary"],
+          note: "Восемь заказов покупателя 1028 сжались в одну строку. От 21 февраля до 30 сентября — 222 дня."
+        },
+        task: "<p><strong>Задание.</strong> Допишите в <code>.agg()</code> столбец <code>recency</code> с лямбдой из теории и запустите: напечатаются число покупателей Android и три числа покупателя 1028 — <code>[222, 8, 29320]</code>.</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+
+rfm = ao.groupby("user_id").agg(
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+print(f"покупателей Android: {len(rfm)} из {len(android)} ({len(rfm) / len(android) * 100:.1f}%)")
+print(rfm.loc[1028].tolist())
+`,
+        expected: { stdout: "покупателей Android: 423 из 1949 (21.7%)\n[222, 8, 29320]" },
+        hint: "Первой строкой внутри <code>.agg(</code> добавьте <code>recency=(\"order_date\", lambda s: (LAST_DAY - s.max()).days),</code>. Порядок именованных столбцов задаёт порядок в таблице.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+print(f"покупателей Android: {len(rfm)} из {len(android)} ({len(rfm) / len(android) * 100:.1f}%)")
+print(rfm.loc[1028].tolist())
+`
+      },
+      {
+        title: "Верхние 20% через .nlargest()",
+        body: `
+<p>Прежде чем делить базу на сегменты, полезно посмотреть, насколько неравномерно распределены деньги. <code>rfm.nlargest(k, "monetary")</code> возвращает <code>k</code> строк с самыми большими тратами — это короче, чем сортировать по убыванию и брать <code>.head(k)</code>.</p>
+<p>Двадцать процентов от 423 покупателей — 84,6. Людей дробных не бывает, <code>int()</code> отбрасывает дробную часть: берём 84.</p>`,
+        ba: {
+          before: { columns: ["user_id", "monetary"], rows: [[1019, 2490], [1024, 3490], [1028, 29320], ["…", "ещё 420 строк"]] },
+          after: { columns: ["user_id", "monetary"], rows: [[3878, 70720], [1059, 69880], [1322, 62570], ["…", "ещё 81 строка"]] },
+          note: "Самый крупный покупатель Android потратил 70 720 рублей — в 28 раз больше, чем 1019."
+        },
+        task: "<p><strong>Задание.</strong> Отберите верхние 20% покупателей по <code>monetary</code> в переменную <code>top</code> и напечатайте <code>топ-20%: 84 из 423 покупателей, 53.8% выручки</code> (числа — ваши).</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+k = int(len(rfm) * 0.2)
+top = ...
+`,
+        expected: { stdout: "топ-20%: 84 из 423 покупателей, 53.8% выручки" },
+        hint: "<code>top = rfm.nlargest(k, \"monetary\")</code>, доля — <code>top[\"monetary\"].sum() / rfm[\"monetary\"].sum() * 100</code>.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+k = int(len(rfm) * 0.2)
+top = rfm.nlargest(k, "monetary")
+share = top["monetary"].sum() / rfm["monetary"].sum() * 100
+print(f"топ-20%: {len(top)} из {len(rfm)} покупателей, {share:.1f}% выручки")
+`
+      },
+      {
+        title: "Оценка M через pd.qcut",
+        body: `
+<p>Оценка от 1 до 5 — это номер квинтиля: покупателей сортируют по тратам и режут на пять равных по численности групп. Так делает <code>pd.qcut</code>:</p>
+<pre><code>rfm["M"] = pd.qcut(rfm["monetary"], 5, labels=[1, 2, 3, 4, 5]).astype(int)</code></pre>
+<p><code>labels</code> — что написать в каждой из пяти групп, от меньших значений к большим. <code>.astype(int)</code> превращает метки в обычные числа, чтобы их можно было сравнивать.</p>
+<p>Группы равны только примерно. Граница первого квинтиля — 1990 рублей, а ровно 1990 потратили 14 человек; граница входит в нижнюю группу, и в M=1 попадает 94 человека вместо 85.</p>`,
+        ba: {
+          before: { columns: ["user_id", "monetary"], rows: [[1019, 2490], [1024, 3490], [1028, 29320]] },
+          after: { columns: ["user_id", "monetary", "M"], rows: [[1019, 2490, 2], [1024, 3490, 2], [1028, 29320, 5]] },
+          hl: ["M"],
+          note: "29 320 рублей — выше границы пятого квинтиля 12 986."
+        },
+        task: "<p><strong>Задание.</strong> Добавьте столбец <code>M</code> и напечатайте, сколько покупателей получило каждую оценку: <code>print(rfm[\"M\"].value_counts().sort_index().tolist())</code>.</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+`,
+        expected: { stdout: "[94, 75, 85, 84, 85]" },
+        hint: "Строка из теории и строка печати из задания — всего две строки.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+rfm["M"] = pd.qcut(rfm["monetary"], 5, labels=[1, 2, 3, 4, 5]).astype(int)
+print(rfm["M"].value_counts().sort_index().tolist())
+`
+      },
+      {
+        title: "Оценка R: шкала наоборот",
+        body: `
+<p>У recency меньше — лучше: покупатель, который заходил вчера, ценнее того, кто пропал полгода назад. Поэтому метки идут в обратном порядке, и самому свежему квинтилю достаётся 5:</p>
+<pre><code>rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)</code></pre>
+<p>Проверить, что шкала не перевёрнута, удобно таблицей: у каждой оценки самая маленькая и самая большая давность и число людей. У R=5 давности должны быть самыми маленькими.</p>`,
+        ba: {
+          before: { columns: ["user_id", "recency"], rows: [[1019, 266], [1028, 222], [3878, 79]] },
+          after: { columns: ["user_id", "recency", "R"], rows: [[1019, 266, 1], [1028, 222, 1], [3878, 79, 5]] },
+          hl: ["R"],
+          note: "Самые давние покупатели получают 1, самые свежие — 5."
+        },
+        task: "<p><strong>Задание.</strong> Добавьте столбец <code>R</code> и напечатайте <code>print(rfm.groupby(\"R\")[\"recency\"].agg([\"min\", \"max\", \"size\"]))</code>.</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[1, 2, 3, 4, 5]).astype(int)
+print(rfm.groupby("R")["recency"].agg(["min", "max", "size"]))
+`,
+        expected: { stdout: "   min  max  size\nR                \n1  214  266    85\n2  170  212    84\n3  136  169    85\n4  101  135    82\n5    0  100    87" },
+        hint: "В заготовке метки идут в прямом порядке, и у R=5 оказываются самые давние. Поменяйте <code>labels</code> на <code>[5, 4, 3, 2, 1]</code>.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)
+print(rfm.groupby("R")["recency"].agg(["min", "max", "size"]))
+`
+      },
+      {
+        title: "Оценка F: когда qcut падает",
+        body: `
+<p>С частотой так не выйдет. 210 из 423 покупателей Android сделали ровно один заказ, и границы квинтилей вместе с краями выходят 1, 1, 1, 2, 3, 19 — три первые одинаковые. <code>pd.qcut(rfm["frequency"], 5, …)</code> падает с ошибкой <code>ValueError: Bin edges must be unique</code>.</p>
+<p>Обход — резать не сами значения, а их ранги: <code>rfm["frequency"].rank(method="first")</code> раздаёт места 1, 2, 3, … без повторов, одинаковым частотам — по порядку строк. Ранги уникальны, и группы выходят равными.</p>
+<pre><code>rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)</code></pre>
+<p>Цена обхода: одинаковые частоты попадают в разные оценки. Разовые покупатели получают F=1, F=2 и даже F=3 — в зависимости от того, в каком порядке стояли строки.</p>`,
+        ba: {
+          before: { columns: ["frequency", "покупателей"], rows: [[1, 210], [2, 102], [3, 43], ["4 и больше", 68]] },
+          after: { columns: ["F", "покупателей", "frequency"], rows: [[1, 85, "1"], [2, 84, "1"], [3, 85, "1–2"], [4, 84, "2–3"], [5, 85, "3–19"]] },
+          hl: ["F"],
+          note: "Пять равных групп по 84–85 человек, но частоты на границах перемешаны."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Замените строку заготовки, которая падает, на вариант с <code>.rank(method="first")</code>.</li>
+<li>Напечатайте <code>rfm["F"].value_counts().sort_index().tolist()</code>.</li>
+<li>Напечатайте, какие оценки F получили разовые покупатели: <code>sorted(rfm.loc[rfm["frequency"] == 1, "F"].unique().tolist())</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Получите оценку F без ошибки и посмотрите, куда попали разовые покупатели.</p>`,
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+rfm["F"] = pd.qcut(rfm["frequency"], 5, labels=[1, 2, 3, 4, 5]).astype(int)
+`,
+        expected: { stdout: "[85, 84, 85, 84, 85]\n[1, 2, 3]" },
+        hint: "Внутрь <code>pd.qcut(…)</code> первым аргументом передайте <code>rfm[\"frequency\"].rank(method=\"first\")</code> вместо <code>rfm[\"frequency\"]</code>.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+
+rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)
+print(rfm["F"].value_counts().sort_index().tolist())
+print(sorted(rfm.loc[rfm["frequency"] == 1, "F"].unique().tolist()))
+`
+      },
+      {
+        title: "Сегмент для каждой строки: apply(axis=1)",
+        body: `
+<p>Правила сегментов из теории смотрят сразу на два столбца — R и F. Такую функцию пишут для одной строки таблицы: в <code>row</code> приходит покупатель, <code>row["R"]</code> и <code>row["F"]</code> — его оценки.</p>
+<p><code>rfm.apply(segment, axis=1)</code> вызывает функцию для каждой строки и собирает ответы в столбец. <code>axis=1</code> значит «по строкам»; без него функция получила бы целые столбцы.</p>
+<p>Порядок проверок важен: функция возвращает первый подошедший сегмент. Покупатель с R=5 и F=5 подходит и под «чемпионов», и под «лояльных», но получает «чемпионов», потому что эта проверка стоит выше.</p>`,
+        ba: {
+          before: { columns: ["user_id", "R", "F"], rows: [[1019, 1, 1], [1028, 1, 5], [1030, 1, 3]] },
+          after: { columns: ["user_id", "R", "F", "segment"], rows: [[1019, 1, 1, "спящие"], [1028, 1, 5, "уходят ценные"], [1030, 1, 3, "прочие"]] },
+          hl: ["segment"],
+          note: "Покупатель 1028 сделал 8 заказов, но последний — 222 дня назад."
+        },
+        task: "<p><strong>Задание.</strong> Создайте столбец <code>segment</code> через <code>apply</code> и напечатайте для покупателей 1019, 1028 и 1030 строки вида <code>1028 R=1 F=5 уходят ценные</code>.</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)
+rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)
+
+def segment(row):
+    R, F = row["R"], row["F"]
+    if R >= 4 and F >= 4:
+        return "чемпионы"
+    if R >= 3 and F >= 3:
+        return "лояльные"
+    if R >= 4 and F <= 2:
+        return "перспективные"
+    if R <= 2 and F >= 4:
+        return "уходят ценные"
+    if R <= 2 and F <= 2:
+        return "спящие"
+    return "прочие"
+
+`,
+        expected: { stdout: "1019 R=1 F=1 спящие\n1028 R=1 F=5 уходят ценные\n1030 R=1 F=3 прочие" },
+        hint: "<code>rfm[\"segment\"] = rfm.apply(segment, axis=1)</code>, затем цикл <code>for uid in [1019, 1028, 1030]:</code> и в нём <code>r = rfm.loc[uid]</code> и <code>print(f\"{uid} R={r['R']} F={r['F']} {r['segment']}\")</code>.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)
+rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)
+
+def segment(row):
+    R, F = row["R"], row["F"]
+    if R >= 4 and F >= 4:
+        return "чемпионы"
+    if R >= 3 and F >= 3:
+        return "лояльные"
+    if R >= 4 and F <= 2:
+        return "перспективные"
+    if R <= 2 and F >= 4:
+        return "уходят ценные"
+    if R <= 2 and F <= 2:
+        return "спящие"
+    return "прочие"
+
+rfm["segment"] = rfm.apply(segment, axis=1)
+for uid in [1019, 1028, 1030]:
+    r = rfm.loc[uid]
+    print(f"{uid} R={r['R']} F={r['F']} {r['segment']}")
+`
+      },
+      {
+        title: "Таблица сегментов",
+        body: `
+<p>Сегмент нужен, чтобы решить, на кого тратить усилия, а для этого у каждого нужны размер и деньги. Именованная агрегация по <code>segment</code> даёт их одной таблицей:</p>
+<pre><code>rep = rfm.groupby("segment").agg(
+    users=("monetary", "size"),
+    revenue=("monetary", "sum"),
+).sort_values("revenue", ascending=False)</code></pre>
+<p><code>"size"</code> считает строки в группе, то есть людей. Доли считают от всех покупателей и от всей выручки разреза — 423 человека и 3 551 620 рублей.</p>`,
+        ba: {
+          before: { columns: ["user_id", "monetary", "segment"], rows: [[1019, 2490, "спящие"], [1024, 3490, "спящие"], [1028, 29320, "уходят ценные"]] },
+          after: { columns: ["segment", "users", "revenue"], rows: [["чемпионы", 93, 1419500], ["лояльные", 85, 668380], ["уходят ценные", 39, 591160], ["…", "ещё 3 сегмента", "…"]] },
+          hl: ["users", "revenue"],
+          note: "39 покупателей «уходят ценные» принесли 591 160 рублей, 85 «лояльных» — 668 380."
+        },
+        task: "<p><strong>Задание.</strong> Соберите <code>rep</code> и напечатайте по строке на сегмент: <code>чемпионы 93 22.0% 1419500 40.0%</code> — имя, людей, их доля, выручка, её доля.</p>",
+        starter: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)
+rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)
+
+def segment(row):
+    R, F = row["R"], row["F"]
+    if R >= 4 and F >= 4:
+        return "чемпионы"
+    if R >= 3 and F >= 3:
+        return "лояльные"
+    if R >= 4 and F <= 2:
+        return "перспективные"
+    if R <= 2 and F >= 4:
+        return "уходят ценные"
+    if R <= 2 and F <= 2:
+        return "спящие"
+    return "прочие"
+
+rfm["segment"] = rfm.apply(segment, axis=1)
+n, total = len(rfm), rfm["monetary"].sum()
+
+`,
+        expected: { stdout: "чемпионы 93 22.0% 1419500 40.0%\nлояльные 85 20.1% 668380 18.8%\nуходят ценные 39 9.2% 591160 16.6%\nпрочие 82 19.4% 382220 10.8%\nспящие 93 22.0% 366930 10.3%\nперспективные 31 7.3% 123430 3.5%" },
+        hint: "После <code>rep = …</code> — цикл <code>for name, s in rep.iterrows():</code> и в нём <code>print(f\"{name} {s['users']:.0f} {s['users'] / n * 100:.1f}% {s['revenue']:.0f} {s['revenue'] / total * 100:.1f}%\")</code>.",
+        solution: `android = app_users.loc[app_users["platform"] == "android", "user_id"]
+ao = app_orders[app_orders["user_id"].isin(android)]
+rfm = ao.groupby("user_id").agg(
+    recency=("order_date", lambda s: (LAST_DAY - s.max()).days),
+    frequency=("order_date", "count"),
+    monetary=("revenue", "sum"),
+)
+rfm["R"] = pd.qcut(rfm["recency"], 5, labels=[5, 4, 3, 2, 1]).astype(int)
+rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5,
+                   labels=[1, 2, 3, 4, 5]).astype(int)
+
+def segment(row):
+    R, F = row["R"], row["F"]
+    if R >= 4 and F >= 4:
+        return "чемпионы"
+    if R >= 3 and F >= 3:
+        return "лояльные"
+    if R >= 4 and F <= 2:
+        return "перспективные"
+    if R <= 2 and F >= 4:
+        return "уходят ценные"
+    if R <= 2 and F <= 2:
+        return "спящие"
+    return "прочие"
+
+rfm["segment"] = rfm.apply(segment, axis=1)
+n, total = len(rfm), rfm["monetary"].sum()
+
+rep = rfm.groupby("segment").agg(
+    users=("monetary", "size"),
+    revenue=("monetary", "sum"),
+).sort_values("revenue", ascending=False)
+for name, s in rep.iterrows():
+    print(f"{name} {s['users']:.0f} {s['users'] / n * 100:.1f}% "
+          f"{s['revenue']:.0f} {s['revenue'] / total * 100:.1f}%")
+`
+      }
+    ]
+  },
 
   starter: `# RFM-сегментация базы покупателей
 
@@ -2920,7 +3294,8 @@ print(f3.value_counts().sort_index().tolist())`,
       body: `<p>Попытка разбить частоту на квинтили падает:</p>
 <pre><code>pd.qcut(rfm["frequency"], 5, labels=[1,2,3,4,5])
 ValueError: Bin edges must be unique</code></pre>
-<p>Объясните причину, посмотрев на распределение частоты. Затем реализуйте три способа обойти проблему и сравните, какие группы получаются: через <code>rank</code>, через <code>duplicates="drop"</code> и через ручные границы <code>pd.cut</code>.</p>`,
+<p>Объясните причину, посмотрев на распределение частоты. Затем реализуйте три способа обойти проблему и сравните, какие группы получаются: через <code>rank</code>, через <code>duplicates="drop"</code> и через ручные границы <code>pd.cut</code>.</p>
+<p><strong>Пригодится.</strong> <code>pd.cut(x, bins=[0, 1, 2, 3, 5, 999], labels=[1, 2, 3, 4, 5])</code> раскладывает значения по границам, заданным вручную: в группу <code>(1, 2]</code> левая граница не входит, правая входит. <code>pd.qcut(x, 5, duplicates="drop")</code> выбрасывает совпавшие границы — групп получается меньше пяти.</p>`,
       solution: `Причина: половина покупателей сделала ровно один заказ.
 
 print(rfm["frequency"].value_counts().sort_index().head())
@@ -2987,7 +3362,8 @@ print((champ / size * 100).sort_values(ascending=False).round(1))`,
   <li>Доля чемпионов <strong>среди покупателей</strong> каждого канала.</li>
   <li>Доля чемпионов <strong>среди всех установивших</strong> из каждого канала.</li>
 </ol>
-<p>Оба ответа посчитайте, оба назовите, объясните расхождение и скажите, какой из них нужен маркетингу для решения о бюджете.</p>`,
+<p>Оба ответа посчитайте, оба назовите, объясните расхождение и скажите, какой из них нужен маркетингу для решения о бюджете.</p>
+<p><strong>Пригодится.</strong> <code>rfm.join(app_users.set_index("user_id")["channel"])</code> приклеивает канал к покупателю по индексу <code>user_id</code>. <code>pd.crosstab(a, b)</code> — таблица частот: строки — значения <code>a</code>, столбцы — значения <code>b</code>, в клетке число строк; <code>normalize="index"</code> делит каждую строку на её сумму.</p>`,
       solution: `Разрез 1: доля чемпионов среди покупателей канала.
 
 j = rfm.join(app_users.set_index("user_id")["channel"])
@@ -3051,7 +3427,8 @@ print("медиана размера клетки:", int(full.median()))`,
   <li>то же для полной матрицы R×F×M;</li>
   <li>медианный размер непустой клетки R×F×M.</li>
 </ul>
-<p>Сделайте вывод о том, при какой базе имело бы смысл работать с полной матрицей.</p>`,
+<p>Сделайте вывод о том, при какой базе имело бы смысл работать с полной матрицей.</p>
+<p><strong>Пригодится.</strong> <code>rfm.pivot_table(index="R", columns="F", values="monetary", aggfunc="size")</code> — сводная таблица: R в строках, F в столбцах, в клетке число покупателей. Пустые клетки там <code>NaN</code>, их заменяет <code>.fillna(0)</code>. <code>rfm.groupby(["R", "F", "M"]).size()</code> даёт размер каждой непустой клетки R×F×M.</p>`,
       solution: `m = rfm.pivot_table(index="R", columns="F",
                     values="monetary", aggfunc="size").fillna(0)
 print(m.sort_index(ascending=False).astype(int))
@@ -3105,7 +3482,8 @@ k80 = int((cum < 0.8).sum()) + 1
 print(f"80% выручки дают {k80} покупателей ({k80/n*100:.1f}%)")
 print(f"это {k80/len(app_users)*100:.1f}% от всех установивших")`,
       body: `<p>«20 процентов клиентов дают 80 процентов выручки» — фраза, которую произносят на каждом втором совещании. Проверьте её на данных.</p>
-<p>Постройте накопленную долю выручки по покупателям, отсортированным по убыванию трат. Ответьте: какую долю выручки дают верхние 10, 20, 30 и 50 процентов покупателей, и сколько покупателей нужно, чтобы набрать 80 процентов выручки. Отдельно посчитайте, какую долю эти люди составляют от <em>всех</em> 4000 установивших приложение.</p>`,
+<p>Постройте накопленную долю выручки по покупателям, отсортированным по убыванию трат. Ответьте: какую долю выручки дают верхние 10, 20, 30 и 50 процентов покупателей, и сколько покупателей нужно, чтобы набрать 80 процентов выручки. Отдельно посчитайте, какую долю эти люди составляют от <em>всех</em> 4000 установивших приложение.</p>
+<p><strong>Пригодится.</strong> <code>s.cumsum()</code> — накопленная сумма: в каждой позиции сумма всех значений до неё включительно. Поделённая на <code>s.sum()</code>, она становится накопленной долей. <code>cum.iloc[k - 1]</code> — значение на <code>k</code>-м месте по счёту, <code>(cum &lt; 0.8).sum()</code> — сколько значений меньше 0,8.</p>`,
       solution: `s = rfm["monetary"].sort_values(ascending=False)
 cum = s.cumsum() / s.sum()
 n = len(s)
