@@ -23978,9 +23978,10 @@ R2 не ловит. На выборке в 4000 наблюдений его шт
 window.CONTENT.m5l3 = {
   intro: "Модель, которая отвечает «да» или «нет», почти всегда хуже модели, которая отвечает «с вероятностью 0,34». Порог — решение бизнеса, а не свойство модели.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: логит, отношение шансов, ROC и AUC" },
+    { m: "30 мин", w: "Практикум: восемь шагов — модель покупки на days7 и платформе" },
     { m: "30 мин", w: "Задача: модель конверсии, пороги и децили" },
     { m: "40 мин", w: "Тренажёр: 5 разборов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -24005,7 +24006,7 @@ window.CONTENT.m5l3 = {
 <p>Сумму квадратов здесь не минимизируют. Вместо неё максимизируют правдоподобие — вероятность увидеть ровно те данные, которые наблюдались. На практике минимизируют её отрицательный логарифм, он же logloss:</p>
 <p class="m">\\[ L = -\\frac{1}{n}\\sum_i \\big[ y_i \\ln p_i + (1-y_i)\\ln(1-p_i) \\big] \\]</p>
 <p>Смысл прост: за уверенный правильный ответ штраф почти нулевой, за уверенный неправильный — огромный. Модель, поставившая вероятность 0,99 там, где ответ 0, получает штраф около 4,6; поставившая 0,5 — около 0,7. Logloss наказывает не за ошибку, а за самоуверенность.</p>
-<p>Явной формулы для коэффициентов нет, их подбирают численно. В решении используется метод Ньютона — тот же принцип, что у градиентного спуска из урока 5.5, только шаг подбирается автоматически по кривизне, поэтому хватает двух десятков итераций вместо десятков тысяч.</p>
+<p>Явной формулы для коэффициентов нет, их подбирают численно. В решении используется метод Ньютона: коэффициенты поправляют шагами, и размер шага подбирается автоматически по кривизне функции, поэтому хватает двух десятков итераций. Подбору по шагам — градиентному спуску — посвящён отдельный урок 5.5.</p>
 
 <h3>Как читать коэффициент</h3>
 <p>Коэффициент — это изменение <em>логарифма шансов</em>, а его экспонента — <strong>отношение шансов</strong> (odds ratio). Именно экспоненту и приводят в отчётах.</p>
@@ -24090,6 +24091,485 @@ window.CONTENT.m5l3 = {
   packages: ["pandas"],
   prelude: window.SH.mlPrelude,
 
+  /* Практикум — восемь шагов на модели попроще: converted через days7
+     и платформу P, без канала (основная задача — days7, канал и
+     платформа). AUC — сначала на игрушечных примерах; вместо децилей —
+     группы по days7 (у модели всего 21 разный прогноз, qcut на 10 частей
+     по нему падает). Числа основной задачи здесь не появляются.
+     Решения: node инструменты/checksteps.js m5l3 */
+  practicum: {
+    intro: "Восемь коротких шагов перед основной задачей. Модель проще, чем в задаче: вероятность покупки <code>yb</code> объясняется через <code>days7</code> и платформу <code>P</code>, без канала. Шаги идут в порядке отчёта: сигмоида, подбор коэффициентов, отношения шансов, logloss, порог, AUC и группы с lift.",
+    schema: window.SH.mlSchema,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.mlPrelude,
+    done: "Все восемь шагов решены. Основная задача — тот же отчёт, но в модели ещё и канал (матрица <code>D</code>, база organic): девять коэффициентов, четыре порога в таблице и децили вместо групп по <code>days7</code>. Функции <code>sigmoid</code>, <code>fit_logit</code> и <code>auc_rank</code> из шагов 1, 2 и 7 нужны как есть. Децили строят из вероятностей: <code>pd.qcut(p, 10, labels=False)</code> даёт номера от 0 (низшие) до 9 (высшие) — у модели с каналом разных вероятностей достаточно, чтобы границы не совпали. Размеры децилей всё равно разные, но <code>qcut</code> не падает. Верхний дециль — номер 9, поэтому в печати он «дециль 1»: номер для печати — <code>10 - d</code>. Три верхних удобно взять циклом <code>for d in (9, 8, 7):</code> и строкой таблицы <code>r = t.loc[d]</code>. Ширину колонок в таблице порогов проверка не сверяет — важны числа и их порядок.",
+    steps: [
+      {
+        title: "Сигмоида",
+        body: `
+<p>Линейная часть модели <code>z = b0 + b1·x1 + …</code> может быть любым числом, а вероятность — только от 0 до 1. Сигмоида переводит одно в другое:</p>
+<pre><code>def sigmoid(z):
+    return 1 / (1 + np.exp(-z))</code></pre>
+<p><code>np.exp(a)</code> — число e в степени, поэлементно для массива. При <code>z = 0</code> сигмоида даёт ровно 0,5, при больших положительных <code>z</code> — почти 1, при больших отрицательных — почти 0.</p>`,
+        ba: {
+          before: { columns: ["z"], rows: [["-2.0"], ["0.0"], ["2.0"]] },
+          after: { columns: ["z", "sigmoid(z)"], rows: [["-2.0", "0.119"], ["0.0", "0.5"], ["2.0", "0.881"]] },
+          hl: ["sigmoid(z)"],
+          note: "0,119 + 0,881 = 1: сигмоида симметрична вокруг нуля."
+        },
+        task: "<p><strong>Задание.</strong> Допишите <code>sigmoid</code> и напечатайте <code>sigmoid(np.array([-2.0, 0.0, 2.0])).round(3).tolist()</code>.</p>",
+        starter: `def sigmoid(z):
+    return z
+
+print(sigmoid(np.array([-2.0, 0.0, 2.0])).round(3).tolist())
+`,
+        expected: { stdout: "[0.119, 0.5, 0.881]" },
+        hint: "<code>return 1 / (1 + np.exp(-z))</code>. <code>.round(3)</code> округляет каждый элемент массива.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+print(sigmoid(np.array([-2.0, 0.0, 2.0])).round(3).tolist())
+`
+      },
+      {
+        title: "Подбор коэффициентов методом Ньютона",
+        body: `
+<p>Формулы для коэффициентов, как у МНК, здесь нет. Их подбирают шагами: начинают с нулей и на каждом шаге поправляют. В методе Ньютона поправка — решение системы, похожей на нормальное уравнение из урока 5.1, только каждое наблюдение входит с весом <code>p·(1 − p)</code>.</p>
+<ul>
+  <li><code>np.zeros(k)</code> — массив из <code>k</code> нулей: стартовые коэффициенты.</li>
+  <li><code>W = p * (1 - p)</code> — вес каждого наблюдения.</li>
+  <li><code>g = X.T @ (p - y)</code> — градиент: куда и насколько ошибаются прогнозы.</li>
+  <li><code>H = X.T @ (X * W[:, None])</code> — та же <code>X.T @ X</code>, но строки умножены на веса. <code>W[:, None]</code> превращает ряд весов в столбец — форма <code>(4000,)</code> становится <code>(4000, 1)</code>, — чтобы каждая строка <code>X</code> умножилась на свой вес.</li>
+  <li><code>np.eye(k)</code> — единичная матрица, единицы на диагонали. Крошечная добавка <code>1e-9 * np.eye(k)</code> страхует <code>solve</code> от вырожденной матрицы — её берут как есть.</li>
+</ul>
+<p><code>w -= …</code> — то же, что <code>w = w - …</code>. Двадцать пять шагов хватает: дальше коэффициенты не меняются.</p>`,
+        ba: {
+          before: { columns: ["шаг", "свободный", "days7", "ios", "web"], rows: [[0, "0.000", "0.000", "0.000", "0.000"]] },
+          after: { columns: ["шаг", "свободный", "days7", "ios", "web"], rows: [[25, "-3.626", "0.650", "0.121", "0.275"]] },
+          hl: ["свободный", "days7", "ios", "web"],
+          note: "На старте все вероятности 0,5; через 25 шагов коэффициенты сошлись."
+        },
+        task: "<p><strong>Задание.</strong> Допишите в цикле три строки — <code>W</code>, <code>H</code> и <code>g</code> — и запустите: напечатается <code>свободный=-3.626 days7=0.650 ios=0.121 web=0.275</code>.</p>",
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        # W = веса, H = взвешенная X.T @ X, g = градиент
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+print(f"свободный={w[0]:.3f} days7={w[1]:.3f} ios={w[2]:.3f} web={w[3]:.3f}")
+`,
+        expected: { stdout: "свободный=-3.626 days7=0.650 ios=0.121 web=0.275" },
+        hint: "Вместо комментария: <code>W = p * (1 - p)</code>, <code>H = X.T @ (X * W[:, None])</code>, <code>g = X.T @ (p - y)</code> — с тем же отступом, что строка <code>p = …</code>.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+print(f"свободный={w[0]:.3f} days7={w[1]:.3f} ios={w[2]:.3f} web={w[3]:.3f}")
+`
+      },
+      {
+        title: "Отношение шансов и вероятность",
+        body: `
+<p>Коэффициент — прирост логарифма шансов. Его экспонента <code>np.exp(w)</code> — отношение шансов: во сколько раз растут шансы <code>p / (1 − p)</code>, когда признак растёт на единицу.</p>
+<p>Вероятность при этом растёт по-разному. Возьмём пользователя android (оба столбца платформы — нули): его вероятность — <code>sigmoid(w[0] + w[1] * d)</code> при <code>d</code> днях активности. Переход с 1 дня на 2 и с 5 на 6 умножает шансы одинаково, а вероятность меняется на разное число пунктов.</p>`,
+        ba: {
+          before: { columns: ["признак", "коэффициент"], rows: [["days7", "0.650"], ["ios", "0.121"], ["web", "0.275"]] },
+          after: { columns: ["признак", "отношение шансов"], rows: [["days7", "1.916"], ["ios", "1.129"], ["web", "1.316"]] },
+          hl: ["отношение шансов"],
+          note: "Каждый день активности умножает шансы покупки на 1,9."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Напечатайте <code>отношение шансов days7=1.916 ios=1.129 web=1.316</code>.</li>
+<li>Посчитайте вероятность android при 1, 2, 5 и 6 днях и напечатайте <code>1->2 дня: 4.9% -> 8.9%</code> и <code>5->6 дней: 40.8% -> 56.9%</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Переведите коэффициенты в отношения шансов и покажите, что прирост вероятности зависит от исходной.</p>`,
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+odds = np.exp(w)
+`,
+        expected: { stdout: "отношение шансов days7=1.916 ios=1.129 web=1.316\n1->2 дня: 4.9% -> 8.9%\n5->6 дней: 40.8% -> 56.9%" },
+        hint: "<code>pr = [sigmoid(w[0] + w[1] * d) * 100 for d in (1, 2, 5, 6)]</code>, затем <code>print(f\"1->2 дня: {pr[0]:.1f}% -> {pr[1]:.1f}%\")</code> и так же для 5 и 6.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+odds = np.exp(w)
+print(f"отношение шансов days7={odds[1]:.3f} ios={odds[2]:.3f} web={odds[3]:.3f}")
+pr = [sigmoid(w[0] + w[1] * d) * 100 for d in (1, 2, 5, 6)]
+print(f"1->2 дня: {pr[0]:.1f}% -> {pr[1]:.1f}%")
+print(f"5->6 дней: {pr[2]:.1f}% -> {pr[3]:.1f}%")
+`
+      },
+      {
+        title: "logloss и модель без признаков",
+        body: `
+<p>Качество подгонки логистической модели меряют logloss — средним штрафом за прогнозы. <code>np.log</code> — натуральный логарифм, поэлементно:</p>
+<pre><code>logloss = -(yb * np.log(p) + (1 - yb) * np.log(1 - p)).mean()</code></pre>
+<p>У купивших (<code>yb = 1</code>) работает первое слагаемое, у остальных — второе. Само число мало что говорит, его сравнивают с моделью без признаков: она всем ставит одну вероятность — долю купивших в базе. Такой массив даёт <code>np.full(n, v)</code> — <code>n</code> одинаковых значений <code>v</code>.</p>`,
+        ba: {
+          before: { columns: ["модель", "logloss"], rows: [["всем одна вероятность", "0.5275"]] },
+          after: { columns: ["модель", "logloss"], rows: [["всем одна вероятность", "0.5275"], ["days7 + платформа", "0.3862"]] },
+          hl: ["logloss"],
+          note: "Меньше — лучше: признаки снизили штраф с 0,5275 до 0,3862, примерно на 27%."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте logloss модели и модели без признаков (<code>p0 = np.full(len(yb), yb.mean())</code> — массив, где всем одна и та же вероятность) и напечатайте <code>logloss: модель 0.3862, без признаков 0.5275</code>.</p>",
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+def logloss(p, y):
+    return ...
+`,
+        expected: { stdout: "logloss: модель 0.3862, без признаков 0.5275" },
+        hint: "<code>return -(y * np.log(p) + (1 - y) * np.log(1 - p)).mean()</code>; затем <code>p0 = np.full(len(yb), yb.mean())</code> и <code>print(f\"logloss: модель {logloss(p, yb):.4f}, без признаков {logloss(p0, yb):.4f}\")</code>.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+def logloss(p, y):
+    return -(y * np.log(p) + (1 - y) * np.log(1 - p)).mean()
+
+p0 = np.full(len(yb), yb.mean())
+print(f"logloss: модель {logloss(p, yb):.4f}, без признаков {logloss(p0, yb):.4f}")
+`
+      },
+      {
+        title: "Порог и матрица ошибок",
+        body: `
+<p>Порог превращает вероятность в решение: <code>pred = p &gt;= t</code> — массив True/False «модель говорит купит». Сравнивая его с фактом <code>yb</code>, получают четыре клетки матрицы ошибок. Условия соединяют через <code>&amp;</code>, как в фильтрах pandas:</p>
+<pre><code>tp = int((pred &amp; (yb == 1)).sum())    # сказали «купит», купил
+fp = int((pred &amp; (yb == 0)).sum())    # сказали «купит», не купил</code></pre>
+<p><code>&amp;</code> и <code>~</code> работают на массивах numpy так же, как на масках pandas; скобки вокруг <code>(yb == 1)</code> обязательны. <code>~pred</code> — «модель говорит не купит». Точность <code>tp / (tp + fp)</code> — доля купивших среди выбранных, полнота <code>tp / (tp + fn)</code> — доля пойманных среди всех купивших. F1 — их гармоническое среднее: <code>2 * prec * rec / (prec + rec)</code>.</p>`,
+        ba: {
+          before: { columns: ["порог", "точность", "полнота"], rows: [["0.50", "0.600", "0.457"]] },
+          after: { columns: ["порог", "точность", "полнота"], rows: [["0.50", "0.600", "0.457"], ["0.30", "0.551", "0.649"]] },
+          hl: ["полнота"],
+          note: "Порог ниже — поймали больше покупателей, но и ошиблись чаще."
+        },
+        task: "<p><strong>Задание.</strong> Для порогов 0.50 и 0.30 напечатайте строки <code>0.50 TP=403 FP=269 FN=479 TN=2849 точность=0.600 полнота=0.457 F1=0.519</code>.</p>",
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+for t in (0.50, 0.30):
+    pred = p >= t
+`,
+        expected: { stdout: "0.50 TP=403 FP=269 FN=479 TN=2849 точность=0.600 полнота=0.457 F1=0.519\n0.30 TP=572 FP=466 FN=310 TN=2652 точность=0.551 полнота=0.649 F1=0.596" },
+        hint: "<code>fn</code> и <code>tn</code> — с <code>~pred</code> вместо <code>pred</code>. Затем <code>prec, rec = tp / (tp + fp), tp / (tp + fn)</code>, <code>f1 = 2 * prec * rec / (prec + rec)</code> и <code>print(f\"{t:.2f} TP={tp} FP={fp} FN={fn} TN={tn} точность={prec:.3f} полнота={rec:.3f} F1={f1:.3f}\")</code>.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+for t in (0.50, 0.30):
+    pred = p >= t
+    tp = int((pred & (yb == 1)).sum())
+    fp = int((pred & (yb == 0)).sum())
+    fn = int((~pred & (yb == 1)).sum())
+    tn = int((~pred & (yb == 0)).sum())
+    prec, rec = tp / (tp + fp), tp / (tp + fn)
+    f1 = 2 * prec * rec / (prec + rec)
+    print(f"{t:.2f} TP={tp} FP={fp} FN={fn} TN={tn} "
+          f"точность={prec:.3f} полнота={rec:.3f} F1={f1:.3f}")
+`
+      },
+      {
+        title: "AUC через ранги",
+        body: `
+<p>AUC — доля пар «покупатель, непокупатель», в которых покупатель получил оценку выше. Перебирать все пары долго; то же число дают ранги: место каждой оценки в общем порядке от 1 до n.</p>
+<ul>
+  <li><code>order = np.argsort(score)</code> — номера элементов в порядке возрастания оценки.</li>
+  <li><code>ranks = np.empty(n)</code> — массив под ранги, пока с мусором внутри. <code>np.arange(1, n + 1)</code> — числа 1, 2, …, n.</li>
+  <li><code>ranks[order] = np.arange(1, n + 1)</code> — самому маленькому ранг 1, следующему 2 и так далее. Для оценок ниже <code>order</code> = <code>[0, 2, 4, 1, 3]</code>: элемент 0 получает ранг 1, элемент 2 — ранг 2, элемент 4 — ранг 3.</li>
+</ul>
+<p>Дальше формула из урока 3.3: <code>(сумма рангов покупателей − npos·(npos + 1)/2) / (npos · nneg)</code>.</p>`,
+        ba: {
+          before: { columns: ["оценка", "купил"], rows: [["0.2", 0], ["0.7", 1], ["0.4", 1], ["0.9", 1], ["0.5", 0]] },
+          after: { columns: ["оценка", "купил", "ранг"], rows: [["0.2", 0, 1], ["0.7", 1, 4], ["0.4", 1, 2], ["0.9", 1, 5], ["0.5", 0, 3]] },
+          hl: ["ранг"],
+          note: "Ранги покупателей 4 + 2 + 5 = 11; (11 − 6) / (3 · 2) = 5/6: в пяти парах из шести покупатель выше."
+        },
+        task: "<p><strong>Задание.</strong> Замените комментарий в функции двумя строками, которые строят <code>ranks</code>, и напечатайте <code>AUC = 0.8333</code> для пяти оценок из заготовки.</p>",
+        starter: `def auc_simple(score, y):
+    order = np.argsort(score)
+    # ranks = массив рангов: самой маленькой оценке 1, следующей 2, …
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+score = np.array([0.2, 0.7, 0.4, 0.9, 0.5])
+y5 = np.array([0, 1, 1, 1, 0])
+print(f"AUC = {auc_simple(score, y5):.4f}")
+`,
+        expected: { stdout: "AUC = 0.8333" },
+        hint: "Две строки: <code>ranks = np.empty(len(score))</code> и <code>ranks[order] = np.arange(1, len(score) + 1)</code>.",
+        solution: `def auc_simple(score, y):
+    order = np.argsort(score)
+    ranks = np.empty(len(score))
+    ranks[order] = np.arange(1, len(score) + 1)
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+score = np.array([0.2, 0.7, 0.4, 0.9, 0.5])
+y5 = np.array([0, 1, 1, 1, 0])
+print(f"AUC = {auc_simple(score, y5):.4f}")
+`
+      },
+      {
+        title: "Одинаковые оценки: средний ранг",
+        body: `
+<p>У нашей модели всего 21 разная вероятность на 4000 человек: оценки массово совпадают. Простые ранги раздают одинаковым оценкам места по порядку строк, и AUC начинает зависеть от того, кто в таблице стоит выше. Правильно — дать каждой группе одинаковых оценок средний ранг, как в критерии Манна-Уитни.</p>
+<p>Цикл <code>while</code> идёт по отсортированным оценкам и находит конец каждой группы одинаковых: пока следующая оценка равна текущей, <code>j</code> сдвигается вправо. Группе с <code>i</code> по <code>j</code> достаётся средний ранг <code>(i + j) / 2 + 1</code>. <code>kind="mergesort"</code> в <code>argsort</code> сохраняет исходный порядок одинаковых — так результат воспроизводим. <code>order[i:j + 1]</code> — номера элементов группы, и присваивание по ним ставит всем один ранг.</p>
+<p>Функцию <code>auc_rank</code> в основную задачу берут целиком, как есть.</p>`,
+        ba: {
+          before: { columns: ["ранги", "AUC"], rows: [["простые", "0.8536"]] },
+          after: { columns: ["ранги", "AUC"], rows: [["простые", "0.8536"], ["средние для одинаковых", "0.8548"]] },
+          hl: ["AUC"],
+          note: "Разница в третьем знаке — из-за того, как простые ранги делят места между одинаковыми оценками, а не из-за модели."
+        },
+        task: "<p><strong>Задание.</strong> Запустите заготовку: функция <code>auc_rank</code> уже со средними рангами. Напечатайте AUC модели двумя способами — <code>AUC: простые ранги 0.8536, средние 0.8548</code>.</p>",
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+def auc_simple(score, y):
+    order = np.argsort(score, kind="mergesort")
+    ranks = np.empty(len(score))
+    ranks[order] = np.arange(1, len(score) + 1)
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+def auc_rank(score, y):
+    order = np.argsort(score, kind="mergesort")
+    ranks = np.empty(len(score))
+    ranks[order] = np.arange(1, len(score) + 1)
+    s = score[order]
+    i = 0
+    while i < len(s):
+        j = i
+        while j + 1 < len(s) and s[j + 1] == s[i]:
+            j += 1
+        if j > i:
+            ranks[order[i:j + 1]] = (i + j) / 2 + 1
+        i = j + 1
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+`,
+        expected: { stdout: "AUC: простые ранги 0.8536, средние 0.8548" },
+        hint: "<code>print(f\"AUC: простые ранги {auc_simple(p, yb):.4f}, средние {auc_rank(p, yb):.4f}\")</code>.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+def auc_simple(score, y):
+    order = np.argsort(score, kind="mergesort")
+    ranks = np.empty(len(score))
+    ranks[order] = np.arange(1, len(score) + 1)
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+def auc_rank(score, y):
+    order = np.argsort(score, kind="mergesort")
+    ranks = np.empty(len(score))
+    ranks[order] = np.arange(1, len(score) + 1)
+    s = score[order]
+    i = 0
+    while i < len(s):
+        j = i
+        while j + 1 < len(s) and s[j + 1] == s[i]:
+            j += 1
+        if j > i:
+            ranks[order[i:j + 1]] = (i + j) / 2 + 1
+        i = j + 1
+    npos, nneg = y.sum(), len(y) - y.sum()
+    return (ranks[y == 1].sum() - npos * (npos + 1) / 2) / (npos * nneg)
+
+X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+print(f"AUC: простые ранги {auc_simple(p, yb):.4f}, средние {auc_rank(p, yb):.4f}")
+`
+      },
+      {
+        title: "Lift и калибровка по группам",
+        body: `
+<p>На практике модель используют для сортировки: людей с высокой вероятностью берут в работу первыми. Lift группы — во сколько раз доля купивших в ней выше, чем в среднем по базе: <code>conv / yb.mean()</code>.</p>
+<p>Заодно видно калибровку: если модель честна о вероятностях, средний прогноз группы близок к фактической доле. Группы здесь — значения <code>days7</code>; таблицу собирают из массивов, как в уроке 5.2, с двумя средними — факта и прогноза — и размером группы.</p>`,
+        ba: {
+          before: { columns: ["days7", "людей", "прогноз"], rows: [[1, 1822, "5.3%"], [7, 319, "73.2%"]] },
+          after: { columns: ["days7", "людей", "прогноз", "факт", "lift"], rows: [[1, 1822, "5.3%", "1.5%", "0.07"], [7, 319, "73.2%", "62.4%", "2.83"]] },
+          hl: ["факт", "lift"],
+          note: "Сортирует модель хорошо, а вероятности на краях завышает — 5,3% вместо 1,5% и 73,2% вместо 62,4%, — а на 2–4 днях занижает: 9,6% вместо 18,1%."
+        },
+        task: "<p><strong>Задание.</strong> Сгруппируйте по <code>days7</code> и напечатайте строку на группу: <code>1 1822 прогноз=5.3% факт=1.5% lift=0.07</code>.</p>",
+        starter: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+x = feat["days7"].to_numpy(float)
+X = np.column_stack([np.ones(len(feat)), x, P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+t = pd.DataFrame({"d": x, "y": yb, "p": p}).groupby("d").agg(
+    n=("y", "size"), conv=("y", "mean"))
+`,
+        expected: { stdout: "1 1822 прогноз=5.3% факт=1.5% lift=0.07\n2 426 прогноз=9.6% факт=18.1% lift=0.82\n3 432 прогноз=17.1% факт=26.6% lift=1.21\n4 325 прогноз=28.0% факт=32.3% lift=1.47\n5 323 прогноз=42.8% факт=48.0% lift=2.18\n6 353 прогноз=59.0% факт=57.8% lift=2.62\n7 319 прогноз=73.2% факт=62.4% lift=2.83" },
+        hint: "Добавьте в <code>agg</code> пару <code>pm=(\"p\", \"mean\")</code>, затем <code>t[\"lift\"] = t[\"conv\"] / yb.mean()</code> и цикл <code>for d, r in t.iterrows():</code> с <code>print(f\"{d:.0f} {r['n']:.0f} прогноз={r['pm'] * 100:.1f}% факт={r['conv'] * 100:.1f}% lift={r['lift']:.2f}\")</code>.",
+        solution: `def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def fit_logit(X, y, steps=25):
+    w = np.zeros(X.shape[1])
+    for _ in range(steps):
+        p = sigmoid(X @ w)
+        W = p * (1 - p)
+        H = X.T @ (X * W[:, None])
+        g = X.T @ (p - y)
+        w -= np.linalg.solve(H + 1e-9 * np.eye(len(w)), g)
+    return w
+
+x = feat["days7"].to_numpy(float)
+X = np.column_stack([np.ones(len(feat)), x, P])
+w = fit_logit(X, yb)
+p = sigmoid(X @ w)
+
+t = pd.DataFrame({"d": x, "y": yb, "p": p}).groupby("d").agg(
+    n=("y", "size"), conv=("y", "mean"), pm=("p", "mean"))
+t["lift"] = t["conv"] / yb.mean()
+for d, r in t.iterrows():
+    print(f"{d:.0f} {r['n']:.0f} прогноз={r['pm'] * 100:.1f}% "
+          f"факт={r['conv'] * 100:.1f}% lift={r['lift']:.2f}")
+`
+      }
+    ]
+  },
+
   starter: `# Логистическая регрессия: вероятность покупки
 
 X = np.column_stack([np.ones(len(feat)), feat["days7"].to_numpy(float), D, P])
@@ -24160,9 +24640,9 @@ def sigmoid(z):
 def fit_logit(X, y, steps=25):
     """Метод Ньютона: на каждом шаге решаем взвешенный МНК.
 
-    Тот же принцип, что у градиентного спуска из урока 5.5,
-    но шаг подбирается автоматически по кривизне, поэтому
-    хватает двух десятков итераций вместо десятков тысяч.
+    Коэффициенты поправляются шагами, размер шага подбирается
+    автоматически по кривизне, поэтому хватает двух десятков
+    итераций.
     """
     w = np.zeros(X.shape[1])
     for _ in range(steps):
