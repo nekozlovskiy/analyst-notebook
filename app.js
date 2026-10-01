@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -114,7 +114,7 @@ const Store = (function () {
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
-      ["done", "attempts", "time", "days", "steps", "drills"].forEach(function (b) {
+      ["done", "attempts", "time", "days", "steps", "drills", "mtest"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -1036,6 +1036,126 @@ const Review = {
 };
 
 /* ============================================================
+   Итоговый тест модуля
+
+   15 вопросов самопроверки из всех уроков модуля: по кругу из каждого
+   урока, потом вперемешку. Сдан — от 80 процентов. Лучший результат
+   хранится в mtest (процент, при переносе прогресса побеждает больший),
+   вопросы с ошибкой уходят в повторение и на страницу «Мои ошибки».
+   ============================================================ */
+
+const ModuleTest = {
+  N: 15,
+  PASS: 80,
+  best: function (m) { const b = Store.get("mtest", m.id, null); return typeof b === "number" ? b : null; },
+  passed: function (m) { const b = ModuleTest.best(m); return b !== null && b >= ModuleTest.PASS; },
+  need: function (n) { return Math.ceil(n * ModuleTest.PASS / 100); },
+
+  /* по кругу из уроков: тест покрывает весь модуль, а не два длинных урока */
+  pick: function (m) {
+    const piles = m.lessons.map(function (l) {
+      const C = window.CONTENT[l.id];
+      const n = C && C.quiz ? C.quiz.length : 0;
+      return shuffled(n).map(function (i) { return { id: l.id, n: i }; });
+    }).filter(function (p) { return p.length; });
+    const out = [];
+    for (let r = 0; out.length < ModuleTest.N; r++) {
+      let any = false;
+      piles.forEach(function (p) {
+        if (p[r] && out.length < ModuleTest.N) { out.push(p[r]); any = true; }
+      });
+      if (!any) break;
+    }
+    return shuffled(out.length).map(function (i) { return out[i]; });
+  },
+
+  mount: function (box, m) {
+    const order = ModuleTest.pick(m);
+    if (!order.length) { box.innerHTML = '<p class="page-empty">В уроках модуля нет вопросов самопроверки.</p>'; return; }
+    const best = ModuleTest.best(m), n = order.length, need = ModuleTest.need(n);
+    box.innerHTML =
+      '<p class="review-intro">' + n + " " + plural(n, "вопрос", "вопроса", "вопросов") +
+        " из всех уроков модуля вперемешку, без подсказок и без возврата назад. Тест сдан, если верно " +
+        need + " из " + n + ". Пройти его можно и до конца уроков — проверить, что уже знаете.</p>" +
+      (best !== null
+        ? '<p class="review-intro">Лучший результат: ' + best + "% — " +
+            (best >= ModuleTest.PASS ? "тест сдан." : "пока не сдан.") + "</p>" : "") +
+      '<button class="btn primary" id="mtStart" type="button">' +
+        (best === null ? "Начать тест" : "Пройти ещё раз") + "</button>";
+    $("#mtStart", box).addEventListener("click", function () { ModuleTest.step(box, m, order, 0, []); });
+  },
+
+  step: function (box, m, order, i, wrong) {
+    if (i >= order.length) { ModuleTest.finish(box, m, order, wrong); return; }
+    const x = order[i], L = Course.byId(x.id), q = window.CONTENT[x.id].quiz[x.n];
+    let h = '<div class="rv-meta" tabindex="-1">Вопрос ' + (i + 1) + " из " + order.length +
+        ", из урока " + L.num + " «" + esc(L.title) + "»</div>" +
+      '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
+    shuffled(q.opts.length).forEach(function (orig, pos) {
+      h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
+        '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
+    });
+    h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" +
+      '<div class="rv-next" hidden><button class="btn primary" type="button">' +
+      (i + 1 < order.length ? "Дальше" : "Узнать результат") + "</button></div>";
+    box.innerHTML = h;
+    /* прошлая кнопка «Дальше» исчезла вместе с фокусом — ставим его на новый вопрос */
+    $(".rv-meta", box).focus({ preventScroll: true });
+    box.scrollIntoView({ block: "nearest" });
+
+    const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
+    opts.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.disabled) return;
+        const picked = +btn.dataset.i, ok = picked === q.right;
+        if (!ok) { wrong.push(x); Review.record(x.id, x.n, false, false); }
+        opts.forEach(function (b) {
+          b.disabled = true;
+          const oi = +b.dataset.i;
+          if (oi === q.right) b.classList.add("right");
+          else if (oi === picked) b.classList.add("wrong");
+        });
+        const why = $(".q-why", box);
+        why.insertAdjacentHTML("afterbegin", "<b>" + (ok ? "Верно." : "Неверно.") + "</b> ");
+        why.classList.add("show");
+        const nx = $(".rv-next", box), nb = $("button", nx);
+        nx.hidden = false;
+        nb.addEventListener("click", function () { ModuleTest.step(box, m, order, i + 1, wrong); });
+        nb.focus();
+      });
+    });
+  },
+
+  finish: function (box, m, order, wrong) {
+    const n = order.length, right = n - wrong.length, pct = Math.round(right / n * 100);
+    const before = ModuleTest.best(m);
+    if (before === null || pct > before) Store.set("mtest", m.id, pct);
+    const ok = pct >= ModuleTest.PASS;
+    /* уроки, к которым вернуться: по числу ошибок, сначала худшие */
+    const by = {};
+    wrong.forEach(function (x) { by[x.id] = (by[x.id] || 0) + 1; });
+    const back = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; }).map(function (id) {
+      const L = Course.byId(id);
+      return '<li><a href="#' + id + '">' + L.num + " " + esc(L.title) + "</a> — " +
+        by[id] + " " + plural(by[id], "ошибка", "ошибки", "ошибок") + "</li>";
+    }).join("");
+    box.innerHTML =
+      '<p class="prep-sum" tabindex="-1">Верно ' + right + " из " + n + " (" + pct + "%) — " +
+        (ok ? "тест сдан." : "пока не сдан: нужно " + ModuleTest.need(n) + " из " + n + ".") + "</p>" +
+      (back
+        ? '<p class="review-intro">Вопросы с ошибками ушли в повторение и на страницу ' +
+            '<a href="#mistakes">«Мои ошибки»</a>. Теорию стоит перечитать здесь:</p><ul class="mt-back">' + back + "</ul>"
+        : '<p class="review-intro">Ни одной ошибки.</p>') +
+      '<button class="btn" id="mtAgain" type="button">Пройти ещё раз — вопросы будут другие</button>';
+    $("#mtAgain", box).addEventListener("click", function () {
+      ModuleTest.mount(box, m);
+      $("#mtStart", box).focus();
+    });
+    $(".prep-sum", box).focus({ preventScroll: true });
+  }
+};
+
+/* ============================================================
    Отдельные страницы: к собеседованию, конспект, итог модуля
 
    Адреса выбраны так, чтобы не совпасть ни с одним id на странице:
@@ -1368,7 +1488,9 @@ function renderSummary(app, id) {
   const main = el("main", { class: "wrap lesson-wrap page" });
   main.innerHTML =
     pageHead(closed ? "Модуль " + m.num + " закрыт" : "Модуль " + m.num + ": пройдено " + d + " из " + t,
-      esc(m.title) + ". " + d + " " + plural(d, "урок", "урока", "уроков") + work + span + ".",
+      esc(m.title) + ". " + d + " " + plural(d, "урок", "урока", "уроков") + work + span + "." +
+        (ModuleTest.best(m) !== null ? " Итоговый тест: " + ModuleTest.best(m) + "%" +
+          (ModuleTest.passed(m) ? ", сдан." : ", пока не сдан.") : ""),
       closed ? (m.sayDone || m.say) : m.say) +
     '<section class="block"><div class="block-h"><h2>' + (closed ? "Что теперь умеете" : "Уроки модуля") + "</h2></div>" +
       '<ul class="sum-list">' + m.lessons.map(function (l) {
@@ -1377,6 +1499,8 @@ function renderSummary(app, id) {
           '<a class="sum-l" href="#' + l.id + '"><span class="sum-t">' + esc(l.title) + "</span>" +
           '<span class="sum-d">' + esc(l.desc) + "</span></a></li>";
       }).join("") + "</ul></section>" +
+    '<section class="block" id="mtest"><div class="block-h"><h2>Итоговый тест</h2></div>' +
+      '<div id="mtBody"><p class="page-wait">Собираю вопросы…</p></div></section>' +
     '<section class="block"><div class="block-h"><h2>Вопросы собеседования из модуля</h2></div>' +
       '<div id="sumJobs"><p class="page-wait">Собираю вопросы…</p></div></section>' +
     '<section class="block">' + nextHtml + "</section>";
@@ -1385,6 +1509,7 @@ function renderSummary(app, id) {
   Lazy.content(m.id).then(function () {
     const box = $("#sumJobs");
     if (!box || location.hash !== "#" + id) return;
+    ModuleTest.mount($("#mtBody"), m);
     const items = interviewItems().filter(function (x) { return x.lesson.module === m && x.kind !== "req"; });
     box.innerHTML = items.length
       ? '<ol class="prep-list">' + items.map(function (x) { return prepItem(x, false); }).join("") + "</ol>" +
@@ -1394,6 +1519,8 @@ function renderSummary(app, id) {
   }, function () {
     const box = $("#sumJobs");
     if (box) box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет.</p>';
+    const mt = $("#mtBody");
+    if (mt) mt.innerHTML = '<p class="page-wait">Тест не загрузился — похоже, пропал интернет.</p>';
   });
 }
 
@@ -1622,7 +1749,9 @@ function renderHome(app) {
           '<span class="toc-mn">' + m.num + "</span>" +
           '<h2 class="toc-mt">' + esc(m.title) +
             (m.optional ? ' <span class="toc-opt" title="' + esc(m.optional) + '">необязательный</span>' : "") + "</h2>" +
-          '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) + "</span>" +
+          '<span class="toc-mw">' + (d === t ? '<a href="#summary-' + m.id + '">пройден, итог</a>' : d ? d + " из " + t : esc(m.weeks)) +
+            (ModuleTest.passed(m) ? ' · <a href="#summary-' + m.id + '">тест сдан</a>'
+              : d < t ? ' · <a href="#summary-' + m.id + '">тест</a>' : "") + "</span>" +
         "</header>" +
         '<p class="toc-ms">' + esc(m.sub) + (m.optional ? " Модуль " + esc(m.optional) + "." : "") + "</p>" +
         (m.say ? '<p class="toc-say">' + esc(m.say) + "</p>" : "") +
