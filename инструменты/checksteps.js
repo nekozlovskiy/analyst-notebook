@@ -14,7 +14,7 @@
 
    Шаги-графики (2.5) — те, у кого expected.plot: решение должно
    выполниться и нарисовать хотя бы один график с данными. Если
-   matplotlib локально не стоит (как в CI), проверяется только синтаксис.
+   matplotlib не установлен, проверяется только синтаксис (в CI он стоит).
 
      node инструменты/checksteps.js m0l1                     — все шаги
      node инструменты/checksteps.js m0l1 --try 3 "SELECT 1"  — что увидит
@@ -80,6 +80,16 @@ function checkPy(got, want) {
     }
   }
   return { ok: true };
+}
+
+/* копия Check.uses из app.js */
+function usesMiss(code, uses) {
+  if (!uses) return "";
+  const src = String(code || "").replace(/#[^\n]*/g, " ");
+  for (let i = 0; i < uses.length; i++) {
+    if (!new RegExp(uses[i][0], "m").test(src)) return uses[i][1];
+  }
+  return "";
 }
 
 const db = new DatabaseSync(":memory:");
@@ -170,7 +180,9 @@ function report(n, sql) {
   if (isPy) {
     const p = runPy(sql);
     if (p.err) { console.log(label + "  ОШИБКА  " + p.err); bad++; return; }
-    const rp = checkPy(p.out, C.steps[n].expected.stdout);
+    let rp = checkPy(p.out, C.steps[n].expected.stdout);
+    const miss = rp.ok && usesMiss(sql, C.steps[n].expected.uses);
+    if (miss) rp = { ok: false, why: "вывод совпал, но не хватает в коде: " + miss };
     console.log(label + "  " + (rp.ok ? "ок" : "РАСХОЖДЕНИЕ  " + rp.why));
     if (!rp.ok) { bad++; console.log(p.out.replace(/^/gm, "    | ")); }
     return;

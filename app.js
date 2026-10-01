@@ -1932,6 +1932,17 @@ const Check = {
       return "Python не понял строку. Частые причины: пропущена запятая, кавычка или скобка, либо одно = вместо == в сравнении.";
     return "";
   },
+  /* Шаг может требовать конструкцию в самом коде, а не только вывод:
+     expected.uses = [["регулярка", "что сказать"], …]. Комментарии
+     Python не в счёт. "" — всё на месте, иначе текст первой нехватки. */
+  uses: function (code, uses) {
+    if (!uses) return "";
+    const src = String(code || "").replace(/#[^\n]*/g, " ");
+    for (let i = 0; i < uses.length; i++) {
+      if (!new RegExp(uses[i][0], "m").test(src)) return uses[i][1];
+    }
+    return "";
+  },
   normLines: function (s) {
     return String(s).replace(/\r/g, "").split("\n")
       .map(function (l) { return l.trim().replace(/\s+/g, " "); })
@@ -3732,7 +3743,11 @@ const Steps = {
         if (py) {
           const want = S.steps[n].expected.stdout;
           const rp = Check.python(lastOut, want);
-          if (rp.ok) { pass(n); return; }
+          if (rp.ok) {
+            const miss = Check.uses(editor ? editor.get() : q(".st-ta").value, S.steps[n].expected.uses);
+            if (miss) { status("bad", "Вывод совпал, но код не тот", esc(miss)); return; }
+            pass(n); return;
+          }
           const a = Check.normLines(lastOut)[rp.line], b = Check.normLines(want)[rp.line];
           status("bad", "Пока не совпадает", esc(rp.why) +
             (a !== undefined && b !== undefined && !/только|формат/.test(rp.why)
