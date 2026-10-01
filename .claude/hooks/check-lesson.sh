@@ -7,7 +7,9 @@
 #   check-lesson.sh check   — PostToolUse (Edit|Write): после правки файла
 #                             сайта на JS — node --check; для текстов уроков
 #                             и app.js ещё и поиск случайных иероглифов
-#                             (U+2E00–U+FEFF): дважды они уже попадали в уроки.
+#                             (U+2E00–U+FEFF): дважды они уже попадали в уроки;
+#                             для content-m*.js — checkorder.js: шаги, карточки,
+#                             вопросы и тренажёр не сдвинулись относительно main.
 #
 # На вход — JSON события на stdin. Ошибка проверки: код 2 и причина в stderr,
 # её видит Claude и исправляет сразу.
@@ -55,6 +57,15 @@ PY
     if [ -n "$bad" ]; then
       echo "$name: в тексте иероглифы или другие символы U+2E00–U+FEFF — похоже на случайную вставку:" >&2
       echo "$bad" >&2
+      exit 2
+    fi
+    ;;
+esac
+
+case "$name" in
+  content-m*.js)
+    if ! out=$(node "$root/инструменты/checkorder.js" 2>&1 >/dev/null); then
+      echo "$out" >&2
       exit 2
     fi
     ;;
