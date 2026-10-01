@@ -1,4 +1,22 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(node инструменты/checksteps.js *)",
+      "Bash(node инструменты/checkcards.js *)",
+      "Bash(node инструменты/checkcards.js)",
+      "Bash(node инструменты/checkterms.js)",
+      "Bash(node инструменты/checkdrills.js)",
+      "Bash(node инструменты/checkfigs.js)",
+      "Bash(node инструменты/checkorder.js)",
+      "Bash(node инструменты/runpy.js *)",
+      "Bash(node --check *)",
+      "Bash(bash инструменты/ci.sh)",
+      "Bash(python3 build.py)",
+      "Bash(python3 инструменты/figs.py *)",
+      "Bash(python3 инструменты/mkdb.py)",
+      "Bash(node .claude/skills/pyerr-rule/scripts/try-pyerr.js *)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
