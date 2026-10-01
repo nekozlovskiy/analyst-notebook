@@ -620,9 +620,10 @@ ORDER BY share;
 window.CONTENT.m6l4 = {
   intro: "Python на интервью аналитика — это не алгоритмы с литкода. Это pandas, здравый смысл и три места, где ошибаются все.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "35 мин", w: "Теория и карточки: что спрашивают и где ошибаются" },
+    { m: "30 мин", w: "Практикум: шесть шагов — витрина по платформам" },
     { m: "35 мин", w: "Задача: витрина по каналам за 40 минут" },
     { m: "45 мин", w: "Тренажёр: пять разборов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -719,6 +720,253 @@ window.CONTENT.m6l4 = {
   data: window.SH.appData,
   packages: ["pandas"],
   prelude: window.SH.appPrelude,
+
+  /* Практикум — шесть шагов: та же витрина, но по платформам, а не по
+     каналам; проверка соединения — на app_activity, интервалы — на web.
+     Числа основной задачи здесь не появляются. Решения:
+     node инструменты/checksteps.js m6l4 */
+  practicum: {
+    intro: "Шесть коротких шагов перед основной задачей. Витрина та же, но по платформам, а не по каналам: android, ios и web. Шаги идут в порядке, в котором витрину собирают на интервью: соединение с проверкой, знаменатель, интервалы между покупками, доля верхних покупателей и сборка таблицы циклом.",
+    schema: window.SH.appSchema,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.appPrelude,
+    done: "Все шесть шагов решены. Основная задача — та же витрина по шести каналам, столбец там <code>channel</code> вместо <code>platform</code>: соединение заказов с <code>validate</code> и проверкой числа строк, размер канала из <code>app_users</code>, интервалы через <code>diff</code> по всем заказам, <code>top_share</code> и сборка циклом. Нового там — три проверки в конце: сумма размеров каналов против числа пользователей, медиана чека в целом против разброса медиан и число интервалов против «заказы минус покупатели», как в шаге 4, только по всей базе.",
+    steps: [
+      {
+        title: "Соединение с validate",
+        body: `
+<p>Перед любой витриной проверяют соединение. У <code>merge</code> есть параметр <code>validate</code>: <code>"many_to_one"</code> значит «слева ключ может повторяться, справа — нет». Если справа окажутся дубли, <code>merge</code> упадёт, а не раздует таблицу молча.</p>
+<p><code>how="left"</code> оставляет все строки левой таблицы, даже без пары справа; у таких строк в новых столбцах будет пусто — <code>NaN</code>. Проверка после соединения — две строки: число строк не изменилось, пустых значений нет. <code>.isna().sum()</code> считает пустые.</p>`,
+        ba: {
+          before: { columns: ["таблица", "строк"], rows: [["app_activity", 28567]] },
+          after: { columns: ["таблица", "строк", "без платформы"], rows: [["app_activity + platform", 28567, 0]] },
+          hl: ["строк", "без платформы"],
+          note: "Строк столько же, у каждой нашлась платформа — соединение чистое."
+        },
+        task: "<p><strong>Задание.</strong> Соедините <code>app_activity</code> с <code>app_users[[\"user_id\", \"platform\"]]</code> по <code>user_id</code> с <code>how=\"left\"</code> и <code>validate=\"many_to_one\"</code> и напечатайте <code>строк до=28567 после=28567 без платформы=0</code>.</p>",
+        starter: `act = app_activity.merge(app_users[["user_id", "platform"]], on="user_id")
+`,
+        expected: { stdout: "строк до=28567 после=28567 без платформы=0" },
+        hint: "Добавьте в <code>merge</code> параметры <code>how=\"left\", validate=\"many_to_one\"</code>, затем <code>print(f\"строк до={len(app_activity)} после={len(act)} без платформы={act['platform'].isna().sum()}\")</code>.",
+        solution: `act = app_activity.merge(app_users[["user_id", "platform"]], on="user_id",
+                         how="left", validate="many_to_one")
+print(f"строк до={len(app_activity)} после={len(act)} "
+      f"без платформы={act['platform'].isna().sum()}")
+`
+      },
+      {
+        title: "Ловушка с дублем и try/except",
+        body: `
+<p>Устроим ловушку: допишем в справочник пользователей ещё раз строку пользователя 1003. <code>pd.concat([a, b])</code> ставит таблицы одну под другой.</p>
+<p>Без <code>validate</code> соединение пройдёт молча: у пользователя 1003 восемь дней активности, и каждая его строка удвоится. С <code>validate</code> — упадёт с ошибкой. Чтобы увидеть ошибку и не остановить программу, код заворачивают в <code>try</code>:</p>
+<pre><code>try:
+    …                         # код, который может упасть
+except Exception as e:
+    print(type(e).__name__)   # имя ошибки</code></pre>
+<p>Если внутри <code>try</code> возникла ошибка, Python переходит в блок <code>except</code>, а в <code>e</code> кладёт саму ошибку. Текст ошибки у pandas многострочный, а хвост у версий разный, поэтому печатают только первую строку: <code>str(e).splitlines()[0]</code>. Строки с <code>pd.concat</code> и соединением без <code>validate</code> уже в заготовке.</p>`,
+        ba: {
+          before: { columns: ["справочник", "строк", "строк после merge"], rows: [["app_users", 4000, 28567]] },
+          after: { columns: ["справочник", "строк", "строк после merge"], rows: [["app_users + дубль 1003", 4001, 28575]] },
+          hl: ["строк после merge"],
+          note: "Одна лишняя строка в справочнике — восемь лишних строк после соединения, и никакого предупреждения."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Напечатайте, сколько строк даёт соединение без <code>validate</code>: <code>без validate: 28575 строк</code>.</li>
+<li>Повторите соединение с <code>validate="many_to_one"</code> внутри <code>try</code> и в <code>except</code> напечатайте <code>с validate: MergeError: Merge keys are not unique in right dataset; not a many-to-one merge</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Покажите, что <code>validate</code> ловит дубль, который обычное соединение пропускает молча.</p>`,
+        starter: `dup = pd.concat([app_users, app_users[app_users["user_id"] == 1003]])
+right = dup[["user_id", "platform"]]
+
+bad = app_activity.merge(right, on="user_id")
+print(f"без validate: {len(bad)} строк")
+`,
+        expected: { stdout: "без validate: 28575 строк\nс validate: MergeError: Merge keys are not unique in right dataset; not a many-to-one merge" },
+        hint: "<code>try:</code>, внутри с отступом <code>app_activity.merge(right, on=\"user_id\", validate=\"many_to_one\")</code>; затем <code>except Exception as e:</code> и <code>print(f\"с validate: {type(e).__name__}: {str(e).splitlines()[0]}\")</code>.",
+        solution: `dup = pd.concat([app_users, app_users[app_users["user_id"] == 1003]])
+right = dup[["user_id", "platform"]]
+
+bad = app_activity.merge(right, on="user_id")
+print(f"без validate: {len(bad)} строк")
+try:
+    app_activity.merge(right, on="user_id", validate="many_to_one")
+except Exception as e:
+    print(f"с validate: {type(e).__name__}: {str(e).splitlines()[0]}")
+`
+      },
+      {
+        title: "Знаменатель — из таблицы пользователей",
+        body: `
+<p>Доля платящих — это покупатели, делённые на всех пользователей платформы. Покупателей считают по заказам: <code>nunique</code> по <code>user_id</code>. А вот всех пользователей по заказам считать нельзя — там только те, кто что-то купил, и доля выйдет 100%. Размер группы берут из таблицы, где одна строка на объект, — из <code>app_users</code>.</p>
+<p>Две группировки по одному ключу делятся друг на друга по совпадению индекса, как в уроке 4.4.</p>`,
+        ba: {
+          before: { columns: ["платформа", "покупателей", "÷ по заказам"], rows: [["android", 423, "100.0%"], ["web", 140, "100.0%"]] },
+          after: { columns: ["платформа", "покупателей", "÷ по app_users"], rows: [["android", 423, "21.7%"], ["web", 140, "24.4%"]] },
+          hl: ["÷ по app_users"],
+          note: "Неправильный знаменатель даёт 100% всем — ошибка видна сразу, если на неё посмотреть."
+        },
+        task: "<p><strong>Задание.</strong> В заготовке знаменатель <code>size</code> посчитан неверно — по заказам. Исправьте его на подсчёт по <code>app_users</code>, чтобы строки стали такими: <code>android 423 из 1949 = 21.7%</code>.</p>",
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+payers = orders.groupby("platform")["user_id"].nunique()
+size = orders.groupby("platform")["user_id"].nunique()
+
+for pl in size.index:
+    print(f"{pl} {payers[pl]} из {size[pl]} = {payers[pl] / size[pl] * 100:.1f}%")
+`,
+        expected: { stdout: "android 423 из 1949 = 21.7%\nios 325 из 1477 = 22.0%\nweb 140 из 574 = 24.4%" },
+        hint: "Строку с <code>size</code> замените на <code>size = app_users.groupby(\"platform\")[\"user_id\"].size()</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+payers = orders.groupby("platform")["user_id"].nunique()
+size = app_users.groupby("platform")["user_id"].size()
+
+for pl in size.index:
+    print(f"{pl} {payers[pl]} из {size[pl]} = {payers[pl] / size[pl] * 100:.1f}%")
+`
+      },
+      {
+        title: "Интервалы между покупками",
+        body: `
+<p>Интервал — сколько дней прошло от прошлого заказа того же человека. <code>diff()</code> внутри группы считает разность с предыдущей строкой группы, поэтому заказы сначала сортируют по пользователю и дате:</p>
+<pre><code>w = w.sort_values(["user_id", "order_date"])
+gaps = w.groupby("user_id")["order_date"].diff().dt.days</code></pre>
+<p>У первого заказа каждого человека предыдущего нет — там пусто. <code>.notna()</code> — обратное к <code>.isna()</code>: True там, где значение есть. Отсюда проверка: интервалов должно быть ровно «заказы минус покупатели».</p>
+<p><code>w.assign(gap=gaps)</code> возвращает таблицу с новым столбцом <code>gap</code>, не меняя исходную, — то же, что <code>w["gap"] = gaps</code>, только без присваивания на месте.</p>`,
+        ba: {
+          before: { columns: ["user_id", "order_date"], rows: [[1286, "2024-01-25"], [1286, "2024-02-03"], [1286, "2024-02-04"], [1443, "2024-02-08"], [1443, "2024-02-09"], [1443, "2024-02-28"]] },
+          after: { columns: ["user_id", "order_date", "gap"], rows: [[1286, "2024-01-25", "NaN"], [1286, "2024-02-03", "9.0"], [1286, "2024-02-04", "1.0"], [1443, "2024-02-08", "NaN"], [1443, "2024-02-09", "1.0"], [1443, "2024-02-28", "19.0"]] },
+          hl: ["gap"],
+          note: "У каждого первого заказа интервала нет: три заказа — два интервала."
+        },
+        task: "<p><strong>Задание.</strong> Для заказов платформы web добавьте столбец <code>gap</code> и напечатайте <code>web: интервалов=215, ожидалось=215, медиана=7.0</code>: ожидаемое — заказов минус разных покупателей, потому что у каждого первого заказа интервала нет (см. таблицу).</p>",
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+w = orders[orders["platform"] == "web"]
+`,
+        expected: { stdout: "web: интервалов=215, ожидалось=215, медиана=7.0" },
+        hint: "Две строки из теории шага, затем <code>w = w.assign(gap=gaps)</code> и <code>print(f\"web: интервалов={int(gaps.notna().sum())}, ожидалось={len(w) - w['user_id'].nunique()}, медиана={w['gap'].median():.1f}\")</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+w = orders[orders["platform"] == "web"]
+w = w.sort_values(["user_id", "order_date"])
+gaps = w.groupby("user_id")["order_date"].diff().dt.days
+w = w.assign(gap=gaps)
+print(f"web: интервалов={int(gaps.notna().sum())}, "
+      f"ожидалось={len(w) - w['user_id'].nunique()}, медиана={w['gap'].median():.1f}")
+`
+      },
+      {
+        title: "Доля верхних 10% покупателей",
+        body: `
+<p>Насколько выручка сосредоточена у немногих: какую долю дают верхние 10% покупателей. Удобно завернуть в функцию — в витрине она понадобится для каждой платформы:</p>
+<pre><code>def top_share(rev_by_user, frac=0.10):
+    s = rev_by_user.sort_values(ascending=False)
+    k = max(1, round(len(s) * frac))
+    return s.head(k).sum() / s.sum() * 100</code></pre>
+<p><code>round</code> округляет до целого, <code>max(1, …)</code> страхует от нуля у маленьких групп. На вход — выручка по покупателям одной платформы, <code>groupby("user_id")["revenue"].sum()</code>.</p>`,
+        ba: {
+          before: { columns: ["что", "значение"], rows: [["покупателей web", 140], ["10% от них", "14"]] },
+          after: { columns: ["что", "значение"], rows: [["их доля выручки", "36.4%"]] },
+          hl: ["значение"],
+          note: "14 человек из 140 приносят больше трети выручки платформы."
+        },
+        task: "<p><strong>Задание.</strong> Напишите <code>top_share</code> и напечатайте <code>web: верхние 10% дают 36.4% выручки</code>.</p>",
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+per_user = orders[orders["platform"] == "web"].groupby("user_id")["revenue"].sum()
+`,
+        expected: { stdout: "web: верхние 10% дают 36.4% выручки" },
+        hint: "Функция — из теории шага; печать: <code>print(f\"web: верхние 10% дают {top_share(per_user):.1f}% выручки\")</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+per_user = orders[orders["platform"] == "web"].groupby("user_id")["revenue"].sum()
+
+def top_share(rev_by_user, frac=0.10):
+    s = rev_by_user.sort_values(ascending=False)
+    k = max(1, round(len(s) * frac))
+    return s.head(k).sum() / s.sum() * 100
+
+print(f"web: верхние 10% дают {top_share(per_user):.1f}% выручки")
+`
+      },
+      {
+        title: "Витрина циклом",
+        body: `
+<p>Когда для каждой группы считается много разных вещей, витрину собирают циклом: на каждую группу — словарь с её показателями, словари складывают в список, а список превращают в таблицу.</p>
+<pre><code>rows = []
+for pl, g in orders.groupby("platform"):
+    rows.append({"platform": pl, "users": size[pl], …})
+rep = pd.DataFrame(rows)</code></pre>
+<p><code>for pl, g in orders.groupby(…)</code> выдаёт пары: название группы и её строки. <code>pd.DataFrame(rows)</code> из списка словарей делает таблицу: ключи — столбцы, словари — строки.</p>
+<p>Печать в заготовке готовая: <code>:&lt;9</code> выравнивает текст по левому краю в 9 символов, <code>:&gt;7.1f</code> — число по правому краю в 7 символов с одним знаком.</p>`,
+        ba: {
+          before: { columns: ["шаги 3–5", "показатель"], rows: [["знаменатель", "payer_share"], ["интервалы", "median_gap"], ["top_share", "top10_share"]] },
+          after: { columns: ["платформа", "юзеров", "платящих", "мед.чек", "мед.пауза", "топ-10%"], rows: [["web", 574, "24.4%", 2490, "7.0", "36.4%"], ["ios", 1477, "22.0%", 2490, "8.0", "31.0%"], ["android", 1949, "21.7%", 2985, "6.0", "35.5%"]] },
+          hl: ["платящих", "мед.чек", "мед.пауза", "топ-10%"],
+          note: "Доля платящих от 21,7% до 24,4%: у android и ios почти поровну, web чуть впереди."
+        },
+        task: "<p><strong>Задание.</strong> Допишите в словарь три показателя — <code>median_check</code> (медиана <code>revenue</code> группы), <code>median_gap</code> (медиана <code>gap</code> из <code>seq</code> для этой платформы) и <code>top10_share</code> — и запустите: напечатается витрина, отсортированная по доле платящих. Столбец <code>gap</code> есть только в <code>seq</code>, а не в <code>g</code>: строки платформы оттуда берут через <code>seq.loc[seq[\"platform\"] == pl, \"gap\"]</code>.</p>",
+        starter: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+size = app_users.groupby("platform")["user_id"].size()
+seq = orders.sort_values(["user_id", "order_date"])
+seq = seq.assign(gap=seq.groupby("user_id")["order_date"].diff().dt.days)
+
+def top_share(rev_by_user, frac=0.10):
+    s = rev_by_user.sort_values(ascending=False)
+    k = max(1, round(len(s) * frac))
+    return s.head(k).sum() / s.sum() * 100
+
+rows = []
+for pl, g in orders.groupby("platform"):
+    per_user = g.groupby("user_id")["revenue"].sum()
+    rows.append({
+        "platform": pl,
+        "users": size[pl],
+        "payer_share": len(per_user) / size[pl] * 100,
+    })
+
+rep = pd.DataFrame(rows).sort_values("payer_share", ascending=False)
+for _, r in rep.iterrows():
+    print(f"{r['platform']:<9}{r['users']:>6.0f}{r['payer_share']:>7.1f}%"
+          f"{r['median_check']:>7.0f}{r['median_gap']:>6.1f}{r['top10_share']:>7.1f}%")
+`,
+        expected: { stdout: "web 574 24.4% 2490 7.0 36.4%\nios 1477 22.0% 2490 8.0 31.0%\nandroid 1949 21.7% 2985 6.0 35.5%" },
+        hint: "В словарь: <code>\"median_check\": g[\"revenue\"].median()</code>, <code>\"median_gap\": seq.loc[seq[\"platform\"] == pl, \"gap\"].median()</code>, <code>\"top10_share\": top_share(per_user)</code>.",
+        solution: `orders = app_orders.merge(app_users[["user_id", "platform"]], on="user_id",
+                          how="left", validate="many_to_one")
+size = app_users.groupby("platform")["user_id"].size()
+seq = orders.sort_values(["user_id", "order_date"])
+seq = seq.assign(gap=seq.groupby("user_id")["order_date"].diff().dt.days)
+
+def top_share(rev_by_user, frac=0.10):
+    s = rev_by_user.sort_values(ascending=False)
+    k = max(1, round(len(s) * frac))
+    return s.head(k).sum() / s.sum() * 100
+
+rows = []
+for pl, g in orders.groupby("platform"):
+    per_user = g.groupby("user_id")["revenue"].sum()
+    rows.append({
+        "platform": pl,
+        "users": size[pl],
+        "payer_share": len(per_user) / size[pl] * 100,
+        "median_check": g["revenue"].median(),
+        "median_gap": seq.loc[seq["platform"] == pl, "gap"].median(),
+        "top10_share": top_share(per_user),
+    })
+
+rep = pd.DataFrame(rows).sort_values("payer_share", ascending=False)
+for _, r in rep.iterrows():
+    print(f"{r['platform']:<9}{r['users']:>6.0f}{r['payer_share']:>7.1f}%"
+          f"{r['median_check']:>7.0f}{r['median_gap']:>6.1f}{r['top10_share']:>7.1f}%")
+`
+      }
+    ]
+  },
 
   starter: `# Витрина качества каналов
 
@@ -829,7 +1077,8 @@ print(f"интервалов посчитано={int(gaps.notna().sum())} "
   <li>Из получившегося словаря выведите три канала с наибольшими значениями, по убыванию.</li>
   <li>Дан список чисел. Верните список без дублей с сохранением порядка первого появления.</li>
   <li>Объясните, почему <code>def f(x, acc=[])</code> — источник ошибок.</li>
-</ol>`,
+</ol>
+<p><strong>Пригодится.</strong> <code>d.get(k, 0)</code> — значение по ключу или 0, если ключа нет. <code>set()</code> — множество, коллекция без повторов: <code>s.add(x)</code> добавляет элемент, <code>x in s</code> проверяет его быстро. <code>dict.fromkeys(xs)</code> делает словарь с ключами из <code>xs</code> в порядке первого появления, <code>list(…)</code> превращает его ключи в список. <code>defaultdict(int)</code> из модуля <code>collections</code> — словарь, у которого отсутствующий ключ сам появляется со значением 0. Три наибольших: <code>sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:3]</code> — пары «ключ, значение», отсортированные по значению.</p>`,
       solution: `1. Суммирование по ключу:
 
    rows = [("organic", 120), ("social", 45),
@@ -1121,7 +1370,8 @@ print(funnel.to_string())`,
 купили           — сделали хотя бы один заказ
 купили повторно  — сделали два и более
 купили 5+ раз    — сделали пять и более</code></pre>
-<p>Отдельно проверьте, вложена ли воронка: все ли купившие действительно возвращались.</p>`,
+<p>Отдельно проверьте, вложена ли воронка: все ли купившие действительно возвращались.</p>
+<p><strong>Пригодится.</strong> <code>days.reindex(buyers)</code> берёт из Series <code>days</code> значения для списка ключей <code>buyers</code> в его порядке; для ключей, которых в <code>days</code> нет, ставит пусто. <code>steps.shift(1)</code> сдвигает значения на одну позицию вниз — так рядом с каждым шагом оказывается предыдущий.</p>`,
       solution: `days = app_activity.groupby("user_id").size()
 n_orders = app_orders.groupby("user_id").size()
 
