@@ -22052,9 +22052,10 @@ window.FIGS["retention-defs"] = "<svg class=\"fig-svg\" viewBox=\"-4 0 340 300\"
 window.CONTENT.m5l1 = {
   intro: "Регрессия нужна аналитику не ради прогноза. Она нужна ради одной фразы: «при прочих равных» — единственного способа отделить эффект признака от всего, с чем он ходит парой.",
 
-  duration: "≈ 2 часа",
+  duration: "≈ 2,5 часа",
   plan: [
     { m: "40 мин", w: "Теория и карточки: что подбирает модель и как читать коэффициент" },
+    { m: "30 мин", w: "Практикум: восемь шагов — numpy, МНК и смещение на платформах" },
     { m: "30 мин", w: "Задача: три модели и что стало с эффектом канала" },
     { m: "40 мин", w: "Тренажёр: 5 разборов" },
     { m: "10 мин", w: "Самопроверка вопросами" },
@@ -22152,6 +22153,337 @@ window.CONTENT.m5l1 = {
   data: window.SH.appData,
   packages: ["pandas"],
   prelude: window.SH.mlPrelude,
+
+  /* Практикум — восемь шагов: азы numpy для регрессии и та же логика
+     на другом разрезе. Объясняем days90 (дни активности за 90 дней)
+     через days7 и платформу; основная задача — rev90 через days7 и
+     канал, её числа здесь не появляются. Решения:
+     node инструменты/checksteps.js m5l1 */
+  practicum: {
+    intro: "Восемь коротких шагов перед основной задачей. Первые четыре — numpy: массив из столбца, столбец единиц, нормальное уравнение на четырёх точках и функция МНК. numpy уже загружен под именем <code>np</code>. Дальше та же логика, что в задаче, но на другом разрезе: объясняем не выручку, а число дней активности за 90 дней, и не каналом, а платформой.",
+    schema: window.SH.mlSchema,
+    data: window.SH.appData,
+    packages: ["pandas"],
+    prelude: window.SH.mlPrelude,
+    done: "Все восемь шагов решены. Основная задача — те же три модели, но объясняется выручка <code>rev90</code> (готовый массив <code>y</code> из пролога), а вместо платформы — пять каналов (матрица <code>D</code>, база organic, названия в списке <code>CHANNELS</code>). Функция <code>ols</code> из шага 4 нужна как есть, печать коэффициентов — как в шаге 8. Нового там одно: таблица «что стало с эффектом канала» — какая доля разрыва с organic исчезает, когда сравниваем людей с одинаковой активностью. У каналов, в отличие от платформ, активность первой недели сильно разная, поэтому и сдвиг коэффициентов большой.",
+    steps: [
+      {
+        title: "Из столбца в массив numpy",
+        body: `
+<p>numpy уже загружен под именем <code>np</code>. Регрессию считают на массивах numpy: это таблица чисел без названий столбцов, зато с быстрыми матричными операциями. Столбец pandas превращается в массив через <code>.to_numpy(float)</code> — <code>float</code> — чтобы все числа были дробными: так их ждёт <code>np.linalg.solve</code>.</p>
+<p>У массива есть форма — <code>.shape</code>. У столбца она <code>(4000,)</code>: одно измерение, 4000 чисел. Матрица признаков должна быть двумерной — строки и столбцы. <code>.reshape(-1, 1)</code> делает из ряда один столбец: <code>-1</code> значит «сколько получится строк», <code>1</code> — один столбец.</p>
+<p><code>x[:3]</code> — первые три числа, как срез списка, а <code>.tolist()</code> превращает массив в обычный список — так его удобно печатать.</p>`,
+        ba: {
+          before: { columns: ["user_id", "days7"], rows: [[1001, 4], [1002, 1], [1003, 4]] },
+          after: { columns: ["что", "значение"], rows: [["x.shape", "(4000,)"], ["x.reshape(-1, 1).shape", "(4000, 1)"], ["x[:3].tolist()", "[4.0, 1.0, 4.0]"]] },
+          hl: ["значение"],
+          note: "Числа те же, меняется только форма: ряд или столбец."
+        },
+        task: "<p><strong>Задание.</strong> В заготовке <code>x</code> — ещё столбец pandas. Сделайте из него массив через <code>.to_numpy(float)</code>, а вторую форму в <code>print</code> возьмите у <code>x.reshape(-1, 1)</code>.</p>",
+        starter: `x = feat["days7"]
+print(x.shape, x.shape)
+print(x[:3].tolist())
+`,
+        expected: { stdout: "(4000,) (4000, 1)\n[4.0, 1.0, 4.0]" },
+        hint: "<code>x = feat[\"days7\"].to_numpy(float)</code>. <code>x[:3]</code> — первые три числа, как срез списка.",
+        solution: `x = feat["days7"].to_numpy(float)
+print(x.shape, x.reshape(-1, 1).shape)
+print(x[:3].tolist())
+`
+      },
+      {
+        title: "Столбец единиц",
+        body: `
+<p>Свободный член модели — тоже коэффициент, только умножается он всегда на 1. Поэтому к матрице признаков слева приписывают столбец единиц.</p>
+<p><code>np.ones(n)</code> — массив из <code>n</code> единиц. <code>np.column_stack([a, b])</code> ставит массивы рядом как столбцы одной матрицы:</p>
+<pre><code>X1 = np.column_stack([np.ones(len(x)), x])</code></pre>
+<p>Строка матрицы — один пользователь: единица и его <code>days7</code>.</p>`,
+        ba: {
+          before: { columns: ["x"], rows: [["4.0"], ["1.0"], ["4.0"]] },
+          after: { columns: ["единица", "x"], rows: [["1.0", "4.0"], ["1.0", "1.0"], ["1.0", "4.0"]] },
+          hl: ["единица"],
+          note: "Матрица 4000 × 2: столбец единиц и столбец days7."
+        },
+        task: "<p><strong>Задание.</strong> Соберите <code>X1</code> и напечатайте её форму и первые три строки: <code>print(X1.shape)</code> и <code>print(X1[:3].tolist())</code>.</p>",
+        starter: `x = feat["days7"].to_numpy(float)
+X1 = x
+`,
+        expected: { stdout: "(4000, 2)\n[[1.0, 4.0], [1.0, 1.0], [1.0, 4.0]]" },
+        hint: "Строку <code>X1 = x</code> замените на <code>X1 = np.column_stack([np.ones(len(x)), x])</code>.",
+        solution: `x = feat["days7"].to_numpy(float)
+X1 = np.column_stack([np.ones(len(x)), x])
+print(X1.shape)
+print(X1[:3].tolist())
+`
+      },
+      {
+        title: "Нормальное уравнение на четырёх точках",
+        body: `
+<p>Прямую через четыре точки <code>(1, 3)</code>, <code>(2, 5)</code>, <code>(3, 4)</code>, <code>(4, 8)</code> подбирают тем же уравнением, что и на 4000 пользователях: <code>(A.T @ A) b = A.T @ ys</code>. На маленьком примере каждое число можно проверить в уме.</p>
+<ul>
+  <li><code>np.array([1.0, 2.0])</code> — массив из обычного списка.</li>
+  <li><code>A.T</code> — транспонированная матрица: строки становятся столбцами.</li>
+  <li><code>@</code> — матричное умножение: каждая строка левой матрицы попарно умножается на столбец правой, и произведения складываются. Например, вторая клетка <code>A.T @ ys</code> — это <code>1·3 + 2·5 + 3·4 + 4·8 = 57</code>. <code>A.T @ A</code> даёт таблицу 2 × 2: число точек, сумма x и сумма квадратов x.</li>
+  <li><code>np.linalg.solve(M, v)</code> решает систему <code>M b = v</code> — находит <code>b</code>.</li>
+</ul>`,
+        ba: {
+          before: { columns: ["x", "y"], rows: [[1, 3], [2, 5], [3, 4], [4, 8]] },
+          after: { columns: ["что", "значение"], rows: [["A.T @ A", "[[4.0, 10.0], [10.0, 30.0]]"], ["A.T @ ys", "[20.0, 57.0]"], ["b", "1.50, 1.40"]] },
+          hl: ["значение"],
+          note: "4 точки, сумма x = 10, сумма x² = 30, сумма y = 20, сумма x·y = 57."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>Запустите заготовку: она уже печатает <code>A.T @ A</code> и <code>A.T @ ys</code> — сверьте их с суммами в подписи к таблице.</li>
+<li><code>b = np.linalg.solve(A.T @ A, A.T @ ys)</code>.</li>
+<li>Напечатайте <code>y = 1.50 + 1.40 * x</code> — коэффициенты с двумя знаками.</li>
+</ol>
+<p><strong>Задание.</strong> Подберите прямую через четыре точки нормальным уравнением. Первые две таблицы проверяются в уме, решение системы — по контрольным числам 1.50 и 1.40.</p>`,
+        starter: `xs = np.array([1.0, 2.0, 3.0, 4.0])
+ys = np.array([3.0, 5.0, 4.0, 8.0])
+A = np.column_stack([np.ones(4), xs])
+
+print((A.T @ A).tolist())
+print((A.T @ ys).tolist())
+`,
+        expected: { stdout: "[[4.0, 10.0], [10.0, 30.0]]\n[20.0, 57.0]\ny = 1.50 + 1.40 * x" },
+        hint: "Последняя строка — <code>print(f\"y = {b[0]:.2f} + {b[1]:.2f} * x\")</code>. <code>np.array([…])</code> делает массив из списка.",
+        solution: `xs = np.array([1.0, 2.0, 3.0, 4.0])
+ys = np.array([3.0, 5.0, 4.0, 8.0])
+A = np.column_stack([np.ones(4), xs])
+
+print((A.T @ A).tolist())
+print((A.T @ ys).tolist())
+b = np.linalg.solve(A.T @ A, A.T @ ys)
+print(f"y = {b[0]:.2f} + {b[1]:.2f} * x")
+`
+      },
+      {
+        title: "Функция МНК и R²",
+        body: `
+<p>Первые три строки — то же нормальное уравнение, только завёрнутое в функцию: она работает на любой матрице признаков. Дальше функция считает R²: какая доля разброса <code>y</code> вокруг среднего объяснена моделью.</p>
+<pre><code>def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2</code></pre>
+<p><code>X1 @ b</code> — прогнозы для всех строк сразу, <code>resid</code> — остатки, промахи модели. <code>ols</code> ждёт матрицу признаков, поэтому один признак передают как столбец — через <code>.reshape(-1, 1)</code>. Функция возвращает два значения, и при вызове их сразу раскладывают по двум переменным: <code>b, r2 = ols(…)</code>.</p>
+<p>Здесь объясняем <code>days90</code> — сколько дней человек заходил за первые 90 дней — через <code>days7</code>, дни первой недели.</p>`,
+        ba: {
+          before: { columns: ["user_id", "days7", "days90"], rows: [[1001, 4, 17], [1002, 1, 1], [1003, 4, 8]] },
+          after: { columns: ["коэффициент", "значение"], rows: [["свободный член", "-2.33"], ["days7", "3.27"], ["R2", "0.482"]] },
+          hl: ["значение"],
+          note: "Каждый день первой недели связан примерно с 3,3 дня активности за 90 дней."
+        },
+        task: "<p><strong>Задание.</strong> Замените в функции две строки-комментария на код — <code>b = …</code> и <code>r2 = …</code> — и запустите: напечатается <code>days90 = -2.33 + 3.27 * days7</code> и <code>R2 = 0.482</code>.</p>",
+        starter: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    # b = решение (X1.T @ X1) b = X1.T @ y
+    resid = y - X1 @ b
+    # r2 = 1 - сумма квадратов остатков / разброс y вокруг среднего
+    return b, r2
+
+b, r2 = ols(x.reshape(-1, 1), t)
+print(f"days90 = {b[0]:.2f} + {b[1]:.2f} * days7")
+print(f"R2 = {r2:.3f}")
+`,
+        expected: { stdout: "days90 = -2.33 + 3.27 * days7\nR2 = 0.482" },
+        hint: "<code>b = np.linalg.solve(X1.T @ X1, X1.T @ y)</code> — как в шаге 3. <code>r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()</code>: <code>**</code> — степень, <code>.sum()</code> и <code>.mean()</code> у массива работают так же, как у столбца.",
+        solution: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b, r2 = ols(x.reshape(-1, 1), t)
+print(f"days90 = {b[0]:.2f} + {b[1]:.2f} * days7")
+print(f"R2 = {r2:.3f}")
+`
+      },
+      {
+        title: "Фиктивные переменные платформы",
+        body: `
+<p>Платформа — текст. Её превращают в столбцы из нулей и единиц: столбец <code>ios</code> равен 1 у пользователей iOS и 0 у остальных. Сравнение <code>feat["platform"] == "ios"</code> даёт True/False, <code>.to_numpy(float)</code> — единицы и нули. Генератор списка делает такой столбец на каждую платформу из списка, а <code>column_stack</code> ставит их рядом.</p>
+<pre><code>P2 = np.column_stack([(feat["platform"] == p).to_numpy(float)
+                      for p in ["ios", "web"]])</code></pre>
+<p>Столбца android нет — это база. Если оставить все три, их сумма в каждой строке равна 1 и совпадёт со столбцом единиц, и коэффициенты перестанут определяться однозначно.</p>
+<p>Сумма столбца — сколько в нём единиц, то есть людей платформы: <code>P2.sum(axis=0)</code> складывает строки друг с другом и даёт одну сумму на столбец.</p>`,
+        ba: {
+          before: { columns: ["user_id", "platform"], rows: [[1001, "web"], [1002, "android"], [1003, "ios"]] },
+          after: { columns: ["user_id", "ios", "web"], rows: [[1001, "0.0", "1.0"], [1002, "0.0", "0.0"], [1003, "1.0", "0.0"]] },
+          hl: ["ios", "web"],
+          note: "У android обе единицы — нули: он узнаётся по отсутствию."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li>В заготовке не хватает web: список платформ — <code>["ios", "web"]</code>.</li>
+<li><code>s = P2.sum(axis=0)</code> — людей на каждой платформе.</li>
+<li><code>print(f"ios={s[0]:.0f} web={s[1]:.0f} база android={len(P2) - s.sum():.0f}")</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Соберите <code>P2</code> и посчитайте, сколько людей на каждой платформе, включая базу.</p>`,
+        starter: `P2 = np.column_stack([(feat["platform"] == p).to_numpy(float)
+                      for p in ["ios"]])
+`,
+        expected: { stdout: "ios=1477 web=574 база android=1949" },
+        hint: "Android в <code>P2</code> нет, поэтому его считают остатком: всего строк минус ios и web.",
+        solution: `P2 = np.column_stack([(feat["platform"] == p).to_numpy(float)
+                      for p in ["ios", "web"]])
+s = P2.sum(axis=0)
+print(f"ios={s[0]:.0f} web={s[1]:.0f} база android={len(P2) - s.sum():.0f}")
+`
+      },
+      {
+        title: "Модель только на платформе",
+        body: `
+<p>Модель на одних фиктивных переменных — это средние по группам в другой записи. Свободный член — среднее базы, android. Коэффициент <code>ios</code> — на сколько среднее iOS больше среднего android, <code>web</code> — то же для web.</p>
+<p>В прологе такая матрица уже есть — <code>P</code>: те же столбцы <code>ios</code> и <code>web</code>, что вы собрали в <code>P2</code>, база android. Проверить чтение коэффициентов можно напрямую: <code>feat.groupby("platform")["days90"].mean()</code>.</p>`,
+        ba: {
+          before: { columns: ["platform", "среднее days90"], rows: [["android", "6.70"], ["ios", "6.85"], ["web", "7.41"]] },
+          after: { columns: ["коэффициент", "значение"], rows: [["свободный член", "6.70"], ["ios", "0.16"], ["web", "0.71"]] },
+          hl: ["значение"],
+          note: "6,70 + 0,71 = 7,41 — среднее web."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>b, r2 = ols(P, t)</code>.</li>
+<li>Напечатайте <code>база android=6.70 ios=+0.16 web=+0.71 R2=0.001</code> (знак <code>+</code> даёт формат <code>{x:+.2f}</code>).</li>
+<li><code>m = feat.groupby("platform")["days90"].mean()</code> и второй строкой — <code>print(" ".join(f"{k}={v:.2f}" for k, v in m.items()))</code>: средние через пробел, как в уроке 4.5.</li>
+</ol>
+<p><strong>Задание.</strong> Постройте модель <code>days90</code> от платформы и сверьте коэффициенты со средними.</p>`,
+        starter: `t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+`,
+        expected: { stdout: "база android=6.70 ios=+0.16 web=+0.71 R2=0.001\nandroid=6.70 ios=6.85 web=7.41" },
+        hint: "Первая строка — <code>print(f\"база android={b[0]:.2f} ios={b[1]:+.2f} web={b[2]:+.2f} R2={r2:.3f}\")</code>: в <code>b</code> по порядку свободный член, ios, web.",
+        solution: `t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b, r2 = ols(P, t)
+print(f"база android={b[0]:.2f} ios={b[1]:+.2f} web={b[2]:+.2f} R2={r2:.3f}")
+m = feat.groupby("platform")["days90"].mean()
+print(" ".join(f"{k}={v:.2f}" for k, v in m.items()))
+`
+      },
+      {
+        title: "Добавили активность: смещение по формуле",
+        body: `
+<p>Теперь в модели и <code>days7</code>, и платформа. Коэффициент web отвечает на вопрос «на сколько web отличается от android <em>при одинаковой активности первой недели</em>». Он изменился мало: был 0,71, стал 0,80 — на 0,09 дня.</p>
+<p>Почему почти не изменился, объясняет формула из теории: короткая модель смещена на <code>b_days7 × δ</code>, где <code>δ</code> — на сколько у web больше <code>days7</code>, чем у android. Активность первой недели на платформах почти одинаковая, <code>δ</code> около нуля — и смещение маленькое. В основной задаче у каналов <code>δ</code> большой, и коэффициенты сдвинутся сильно.</p>
+<p><code>δ</code> считается той же функцией, только роли меняются: теперь отклик — <code>days7</code>, а признаки — платформа, <code>ols(P, x)</code>. Это формула из теории <code>z ≈ δ0 + δ·x</code>, где <code>z</code> — <code>days7</code>, а <code>x</code> — столбец web.</p>
+<p>R² здесь не нужен. Второе значение, которое возвращает <code>ols</code>, кладут в <code>_</code> — так в Python называют переменную «это значение мне не нужно».</p>`,
+        ba: {
+          before: { columns: ["модель", "web"], rows: [["только платформа", "0.7102"], ["days7 + платформа", "0.7967"]] },
+          after: { columns: ["что", "значение"], rows: [["b_days7", "3.2710"], ["δ web", "-0.0264"], ["0.7967 + 3.2710 × δ", "0.7102"]] },
+          hl: ["значение"],
+          note: "b_days7 = 3,2710 — из модели с платформой (без неё было 3,27, совпадение случайное). Формула сходится: длинная модель плюс смещение дают короткую."
+        },
+        task: `<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>b3, _ = ols(np.column_stack([x, P]), t)</code> — порядок коэффициентов: свободный член, <code>days7</code>, <code>ios</code>, <code>web</code>.</li>
+<li><code>d, _ = ols(P, x)</code> — в <code>d[2]</code> лежит <code>δ</code> для web.</li>
+<li>Напечатайте <code>web: 0.7967 + 3.2710 * (-0.0264) = 0.7102</code> — четыре знака, последнее число посчитайте как <code>b3[3] + b3[1] * d[2]</code>.</li>
+</ol>
+<p><strong>Задание.</strong> Проверьте формулу смещения пропущенной переменной на коэффициенте web.</p>`,
+        starter: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b3, _ = ols(np.column_stack([x, P]), t)
+`,
+        expected: { stdout: "web: 0.7967 + 3.2710 * (-0.0264) = 0.7102" },
+        hint: "<code>print(f\"web: {b3[3]:.4f} + {b3[1]:.4f} * ({d[2]:.4f}) = {b3[3] + b3[1] * d[2]:.4f}\")</code>. Если перемножить округлённые числа в уме, выйдет 0,7103 — разница в последнем знаке от округления.",
+        solution: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b3, _ = ols(np.column_stack([x, P]), t)
+d, _ = ols(P, x)
+print(f"web: {b3[3]:.4f} + {b3[1]:.4f} * ({d[2]:.4f}) = {b3[3] + b3[1] * d[2]:.4f}")
+`
+      },
+      {
+        title: "Печать коэффициентов: zip и срез",
+        body: `
+<p>В модели с несколькими признаками коэффициенты удобно печатать по одному в строке, с названием. Свободный член и <code>days7</code> стоят первыми, а коэффициенты платформ — с третьего места до конца. Это срез массива <code>b3[2:]</code>, как у списка.</p>
+<p><code>zip(a, b)</code> идёт по двум спискам сразу и выдаёт пары: первое название с первым коэффициентом, второе со вторым.</p>
+<pre><code>for name, v in zip(["ios", "web"], b3[2:]):
+    print(f"  {name:&lt;8}{v:&gt;7.2f}")</code></pre>
+<p><code>{name:&lt;8}</code> прижимает текст к левому краю поля в 8 символов, <code>{v:&gt;7.2f}</code> — число к правому краю поля в 7 символов. Так столбец чисел встаёт ровно. В основной задаче названий пять — список <code>CHANNELS</code> из пролога.</p>`,
+        ba: {
+          before: { columns: ["позиция в b3", "значение"], rows: [[0, "-2.63"], [1, "3.27"], [2, "0.51"], [3, "0.80"]] },
+          after: { columns: ["строка вывода"], rows: [["свободный член = -2.63"], ["days7 = 3.27"], ["  ios        0.51"], ["  web        0.80"], ["R2 = 0.483"]] },
+          note: "Позиции 2 и 3 — платформы: zip склеивает их с названиями."
+        },
+        task: "<p><strong>Задание.</strong> Постройте модель <code>days90</code> от <code>days7</code> и платформы и напечатайте её, как в таблице «стало»: свободный член, <code>days7</code>, две строки платформ через <code>zip</code> и R².</p>",
+        starter: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b3, r2_3 = ols(np.column_stack([x, P]), t)
+print(f"свободный член = {b3[0]:.2f}")
+print(f"days7 = {b3[1]:.2f}")
+`,
+        expected: { stdout: "свободный член = -2.63\ndays7 = 3.27\nios 0.51\nweb 0.80\nR2 = 0.483" },
+        hint: "Цикл из теории шага и последней строкой <code>print(f\"R2 = {r2_3:.3f}\")</code>.",
+        solution: `x = feat["days7"].to_numpy(float)
+t = feat["days90"].to_numpy(float)
+
+def ols(X, y):
+    X1 = np.column_stack([np.ones(len(X)), X])
+    b = np.linalg.solve(X1.T @ X1, X1.T @ y)
+    resid = y - X1 @ b
+    r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return b, r2
+
+b3, r2_3 = ols(np.column_stack([x, P]), t)
+print(f"свободный член = {b3[0]:.2f}")
+print(f"days7 = {b3[1]:.2f}")
+for name, v in zip(["ios", "web"], b3[2:]):
+    print(f"  {name:<8}{v:>7.2f}")
+print(f"R2 = {r2_3:.3f}")
+`
+      }
+    ]
+  },
 
   starter: `# Три регрессии: активность, канал, и то и другое
 
@@ -22317,7 +22649,8 @@ R2 = 0,64,  n = 12 480</code></pre>
   <li>совпадают ли прогнозы для organic и social со средними по этим каналам;</li>
   <li>совпадает ли <span class="m">\\(R^2\\)</span> с правильной моделью из основной задачи.</li>
 </ul>
-<p>Сравните коэффициенты, полученные через <code>solve</code> и через <code>np.linalg.lstsq</code>.</p>`,
+<p>Сравните коэффициенты, полученные через <code>solve</code> и через <code>np.linalg.lstsq</code>.</p>
+<p><strong>Пригодится.</strong> <code>np.linalg.matrix_rank(X1)</code> — сколько столбцов матрицы независимы друг от друга; <code>np.linalg.cond(X1.T @ X1)</code> — число обусловленности: чем оно больше, тем сильнее малая погрешность искажает решение. <code>b, *_ = np.linalg.lstsq(X1, y, rcond=None)</code> подбирает коэффициенты МНК без нормального уравнения и возвращает несколько значений — коэффициенты первые, остальные собирает <code>*_</code>.</p>`,
       solution: `ALL = ["organic"] + CHANNELS
 Dall = np.column_stack([(feat["channel"] == c).to_numpy(float)
                         for c in ALL])
