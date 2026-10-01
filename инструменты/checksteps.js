@@ -84,6 +84,21 @@ function checkPy(got, want) {
 
 const db = new DatabaseSync(":memory:");
 db.exec(ctx.window.DATA.shopSQL);
+/* журнал мобильного приложения (модуль 4) лежит в data.js CSV-строками —
+   заливаем так же, как Engine.sql в app.js */
+function fillFromCsv(csv, sql, conv) {
+  if (!csv) throw new Error("нет CSV для: " + sql);
+  const st = db.prepare(sql);
+  db.exec("BEGIN");
+  csv.split("\n").slice(1).forEach(function (line) { if (line) st.run.apply(st, conv(line.split(","))); });
+  db.exec("COMMIT");
+}
+fillFromCsv(ctx.window.DATA.appUsersCSV, "INSERT INTO app_users VALUES (?,?,?,?,?)",
+  function (c) { return [+c[0], c[1], c[2], c[3], c[4]]; });
+fillFromCsv(ctx.window.DATA.appActivityCSV, "INSERT INTO app_activity VALUES (?,?)",
+  function (c) { return [+c[0], c[1]]; });
+fillFromCsv(ctx.window.DATA.appOrdersCSV, "INSERT INTO app_orders VALUES (?,?,?)",
+  function (c) { return [+c[0], c[1], +c[2]]; });
 
 function query(sql) {
   const st = db.prepare(sql);
