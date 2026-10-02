@@ -14,7 +14,14 @@
       "Bash(python3 build.py)",
       "Bash(python3 инструменты/figs.py *)",
       "Bash(python3 инструменты/mkdb.py)",
-      "Bash(node .claude/skills/pyerr-rule/scripts/try-pyerr.js *)"
+      "Bash(node .claude/skills/pyerr-rule/scripts/try-pyerr.js *)",
+      "Bash(python3 .claude/skills/new-practicum/scripts/practicum_check.py *)",
+      "Bash(python3 .claude/skills/new-practicum/scripts/audit.py *)",
+      "Bash(python3 .claude/skills/new-practicum/scripts/audit.py)",
+      "Bash(bash .claude/skills/new-practicum/scripts/setup-pandas22.sh *)",
+      "Bash(bash инструменты/release.sh --dry-run)",
+      "Bash(python3 инструменты/devserver.py *)",
+      "Bash(node .claude/skills/new-practicum/scripts/prelude.js *)"
     ]
   },
   "hooks": {
@@ -39,6 +46,17 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-lesson.sh check",
             "timeout": 30,
             "statusMessage": "Проверяю файл урока"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pandas22.sh",
+            "timeout": 5
           }
         ]
       }

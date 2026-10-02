@@ -47,6 +47,26 @@ steps_all() {
   return $ok
 }
 
+# Служебные скрипты: инструменты, хуки и скрипты скиллов Claude Code
+# хотя бы разбираются — они запускаются не на каждом PR, и сломанный
+# заметили бы только в нужный момент.
+tool_scripts() {
+  local f ok=0
+  for f in инструменты/*.sh .claude/hooks/*.sh .claude/skills/*/scripts/*.sh; do
+    [ -e "$f" ] || continue
+    bash -n "$f" || ok=1
+  done
+  for f in инструменты/*.js .claude/skills/*/scripts/*.js; do
+    [ -e "$f" ] || continue
+    node --check "$f" || ok=1
+  done
+  for f in инструменты/*.py .claude/skills/*/scripts/*.py; do
+    [ -e "$f" ] || continue
+    python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' "$f" || ok=1
+  done
+  return $ok
+}
+
 fig_modules() {
   python3 -c 'import sys; sys.path.insert(0, "инструменты"); import figs; print(" ".join(figs.MODULES))'
 }
@@ -85,6 +105,7 @@ version_bumped() {
 }
 
 step "Синтаксис JS" "в одном из файлов сайта синтаксическая ошибка — страница не откроется" syntax
+step "Служебные скрипты" "синтаксическая ошибка в скрипте инструментов, хука или скилла (bash -n / node --check)" tool_scripts
 step "Тренажёр" "эталон задачи тренажёра не выполняется (node инструменты/checkdrills.js)" node инструменты/checkdrills.js
 step "Карточки" "ошибка в карточках повторения (node инструменты/checkcards.js)" node инструменты/checkcards.js
 step "Словарь" "ошибка в словаре терминов (node инструменты/checkterms.js)" node инструменты/checkterms.js

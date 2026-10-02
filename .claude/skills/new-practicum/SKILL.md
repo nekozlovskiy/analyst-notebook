@@ -43,9 +43,17 @@ argument-hint: "[id урока, например m3l4]"
 
 - SQL: учебная база из `data.js` (рецепт в `ПРОГРЕСС.md`) или
   `node инструменты/checksteps.js <id> --try <шаг> "<SQL>"`.
-- Python — в двух версиях pandas: локальной 3.x и 2.2, как в браузере:
+- Python — в двух версиях pandas: локальной 3.x и 2.2, как в браузере.
+  Окружение с 2.2 — `~/.cache/analyst-notebook/v312/bin/python`: его в начале
+  сессии готовит хук `.claude/hooks/pandas22.sh` (в фоне, около минуты в
+  первый раз). Готово, когда есть `v312/.pandas22-ok`: сам python появляется
+  в первую секунду, pandas — позже. Нет — `bash .claude/skills/new-practicum/scripts/setup-pandas22.sh ~/.cache/analyst-notebook`.
+- Данные и пролог урока одним файлом, чтобы считать тем же кодом, что
+  видит ученик:
 
-      bash .claude/skills/new-practicum/scripts/setup-pandas22.sh <scratchpad>
+      node .claude/skills/new-practicum/scripts/prelude.js <id> > <scratchpad>/pre.py
+      cat <scratchpad>/pre.py расчёт.py | python3 -
+      cat <scratchpad>/pre.py расчёт.py | ~/.cache/analyst-notebook/v312/bin/python -
 
 ## 4. Подводные камни, на которых уже спотыкались
 
@@ -61,6 +69,12 @@ argument-hint: "[id урока, например m3l4]"
 - Бесконечный `while` в браузере вешает Pyodide — в шагах с циклами давать
   подсказку про изменение счётчика.
 - Новая частая ошибка ученика — правило в `Check.pyErr` в `app.js`.
+- В заготовке вместо `...` — комментарий (`# b = решение …`): с `...` код
+  падает невнятно (`'ellipsis' object…`, ошибка `matmul`), а без строки —
+  понятным `NameError`, на который у курса есть подсказка по-русски.
+- Если нужный вывод можно получить и без приёма шага (копипастой вместо
+  функции), у шага `expected.uses` — регулярка, которую код обязан содержать
+  (README, «Как добавить практикум»).
 - Заодно проверять, что код из теории урока работает на данных курса (в 2.4
   пример среза падал на неотсортированном индексе).
 
@@ -72,7 +86,7 @@ argument-hint: "[id урока, например m3l4]"
 
       node инструменты/checksteps.js <id>
       python3 .claude/skills/new-practicum/scripts/practicum_check.py <id>
-      python3 .claude/skills/new-practicum/scripts/practicum_check.py <id> --python <scratchpad>/v312/bin/python
+      python3 .claude/skills/new-practicum/scripts/practicum_check.py <id> --python ~/.cache/analyst-notebook/v312/bin/python
 
 - Браузер: `python3 инструменты/devserver.py 8781` (фоном), страница
   `http://localhost:8781/index.html#<id>`, `browser_resize` 390×844, затем
@@ -80,8 +94,17 @@ argument-hint: "[id урока, например m3l4]"
   заменён на id урока. Ждём: у каждого шага заготовка «Пока не совпадает»,
   решение `passed`, основная задача «Задание выполнено», `pageW` и
   `maxRight` не больше 390.
+  - Переход на другой `#хэш` того же `index.html` документ не перезагружает:
+    в памяти остаются прежние `app.js` и уроки. Скрипт сверяет время
+    загрузки страницы с `/__mtime` devserver и, если страница старше правок,
+    перезагружает её и возвращает `{ stale: true }` — запустите его ещё раз.
+  - Практикум, уже пройденный в этом origin, не перепроверить. Чистый
+    прогресс — другой origin: `127.0.0.1` вместо `localhost` или второй
+    devserver на свободном порту (8782…), потом `pkill -f "devserver.py 8782"`.
 - В README дописать урок в список «сейчас он есть в …».
 - Перед PR — агент `lesson-reviewer`; для нового материала для новичков —
-  ещё и `student-walkthrough`.
+  ещё и `student-walkthrough` (оба сразу, параллельно). Правки `app.js` по
+  дороге — ещё `engine-reviewer`.
 
-Коммит содержания — один; выпуск (версия, сборка, PR) — скилл `/release`.
+Коммит содержания — один; выпуск (версия, сборка, коммит, ci.sh) —
+`bash инструменты/release.sh "<что>"` после согласия владельца (скилл `/release`).

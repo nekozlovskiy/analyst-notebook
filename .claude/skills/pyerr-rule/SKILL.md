@@ -24,8 +24,8 @@ argument-hint: "[текст ошибки или код, который её да
 pandas 2.2 (Pyodide 0.26) — их сообщения бывают другими, чем у локальных
 Python 3.13+ и pandas 3. Проверьте обе версии:
 
-    bash .claude/skills/new-practicum/scripts/setup-pandas22.sh <scratchpad>/py22
-    node .claude/skills/pyerr-rule/scripts/try-pyerr.js --code "…" --python <scratchpad>/py22/v312/bin/python
+    bash .claude/skills/new-practicum/scripts/setup-pandas22.sh ~/.cache/analyst-notebook   # если хук сессии ещё не поставил
+    node .claude/skills/pyerr-rule/scripts/try-pyerr.js --code "…" --python ~/.cache/analyst-notebook/v312/bin/python
 
 Если подсказка уже есть и она верна — правило не нужно. Если есть, но
 вводит в заблуждение, — поправить её или поставить частное правило выше.
