@@ -3,7 +3,10 @@
 #
 #   check-lesson.sh guard   — PreToolUse (Edit|Write): запрещает править
 #                             «Тетрадь аналитика.html» руками — его целиком
-#                             собирает build.py.
+#                             собирает build.py; запрещает править файлы
+#                             репозитория на main и на ветке, которая уже
+#                             слита в main (одна ветка — один PR). Слитость —
+#                             по локальному origin/main, без сети.
 #   check-lesson.sh check   — PostToolUse (Edit|Write): после правки файла
 #                             сайта на JS — node --check; для текстов уроков
 #                             и app.js ещё и поиск случайных иероглифов
@@ -19,10 +22,36 @@ file=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty')
 [ -n "$file" ] || exit 0
 name=$(basename "$file")
 
+deny() {
+  jq -n --arg r "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny",
+    permissionDecisionReason: $r}}'
+  exit 0
+}
+
 if [ "$mode" = "guard" ]; then
   if [ "$name" = "Тетрадь аналитика.html" ]; then
-    jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny",
-      permissionDecisionReason: "«Тетрадь аналитика.html» собирает build.py: правьте исходники (content-*.js, app.js…) и запустите python3 build.py."}}'
+    deny "«Тетрадь аналитика.html» собирает build.py: правьте исходники (content-*.js, app.js…) и запустите python3 build.py."
+  fi
+  # Ветка — только для файлов этого репозитория. Принадлежность — через
+  # git, а не сравнением строк: в пути проекта есть «й», и macOS отдаёт его
+  # то составным символом, то «и» с отдельной краткой. Существующий, но не
+  # отслеживаемый git файл (личный план в docs/) править можно где угодно.
+  repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+  dir=$(dirname "$file")
+  while [ ! -d "$dir" ]; do dir=$(dirname "$dir"); done
+  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)
+  [ -n "$top" ] && [ "$top" = "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" ] || exit 0
+  if [ -f "$file" ] && ! git -C "$dir" ls-files --error-unmatch -- "$(basename "$file")" >/dev/null 2>&1; then exit 0; fi
+  branch=$(git -C "$repo" branch --show-current 2>/dev/null || true)
+  [ -n "$branch" ] || exit 0
+  if [ "$branch" = main ]; then
+    deny "Это main: правки идут в отдельной ветке — git switch -c <имя> от свежего origin/main (одна ветка — один PR)."
+  fi
+  branch_re=$(printf '%s' "$branch" | sed 's/[][\.*^$+?(){}|/]/\\&/g')
+  merged=$(git -C "$repo" log origin/main --merges -1 --format=%h -E \
+           --grep="from [^ /]+/${branch_re}\$" 2>/dev/null || true)
+  if [ -n "$merged" ]; then
+    deny "Ветка $branch уже слита в main ($merged): новые правки — в новую ветку от свежего origin/main. Незакоммиченное переносится так: git stash; git switch main; git merge --ff-only origin/main; git switch -c <имя>; git stash pop."
   fi
   exit 0
 fi

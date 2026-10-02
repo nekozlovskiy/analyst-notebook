@@ -5,10 +5,25 @@
    не пройти), затем решения (должно пройти); в конце — основная задача.
    Возвращает статусы, ширину страницы и правый край таблиц — всё должно
    быть не шире 390. Практикум, уже пройденный в этом origin, не
-   перепроверить: откройте другой origin (127.0.0.1 вместо localhost). */
+   перепроверить: откройте другой origin (127.0.0.1 вместо localhost
+   или второй devserver на свободном порту).
+
+   Если вернулось { stale: true } — страница загружена раньше последней
+   правки файлов (переход на другой #хэш документ не перезагружает),
+   и скрипт сам её перезагрузил: просто запустите его ещё раз. */
 async () => {
   const ID = "LESSON_ID";
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  /* devserver.py отдаёт время последней правки файлов сайта; на другом
+     сервере адреса нет, и проверка свежести пропускается */
+  try {
+    const r = await fetch("/__mtime", { cache: "no-store" });
+    if (r.ok && (await r.json()).mtime > performance.timeOrigin) {
+      setTimeout(function () { location.reload(); }, 50);
+      return { stale: true, say: "страница старше правок — перезагружаю, запустите проверку ещё раз" };
+    }
+  } catch (e) { /* не devserver */ }
+  for (let t = 0; t < 50 && !(window.CONTENT && window.CONTENT[ID] && document.getElementById("practiceBox")); t++) await sleep(200);
   await sleep(500);
   const L = window.CONTENT[ID], P = L.practicum;
   const box = document.getElementById("practiceBox");
