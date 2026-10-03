@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -126,7 +126,7 @@ const Store = (function () {
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review", "prep"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep", "plan"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -792,12 +792,188 @@ const Stats = {
      иначе к следующему непройденному. Новичку карточка не нужна. */
   resume: function () {
     const last = Course.byId(Store.get("seen", "last", null) || "");
-    if (last && last.ready && !Course.isDone(last.id)) return { lesson: last, fresh: false };
+    /* в быстром темпе начатый урок вне темпа не предлагаем — он есть в оглавлении */
+    if (last && last.ready && !Course.isDone(last.id) && Plan.inTrack(last)) return { lesson: last, fresh: false };
     if (!last && Course.doneCount(Course.flat) === 0) return null;
     const from = last ? Course.ready.indexOf(last) : -1;
     const order = Course.ready.slice(from + 1).concat(Course.ready.slice(0, from + 1));
-    const next = order.filter(function (l) { return !Course.isDone(l.id); })[0];
+    /* в быстром темпе следующий — только из его уроков */
+    const next = order.filter(function (l) { return !Course.isDone(l.id) && Plan.inTrack(l); })[0];
     return next ? { lesson: next, fresh: true } : null;
+  }
+};
+
+/* ============================================================
+   План на день
+
+   Ученик выбирает, сколько минут в день занимается (30, 60, 120), и
+   темп: полный — все уроки, быстрый — без уроков с fast: false в карте
+   курса (3.5, 3.6 и модуль 5). Хранится в Store: plan.daily, plan.pace.
+
+   Длительность урока — оценка: mins из карты курса, иначе 90 минут.
+   Когда пройдено три урока с записанным временем от 5 минут, оценки
+   умножаются на личный коэффициент — сколько на эти уроки ушло на самом
+   деле против оценки. Перенесённый без времени урок в расчёт не идёт.
+   ============================================================ */
+
+const Plan = {
+  DAILY: [30, 60, 120],
+  MINS: 90,               /* урок без своей оценки */
+  REVIEW_SEC: 30,         /* на вопрос или карточку повторения */
+  REVIEW_DAY: 5,          /* в среднем минут в день на повторение — для прогноза */
+
+  daily: function () {
+    const d = Store.get("plan", "daily", null);
+    return Plan.DAILY.indexOf(d) >= 0 ? d : null;
+  },
+  fast: function () { return Store.get("plan", "pace", "full") === "fast"; },
+  inFast: function (l) { return l.fast !== false && l.module.fast !== false; },
+  inTrack: function (l) { return !Plan.fast() || Plan.inFast(l); },
+  track: function () { return Course.ready.filter(Plan.inTrack); },
+
+  base: function (l) { return l.mins || Plan.MINS; },
+
+  /* k — личный коэффициент, n — по скольким урокам он посчитан */
+  pace: function () {
+    let spent = 0, est = 0, n = 0;
+    Course.ready.forEach(function (l) {
+      const t = Store.get("time", l.id, 0);
+      if (!Course.isDone(l.id) || t < 300) return;
+      spent += t / 60; est += Plan.base(l); n++;
+    });
+    if (n < 3) return { k: 1, n: n, spent: spent, est: est };
+    return { k: Math.min(3, Math.max(0.5, spent / est)), n: n, spent: spent, est: est };
+  },
+
+  /* Сколько минут осталось на урок. Начатый урок, на который уже ушло
+     больше оценки, всё равно не закончен — оставляем ему 10 минут. */
+  left: function (l, k) {
+    if (Course.isDone(l.id)) return 0;
+    const est = Plan.base(l) * k, spent = Store.get("time", l.id, 0) / 60;
+    return Math.max(Math.round(est - spent), 10);
+  },
+
+  /* урок на сегодня: тот же, что в карточке «продолжить», а новичку — первый */
+  next: function () {
+    const r = Stats.resume();
+    if (r) return r.lesson;
+    return Plan.track().filter(function (l) { return !Course.isDone(l.id); })[0] || null;
+  },
+
+  /* до 5 минут, но не меньше 5 — точнее оценка всё равно не бывает */
+  r5: function (m) { return Math.max(5, Math.round(m / 5) * 5); },
+  dur: function (m) {
+    if (m < 60) return m + " " + plural(m, "минута", "минуты", "минут");
+    const h = Math.round(m / 60);
+    return h + " " + plural(h, "час", "часа", "часов");
+  },
+  date: function (iso) {
+    const d = fromIso(iso);
+    return d.getDate() + " " + MONTHS_GEN[d.getMonth()] +
+      (d.getFullYear() !== new Date().getFullYear() ? " " + d.getFullYear() + " года" : "");
+  },
+
+  /* Прогноз: оставшиеся минуты по темпу делим на минуты в день за
+     вычетом повторения. Сегодня — первый из этих дней, но в нём
+     осталось меньше: уже позанимались — минут на сегодня меньше. */
+  finish: function (k) {
+    const d = Plan.daily();
+    const track = Plan.track();
+    const rest = track.filter(function (l) { return !Course.isDone(l.id); });
+    const mins = rest.reduce(function (s, l) { return s + Plan.left(l, k); }, 0);
+    if (!d || !mins) return null;
+    const per = d - Plan.REVIEW_DAY;
+    const now = Math.max(per - Math.floor(Store.get("days", isoDay(), 0) / 60), 0);
+    const days = mins <= now ? 1 : 1 + Math.ceil((mins - now) / per);
+    return { lessons: rest.length, total: track.length, mins: mins, days: days,
+             date: addDays(isoDay(), days - 1) };
+  },
+
+  /* «Сегодня: повторение … и урок …» */
+  today: function (k) {
+    const d = Plan.daily();
+    const due = Review.due(), n = Math.min(due.length, Review.LIMIT);
+    const rv = Math.ceil(n * Plan.REVIEW_SEC / 60);
+    const spent = Math.floor(Store.get("days", isoDay(), 0) / 60);
+    const l = Plan.next();
+    const rvWhat = n ? Review.say(due.slice(0, n)).replace(/^\d+: /, "") + ", ≈ " + rv + " мин" : "";
+    const rvTxt = n ? "повторение — " + rvWhat : "";
+    if (spent >= d) {
+      return "Сегодня уже " + spent + " мин из " + d + " — план на день выполнен." +
+        (n ? " Если останутся силы, есть повторение: " + rvWhat + "." : "");
+    }
+    const parts = rvTxt ? [rvTxt] : [];
+    const free = d - spent - (n ? rv : 0);
+    if (l && free >= 5) {
+      const left = Plan.left(l, k);
+      const name = "урок " + l.num + " «" + l.title + "»";
+      parts.push(free >= left
+        ? name + " целиком, ≈ " + Plan.r5(left) + " мин"
+        : name + ", ≈ " + Plan.r5(free) + " мин из оставшихся ≈ " + Plan.r5(left));
+    }
+    if (!parts.length) return l ? "Сегодня уже " + spent + " мин из " + d + " — план почти выполнен."
+                                : "Все уроки этого темпа пройдены.";
+    const head = spent ? "На сегодня осталось: " : "Сегодня: ";
+    return head + parts.join("; ") + "." +
+      (!l ? " Все уроки этого темпа пройдены." : "");
+  },
+
+  /* Блок на главной. До выбора минут в день — только вопрос и кнопки. */
+  section: function () {
+    const d = Plan.daily(), fast = Plan.fast();
+    const all = Course.ready.length, short = Course.ready.filter(Plan.inFast).length;
+    const node = el("section", { class: "plan has-margin", "aria-labelledby": "planTitle" });
+    function seg(label, key, items, cur) {
+      return '<div class="plan-seg" role="group" aria-label="' + label + '">' +
+        items.map(function (it) {
+          return '<button type="button" aria-describedby="planToday planEnd" data-' + key + '="' + it[0] + '" aria-pressed="' +
+            (it[0] === cur) + '">' + it[1] + "</button>";
+        }).join("") + "</div>";
+    }
+    let body =
+      '<div class="plan-opts">' +
+        seg("Минут в день", "daily", Plan.DAILY.map(function (m) { return [m, m + " мин"]; }), d) +
+        seg("Темп", "pace", [["full", "Полный"], ["fast", "Быстрый"]], fast ? "fast" : "full") +
+      "</div>";
+    const paceNote = "Полный темп — все " + all + " " + plural(all, "урок", "урока", "уроков") +
+      ", быстрый — " + short + ", без 3.5, 3.6 и модуля 5: для тех, у кого собеседования уже назначены.";
+    if (!d) {
+      body += '<p class="plan-today" id="planToday">Сколько минут в день готовы заниматься? ' +
+        "Посчитаю, что делать сегодня и к какому дню закончите.</p>" +
+        '<p class="plan-note">' + paceNote + "</p>";
+    } else {
+      const p = Plan.pace(), k = p.k, end = Plan.finish(k), today = Plan.today(k);
+      if (today) body += '<p class="plan-today" id="planToday">' + esc(today) + "</p>";
+      if (end) body += '<p class="plan-end" id="planEnd">Осталось ' + end.lessons + " из " + end.total + " " +
+        plural(end.total, "урока", "уроков", "уроков") + ", ≈ " + Plan.dur(end.mins) +
+        ". По " + d + " минут в день — к " + Plan.date(end.date) + ".</p>";
+      body += '<p class="plan-note">' +
+        (p.n >= 3
+          ? "Оценка по вашему темпу: " + p.n + " " + plural(p.n, "пройденный урок занял", "пройденных урока заняли", "пройденных уроков заняли") +
+            " " + Plan.dur(Math.round(p.spent)) + " при оценке " + Plan.dur(Math.round(p.est)) + "."
+          : "Урок — около " + Plan.MINS + " минут, в модуле 0 меньше. После трёх пройденных уроков оценка подстроится под ваш темп.") +
+        " Из минут в день ≈ " + Plan.REVIEW_DAY + " уходит на повторение. " + paceNote + "</p>";
+    }
+    node.innerHTML =
+      '<div class="aside"><p>чтобы садиться заниматься без раздумий</p></div>' +
+      '<div class="sec-title" id="planTitle">План на день</div>' +
+      '<div class="plan-body">' + body + "</div>";
+
+    /* выбор меняет и карточку «продолжить», и оглавление — перерисовываем
+       главную, оставаясь на месте и с фокусом на нажатой кнопке */
+    node.addEventListener("click", function (e) {
+      const b = e.target.closest(".plan-seg button");
+      if (!b || b.getAttribute("aria-pressed") === "true") return;
+      if (b.dataset.daily) Store.set("plan", "daily", +b.dataset.daily);
+      else Store.set("plan", "pace", b.dataset.pace);
+      const y = window.scrollY, sel = b.dataset.daily ? '[data-daily="' + b.dataset.daily + '"]'
+                                                       : '[data-pace="' + b.dataset.pace + '"]';
+      Router.render(true);
+      window.scrollTo(0, y);
+      const nb = $(".plan-seg " + sel);
+      if (nb) nb.focus({ preventScroll: true });
+    });
+    return node;
   }
 };
 
@@ -1686,10 +1862,14 @@ function renderHome(app) {
     : "";
 
   /* с именем секция становится областью страницы — обложка не висит вне разметки */
+  /* выбран план — на полях не общее обещание, а дата этого ученика */
+  const planned = !!Plan.daily(), end = planned ? Plan.finish(Plan.pace().k) : null;
   const hero = el("section", { class: "hero", "aria-labelledby": "heroTitle" });
   hero.innerHTML =
     '<div class="wrap hero-in has-margin">' +
-      '<div class="aside"><p>за 2-3 месяца реально, если по часу-два в день</p>' +
+      '<div class="aside"><p>' + (end ? "в вашем темпе — к " + Plan.date(end.date)
+                                     : planned ? "уроки вашего темпа пройдены"
+                                     : "за 2-3 месяца реально, если по часу-два в день") + "</p>" +
         "<p>начните с первого модуля, остальное подождёт</p></div>" +
       '<h1 id="heroTitle">Тетрадь аналитика данных</h1>' +
       '<p class="lede">Программа на 2-3 месяца до первого оффера. Каждый урок ' +
@@ -1716,7 +1896,8 @@ function renderHome(app) {
 
   const main = el("main", { class: "wrap" });
 
-  /* повторение — первым в программе: оно на сегодня, программа — на месяцы */
+  /* план и повторение — первыми в программе: они на сегодня, программа — на месяцы */
+  main.appendChild(Plan.section());
   const review = Review.section();
   if (review) {
     /* ошибки уже есть — к ним ссылка прямо из повторения */
@@ -1740,6 +1921,7 @@ function renderHome(app) {
   /* Не карточки, а оглавление: номер, название, отточие, вид практики
      и галочка ручкой у пройденных. Всё видно сразу, без раскрытий. */
   const toc = el("section", { class: "toc" });
+  const fastPace = Plan.fast();
   let tocHtml = '<div class="sec-title">Оглавление</div>';
   Course.data.modules.forEach(function (m) {
     const d = Course.doneCount(m.lessons), t = m.lessons.length;
@@ -1762,7 +1944,9 @@ function renderHome(app) {
       const row =
         '<span class="toc-line">' +
           '<span class="toc-n">' + l.num + "</span>" +
-          '<span class="toc-tt">' + esc(l.title) + "</span>" +
+          '<span class="toc-tt">' + esc(l.title) +
+            (fastPace && !Plan.inFast(l) && l.module.fast !== false
+              ? ' <span class="toc-opt">вне быстрого темпа</span>' : "") + "</span>" +
           '<span class="toc-lead" aria-hidden="true"></span>' +
           '<span class="toc-k">' + kind + "</span>" +
           '<span class="toc-c">' + (isDone ? penTick(l.id) + '<span class="sr">пройден</span>' : "") + "</span>" +

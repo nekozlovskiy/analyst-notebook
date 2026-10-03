@@ -11,6 +11,10 @@
    хотя в карте он стоит в своём модуле.
    route: "id" — на схеме «Маршрут» урок модуля 0 входит в узел урока id;
    подпись узла — routeTitle того урока (0.2–0.5 — один блок).
+   fast: false у модуля или урока — его нет в быстром темпе прохождения
+   (план на день на главной): без 3.5, 3.6 и модуля 5.
+   mins — оценка длительности урока в минутах для плана на день; без
+   поля — 90. В модуле 0 по его weeks: 0.1 — 45 минут, 0.2–0.5 — по 30.
    Содержание готовых уроков лежит в content.js.
    ============================================================ */
 
@@ -44,26 +48,26 @@ window.COURSE = {
       weeks: "≈ 45 минут + два часа",
       summary: false,
       lessons: [
-        { id: "m0l1", title: "Первый запрос", kind: "sql", ready: true, steps: true,
+        { id: "m0l1", title: "Первый запрос", kind: "sql", ready: true, steps: true, mins: 45,
           desc: "SELECT, WHERE, ORDER BY, GROUP BY — с нуля до группировки",
           say: "запрос — это вежливая просьба к базе показать нужное",
           sayTask: "каждый шаг — одна новая мысль и одна проверка" },
-        { id: "m0l2", title: "Python: первые строки", kind: "python", ready: true, steps: true,
+        { id: "m0l2", title: "Python: первые строки", kind: "python", ready: true, steps: true, mins: 30,
           before: "m2l1", routeTitle: "0.2–0.5 Python",
           desc: "print, переменные, функции и списки — первый из четырёх уроков перед модулем 2",
           say: "код идёт сверху вниз, скобки — изнутри наружу",
           sayTask: "печатайте всё: print — ваши глаза в Python" },
-        { id: "m0l3", title: "pandas: таблица и столбцы", kind: "python", ready: true, steps: true,
+        { id: "m0l3", title: "pandas: таблица и столбцы", kind: "python", ready: true, steps: true, mins: 30,
           before: "m2l1", route: "m0l2",
           desc: "head, len, один и несколько столбцов, сумма и среднее по столбцу",
           say: "цепочка через точку читается слева направо",
           sayTask: "сначала столбец, потом расчёт" },
-        { id: "m0l4", title: "pandas: отбор, сортировка, группировка", kind: "python", ready: true, steps: true,
+        { id: "m0l4", title: "pandas: отбор, сортировка, группировка", kind: "python", ready: true, steps: true, mins: 30,
           before: "m2l1", route: "m0l2",
           desc: "WHERE, ORDER BY, LIMIT и GROUP BY на pandas — по звену за шаг",
           say: "сначала отбор, потом сортировка, потом первые строки",
           sayTask: "от порядка звеньев меняется ответ" },
-        { id: "m0l5", title: "Python: условия, циклы, словари", kind: "python", ready: true, steps: true,
+        { id: "m0l5", title: "Python: условия, циклы, словари", kind: "python", ready: true, steps: true, mins: 30,
           before: "m2l1", route: "m0l2",
           desc: "if, for, счётчик, множество, словарь и f-строка — последний шаг перед модулем 2",
           say: "отступ решает, что внутри условия и цикла",
@@ -193,12 +197,12 @@ window.COURSE = {
           say: "«сколько ждать» спросят на интервью",
           sayTask: "MDE выбирают до теста. После — это подгонка",
           sayDrills: "«Цена низкой базы» — почему тесты идут месяцами" },
-        { id: "m3l5", title: "Ошибки I и II рода, поправки", kind: "python", ready: true,
+        { id: "m3l5", title: "Ошибки I и II рода, поправки", kind: "python", ready: true, fast: false,
           desc: "Бонферрони и почему 10 метрик — это проблема",
           say: "десять метрик — это десять шансов ошибиться",
           sayTask: "десять метрик почти гарантируют «находку»",
           sayDrills: "«Сколько правды среди значимых» — отрезвляет" },
-        { id: "m3l6", title: "Ловушки A/B: SRM, подглядывание, сегменты", kind: "text", ready: true,
+        { id: "m3l6", title: "Ловушки A/B: SRM, подглядывание, сегменты", kind: "text", ready: true, fast: false,
           desc: "разбор одного плохого теста",
           say: "один плохой тест учит больше десяти хороших",
           sayTask: "назовите, что именно сломано, а не «тест плохой»",
@@ -256,7 +260,7 @@ window.COURSE = {
       ]
     },
     {
-      id: "m5", num: 5, short: "Математика", needs: ["m3"],
+      id: "m5", num: 5, short: "Математика", needs: ["m3"], fast: false,
       /* необязательный: на схеме «Маршрут» — пунктиром, в оглавлении — с меткой */
       optional: "можно отложить до первого оффера",
       title: "Математика — прикладной буст",
