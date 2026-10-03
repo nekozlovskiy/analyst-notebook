@@ -415,10 +415,12 @@ body.reading .hdr-bar { display: none; }
   .hero-in.has-margin,
   .market.has-margin,
   .review.has-margin,
+  .plan.has-margin,
   .route.has-margin { position: relative; }
   .hero-in.has-margin > .aside,
   .market.has-margin > .aside,
   .review.has-margin > .aside,
+  .plan.has-margin > .aside,
   .route.has-margin > .aside {
     position: absolute;
     left: calc(-1 * (var(--margin-w) + 26px));
@@ -432,6 +434,7 @@ body.reading .hdr-bar { display: none; }
      Компенсируем, иначе две реплики стоят на разной вертикали. */
   .market.has-margin > .aside,
   .review.has-margin > .aside,
+  .plan.has-margin > .aside,
   .route.has-margin > .aside { left: calc(-1 * (var(--margin-w) + 26px + 32px)); }
 }
 
@@ -572,6 +575,17 @@ body.reading .hdr-bar { display: none; }
   max-width: 58ch; margin: 0 0 18px;
 }
 .review-later { font-size: 15px; color: var(--ink-2); margin: 0; }
+
+/* План на день: минуты и темп, фраза на сегодня, дата окончания. */
+.plan { padding: 44px 0 4px; }
+.plan-body { max-width: 720px; }
+.plan-opts { display: flex; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 16px; }
+.plan-today {
+  font-family: var(--serif); font-size: 17px; line-height: 1.6; color: var(--ink-2);
+  max-width: 58ch; margin: 0 0 8px;
+}
+.plan-end { font-size: 15px; line-height: 1.55; color: var(--ink-2); margin: 0 0 8px; max-width: 62ch; }
+.plan-note { font-size: 14px; line-height: 1.55; color: var(--ink-3); margin: 0; max-width: 62ch; }
 .rv-meta { font-size: 13.5px; color: var(--ink-3); margin-bottom: 10px; }
 .rv-next { margin-top: 14px; }
 .mt-back { margin: 4px 0 18px; padding-left: 22px; }
@@ -2157,14 +2171,21 @@ body.ck-typing .actions { position: static; }
 /* ============================================================
    Песочница (renderSandbox в app.js)
    ============================================================ */
-.sb-tabs { display: inline-flex; gap: 4px; padding: 4px; margin: 6px 0 16px;
+.sb-tabs, .plan-seg { display: inline-flex; gap: 4px; padding: 4px; margin: 6px 0 16px;
   background: var(--paper-2); border: 1px solid var(--rule); border-radius: 10px; }
-.sb-tabs button {
+.plan-seg { margin: 0; }
+.sb-tabs button, .plan-seg button {
   font: 600 14px var(--sans); color: var(--ink-2); background: none; border: 0;
   padding: 8px 18px; border-radius: 7px; cursor: pointer; min-height: 40px;
 }
-.sb-tabs button[aria-selected="true"] { background: var(--card); color: var(--pen); box-shadow: var(--shadow-1); }
-.sb-tabs button:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.sb-tabs button[aria-selected="true"],
+.plan-seg button[aria-pressed="true"] { background: var(--card); color: var(--pen); box-shadow: var(--shadow-1); }
+.plan-seg button { padding: 8px 14px; }
+@media (max-width: 640px) {
+  .plan-seg { display: flex; width: 100%; }
+  .plan-seg button { flex: 1 1 auto; padding: 8px 6px; }
+}
+.sb-tabs button:focus-visible, .plan-seg button:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
 .sb-starts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
 .sb-lbl { font: 13px var(--sans); color: var(--ink-3); margin-right: 2px; }
 .sb-starts .chip {
