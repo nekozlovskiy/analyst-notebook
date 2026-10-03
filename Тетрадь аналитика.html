@@ -617,6 +617,10 @@ body.reading .hdr-bar { display: none; }
 .rv-next { margin-top: 14px; }
 .mt-back { margin: 4px 0 18px; padding-left: 22px; }
 .mt-back li { margin: 4px 0; }
+/* Входной тест: разбор по блокам. */
+.et-res { margin-top: 18px; }
+.et-list { margin: 0 0 22px; padding-left: 22px; max-width: 62ch; line-height: 1.55; }
+.et-list li { margin: 6px 0; }
 
 /* Пока подгружается модуль урока. */
 .lazy-wait { padding: 96px 0; font-size: 17px; color: var(--ink-2); }
@@ -2336,6 +2340,37 @@ window.COURSE = {
       where: "воронка, retention, когорты, LTV — модуль 4" },
     { pct: "~25%", what: "ClickHouse",
       where: "почти всегда как «плюсом» — один урок в модуле 1" }
+  ],
+
+  /* Входной тест (#entry-test): три блока по четыре вопроса, внутри
+     блока — от простого к сложному. ref — вопрос
+     самопроверки урока («урок:номер»), урок для старта — тот же урок;
+     у вопроса, написанного здесь, урок для старта — lesson. Неверный
+     ответ — с этого урока блок стоит начать (из нескольких ошибок —
+     самый ранний урок по порядку курса). module — модуль, который
+     при всех верных ответах можно закрыть его итоговым тестом.
+     Порядок блоков и вопросов прогресс не хранит — менять можно. */
+  entry: [
+    { key: "sql", title: "SQL", module: "m1", qs: [
+      { lesson: "m0l1",
+        q: "Что вернёт запрос <code>SELECT * FROM orders ORDER BY revenue DESC LIMIT 3</code>?",
+        opts: ["Три самых крупных заказа", "Три самых мелких заказа",
+               "Три первых заказа в таблице", "Три случайных заказа"],
+        right: 0,
+        why: "DESC — сортировка по убыванию, крупные заказы наверху. LIMIT срабатывает после сортировки и оставляет три верхние строки." },
+      { ref: "m1l3:0" }, { ref: "m1l1:0" }, { ref: "m1l2:2" }
+    ] },
+    { key: "py", title: "Python", module: "m2", qs: [
+      { lesson: "m0l2",
+        q: "Что напечатает <code>print(round(sum(r) / len(r), 1))</code>, если <code>r = [200, 500, 300]</code>?",
+        opts: ["333.3", "1000", "333", "Ошибку: скобки не сходятся"],
+        right: 0,
+        why: "Скобки раскрываются изнутри наружу: <code>sum(r)</code> — 1000, <code>len(r)</code> — 3, деление — 333.333…, <code>round(…, 1)</code> оставляет один знак после точки." },
+      { ref: "m2l1:0" }, { ref: "m2l1:2" }, { ref: "m2l2:1" }
+    ] },
+    { key: "st", title: "Статистика", module: "m3", qs: [
+      { ref: "m3l2:1" }, { ref: "m3l1:0" }, { ref: "m3l1:3" }, { ref: "m3l3:0" }
+    ] }
   ],
 
   modules: [
@@ -69169,7 +69204,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -69261,7 +69296,7 @@ const Store = (function () {
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review", "prep", "plan"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep", "plan", "entry"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -69929,7 +69964,11 @@ const Stats = {
     const last = Course.byId(Store.get("seen", "last", null) || "");
     /* в быстром темпе начатый урок вне темпа не предлагаем — он есть в оглавлении */
     if (last && last.ready && !Course.isDone(last.id) && Plan.inTrack(last)) return { lesson: last, fresh: false };
-    if (!last && Course.doneCount(Course.flat) === 0) return null;
+    if (!last && Course.doneCount(Course.flat) === 0) {
+      /* новичку — урок, который посоветовал входной тест */
+      const e = EntryTest.start();
+      return e ? { lesson: e, fresh: true, entry: true } : null;
+    }
     const from = last ? Course.ready.indexOf(last) : -1;
     const order = Course.ready.slice(from + 1).concat(Course.ready.slice(0, from + 1));
     /* в быстром темпе следующий — только из его уроков */
@@ -69963,7 +70002,20 @@ const Plan = {
   },
   fast: function () { return Store.get("plan", "pace", "full") === "fast"; },
   inFast: function (l) { return l.fast !== false && l.module.fast !== false; },
-  inTrack: function (l) { return !Plan.fast() || Plan.inFast(l); },
+  inTrack: function (l) { return (!Plan.fast() || Plan.inFast(l)) && !Plan.closed(l); },
+
+  /* Модуль со сданным итоговым тестом закрыт экстерном: его уроков нет
+     в плане. Уроки модуля 0 закрываются вместе с модулем, к которому
+     ведут: 0.1 — с модулем 1 (needs), 0.2–0.5 — с модулем 2 (before). */
+  anyClosed: function () { return Course.ready.some(function (l) { return !Course.isDone(l.id) && Plan.closed(l); }); },
+  closed: function (l) {
+    let m = l.module;
+    if (m.num === 0) {
+      m = l.before ? Course.byId(l.before).module
+        : Course.data.modules.filter(function (x) { return (x.needs || []).indexOf(l.id) >= 0; })[0];
+    }
+    return !!m && ModuleTest.passed(m);
+  },
   track: function () { return Course.ready.filter(Plan.inTrack); },
 
   base: function (l) { return l.mins || Plan.MINS; },
@@ -70046,11 +70098,12 @@ const Plan = {
         ? name + " целиком, ≈ " + Plan.r5(left) + " мин"
         : name + ", ≈ " + Plan.r5(free) + " мин из оставшихся ≈ " + Plan.r5(left));
     }
-    if (!parts.length) return l ? "Сегодня уже " + spent + " мин из " + d + " — план почти выполнен."
-                                : "Все уроки этого темпа пройдены.";
+    const allDone = Plan.anyClosed() ? "Все уроки этого темпа пройдены или закрыты итоговыми тестами."
+                                     : "Все уроки этого темпа пройдены.";
+    if (!parts.length) return l ? "Сегодня уже " + spent + " мин из " + d + " — план почти выполнен." : allDone;
     const head = spent ? "На сегодня осталось: " : "Сегодня: ";
     return head + parts.join("; ") + "." +
-      (!l ? " Все уроки этого темпа пройдены." : "");
+      (!l ? " " + allDone : "");
   },
 
   /* Блок на главной. До выбора минут в день — только вопрос и кнопки. */
@@ -70081,7 +70134,8 @@ const Plan = {
       if (today) body += '<p class="plan-today" id="planToday">' + esc(today) + "</p>";
       if (end) body += '<p class="plan-end" id="planEnd">Осталось ' + end.lessons + " из " + end.total + " " +
         plural(end.total, "урока", "уроков", "уроков") + ", ≈ " + Plan.dur(end.mins) +
-        ". По " + d + " минут в день — к " + Plan.date(end.date) + ".</p>";
+        ". По " + d + " минут в день — к " + Plan.date(end.date) + "." +
+        (Plan.anyClosed() ? " Уроки модулей, закрытых итоговым тестом, не считаются." : "") + "</p>";
       body += '<p class="plan-note">' +
         (p.n >= 3
           ? "Оценка по вашему темпу: " + p.n + " " + plural(p.n, "пройденный урок занял", "пройденных урока заняли", "пройденных уроков заняли") +
@@ -70355,6 +70409,47 @@ const Review = {
    вопросы с ошибкой уходят в повторение и на страницу «Мои ошибки».
    ============================================================ */
 
+/* Один вопрос теста: варианты вперемешку, без подсказок; после ответа —
+   «Почему» и кнопка дальше. Общий для итогового теста модуля и входного.
+   dunno — ещё кнопка «Не знаю»: она считается неверным ответом.     */
+function testQuestion(box, meta, q, nextLabel, dunno, onAnswer, onNext) {
+  let h = '<div class="rv-meta" tabindex="-1">' + meta + "</div>" +
+    '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
+  shuffled(q.opts.length).forEach(function (orig, pos) {
+    h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
+      '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
+  });
+  if (dunno) h += '<button class="q-opt" type="button" data-i="-1"><span class="mk">?</span><span>Не знаю</span></button>';
+  h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" +
+    '<div class="rv-next" hidden><button class="btn primary" type="button">' + nextLabel + "</button></div>";
+  box.innerHTML = h;
+  /* прошлая кнопка «Дальше» исчезла вместе с фокусом — ставим его на новый вопрос */
+  $(".rv-meta", box).focus({ preventScroll: true });
+  box.scrollIntoView({ block: "nearest" });
+
+  const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
+  opts.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.disabled) return;
+      const picked = +btn.dataset.i, ok = picked === q.right;
+      onAnswer(ok);
+      opts.forEach(function (b) {
+        b.disabled = true;
+        const oi = +b.dataset.i;
+        if (oi === q.right) b.classList.add("right");
+        else if (oi === picked) b.classList.add("wrong");
+      });
+      const why = $(".q-why", box);
+      why.insertAdjacentHTML("afterbegin", "<b>" + (ok ? "Верно." : picked < 0 ? "Верный ответ подсвечен." : "Неверно.") + "</b> ");
+      why.classList.add("show");
+      const nx = $(".rv-next", box), nb = $("button", nx);
+      nx.hidden = false;
+      nb.addEventListener("click", onNext);
+      nb.focus();
+    });
+  });
+}
+
 const ModuleTest = {
   N: 15,
   PASS: 80,
@@ -70399,42 +70494,10 @@ const ModuleTest = {
   step: function (box, m, order, i, wrong) {
     if (i >= order.length) { ModuleTest.finish(box, m, order, wrong); return; }
     const x = order[i], L = Course.byId(x.id), q = window.CONTENT[x.id].quiz[x.n];
-    let h = '<div class="rv-meta" tabindex="-1">Вопрос ' + (i + 1) + " из " + order.length +
-        ", из урока " + L.num + " «" + esc(L.title) + "»</div>" +
-      '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
-    shuffled(q.opts.length).forEach(function (orig, pos) {
-      h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
-        '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
-    });
-    h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" +
-      '<div class="rv-next" hidden><button class="btn primary" type="button">' +
-      (i + 1 < order.length ? "Дальше" : "Узнать результат") + "</button></div>";
-    box.innerHTML = h;
-    /* прошлая кнопка «Дальше» исчезла вместе с фокусом — ставим его на новый вопрос */
-    $(".rv-meta", box).focus({ preventScroll: true });
-    box.scrollIntoView({ block: "nearest" });
-
-    const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
-    opts.forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        if (btn.disabled) return;
-        const picked = +btn.dataset.i, ok = picked === q.right;
-        if (!ok) { wrong.push(x); Review.record(x.id, x.n, false, false); }
-        opts.forEach(function (b) {
-          b.disabled = true;
-          const oi = +b.dataset.i;
-          if (oi === q.right) b.classList.add("right");
-          else if (oi === picked) b.classList.add("wrong");
-        });
-        const why = $(".q-why", box);
-        why.insertAdjacentHTML("afterbegin", "<b>" + (ok ? "Верно." : "Неверно.") + "</b> ");
-        why.classList.add("show");
-        const nx = $(".rv-next", box), nb = $("button", nx);
-        nx.hidden = false;
-        nb.addEventListener("click", function () { ModuleTest.step(box, m, order, i + 1, wrong); });
-        nb.focus();
-      });
-    });
+    testQuestion(box, "Вопрос " + (i + 1) + " из " + order.length + ", из урока " + L.num + " «" + esc(L.title) + "»",
+      q, i + 1 < order.length ? "Дальше" : "Узнать результат", false,
+      function (ok) { if (!ok) { wrong.push(x); Review.record(x.id, x.n, false, false); } },
+      function () { ModuleTest.step(box, m, order, i + 1, wrong); });
   },
 
   finish: function (box, m, order, wrong) {
@@ -70467,6 +70530,145 @@ const ModuleTest = {
 };
 
 /* ============================================================
+   Входной тест (#entry-test)
+
+   Блоки и вопросы — COURSE.entry в lessons.js. Блоки идут подряд,
+   вопросы в блоке — от простого к сложному. Неверный ответ или «Не
+   знаю» говорит, с какого урока начать блок; общий старт — самый
+   ранний такой урок по порядку курса. Ошибки в повторение не идут:
+   эти уроки ученик ещё не проходил. Результат — Store.entry.result:
+   { at, blocks: { sql: { right, n, from } }, start }.
+   ============================================================ */
+
+const EntryTest = {
+  blocks: function () { return Course.data.entry || []; },
+
+  /* вопрос и урок для старта; null — урок переписан и вопроса нет */
+  item: function (x) {
+    if (!x.ref) return { q: x, lesson: Course.byId(x.lesson) };
+    const p = x.ref.split(":"), C = window.CONTENT[p[0]];
+    const q = C && C.quiz && C.quiz[+p[1]];
+    return q ? { q: q, lesson: Course.byId(p[0]) } : null;
+  },
+  modules: function () {
+    const ids = {};
+    EntryTest.blocks().forEach(function (b) {
+      b.qs.forEach(function (x) { if (x.ref) ids[Course.byId(x.ref.split(":")[0]).module.id] = true; });
+    });
+    return Object.keys(ids);
+  },
+  result: function () { return Store.get("entry", "result", null); },
+  /* стартовый урок теста, а если его модуль закрыт итоговым тестом или
+     урок пройден — первый следующий урок, который остался в плане */
+  start: function () {
+    const r = EntryTest.result(), l = r && r.start ? Course.byId(r.start) : null;
+    const at = l ? Course.ready.indexOf(l) : -1;
+    if (at < 0) return null;
+    return Course.ready.slice(at).filter(function (x) { return !Course.isDone(x.id) && Plan.inTrack(x); })[0] || null;
+  },
+  moduleOf: function (b) { return Course.data.modules.filter(function (m) { return m.id === b.module; })[0]; },
+
+  mount: function (box) {
+    const order = [];
+    EntryTest.blocks().forEach(function (b) {
+      b.qs.forEach(function (x) { const it = EntryTest.item(x); if (it) order.push({ b: b, it: it }); });
+    });
+    const n = order.length, r = EntryTest.result();
+    box.innerHTML =
+      '<p class="review-intro">' + n + " " + plural(n, "вопрос", "вопроса", "вопросов") +
+        " — по SQL, Python и статистике, в каждом блоке от простого к сложному. Минут десять. " +
+        "Если не знаете ответа, жмите «Не знаю»: " +
+        "угаданный ответ отправит вас дальше, чем стоит.</p>" +
+      (r ? '<p class="review-intro">Прошлый результат: верно ' + r.right + " из " + r.n + ".</p>" : "") +
+      '<button class="btn primary" id="etStart" type="button">' + (r ? "Пройти ещё раз" : "Начать тест") + "</button>" +
+      (r ? '<div class="et-res">' + EntryTest.report(r) + "</div>" : "");
+    $("#etStart", box).addEventListener("click", function () { EntryTest.step(box, order, 0, []); });
+  },
+
+  step: function (box, order, i, wrong) {
+    if (i >= order.length) { EntryTest.finish(box, order, wrong); return; }
+    const x = order[i], k = order.filter(function (y) { return y.b === x.b; }), j = k.indexOf(x);
+    testQuestion(box, esc(x.b.title) + ", вопрос " + (j + 1) + " из " + k.length +
+        " · всего " + (i + 1) + " из " + order.length,
+      x.it.q, i + 1 < order.length ? "Дальше" : "Узнать результат", true,
+      function (ok) { if (!ok) wrong.push(x); },
+      function () { EntryTest.step(box, order, i + 1, wrong); });
+  },
+
+  finish: function (box, order, wrong) {
+    const res = { at: isoDay(), right: order.length - wrong.length, n: order.length, blocks: {}, start: null };
+    let first = -1;
+    EntryTest.blocks().forEach(function (b) {
+      const mine = order.filter(function (y) { return y.b === b; });
+      const miss = mine.filter(function (y) { return wrong.indexOf(y) >= 0; });
+      /* вопросы идут от простого к сложному, а не по порядку уроков —
+         берём самый ранний урок среди ошибок */
+      const from = miss.map(function (y) { return y.it.lesson; }).sort(function (a, b) {
+        return Course.ready.indexOf(a) - Course.ready.indexOf(b);
+      })[0] || null;
+      res.blocks[b.key] = { right: mine.length - miss.length, n: mine.length, from: from ? from.id : null };
+      const at = from ? Course.ready.indexOf(from) : -1;
+      if (at >= 0 && (first < 0 || at < first)) first = at;
+    });
+    if (first >= 0) res.start = Course.ready[first].id;
+    Store.set("entry", "result", res);
+    box.innerHTML = '<p class="prep-sum" tabindex="-1">Верно ' + res.right + " из " + res.n + ".</p>" +
+      '<div class="et-res">' + EntryTest.report(res) + "</div>" +
+      '<button class="btn" id="etAgain" type="button">Пройти ещё раз</button>';
+    $("#etAgain", box).addEventListener("click", function () {
+      EntryTest.mount(box);
+      $("#etStart", box).focus();
+    });
+    $(".prep-sum", box).focus({ preventScroll: true });
+  },
+
+  /* разбор по блокам и карточка со стартовым уроком */
+  report: function (r) {
+    const rows = EntryTest.blocks().map(function (b) {
+      const x = r.blocks[b.key];
+      if (!x) return "";
+      const m = EntryTest.moduleOf(b), L = x.from ? Course.byId(x.from) : null;
+      return "<li><b>" + esc(b.title) + "</b> — " + x.right + " из " + x.n + ". " +
+        (m && ModuleTest.passed(m) ? "Итоговый тест модуля " + m.num + " сдан — план на день считает модуль закрытым."
+         : L ? 'Начать с урока <a href="#' + L.id + '">' + L.num + " «" + esc(L.title) + "»</a>."
+           : m ? 'Похоже, это вы знаете. Сдайте <a href="#summary-' + m.id + '">итоговый тест модуля ' + m.num +
+                 "</a> — сданный модуль план на день считает закрытым."
+           : "") + "</li>";
+    }).join("");
+    const L = EntryTest.start();
+    return '<ul class="et-list">' + rows + "</ul>" +
+      (L ? '<a class="resume" href="#' + L.id + '"><span class="resume-txt">' +
+             '<span class="resume-k">' + (L.id === r.start ? "Начать отсюда — самый ранний урок с ошибкой"
+                                                          : "Начать отсюда — модули до него закрыты или пройдены") + "</span>" +
+             '<span class="resume-t">' + L.num + " " + esc(L.title) + "</span>" +
+             '<span class="resume-d">' + esc(L.desc) + "</span>" +
+           '</span><span class="resume-go">Начать</span></a>'
+         : '<p class="review-intro">Ошибок нет. Начните с итоговых тестов модулей — а уроки, где тест не сдан, ' +
+           "пройдите по порядку.</p>");
+  }
+};
+
+function renderEntryTest(app) {
+  document.title = "Входной тест — Тетрадь аналитика";
+  mountHeader("<b>Входной тест</b>");
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML =
+    pageHead("Входной тест",
+      "С какого урока начать, если SQL, Python или статистику вы уже видели. Тест ничего не засчитывает " +
+      "и в повторение не попадает — он только подсказывает старт.",
+      "честное «не знаю» здесь полезнее угаданного ответа") +
+    '<section class="block"><div id="etBody"><p class="page-wait">Собираю вопросы…</p></div></section>';
+  app.appendChild(main);
+  Promise.all(EntryTest.modules().map(function (m) { return Lazy.content(m); })).then(function () {
+    const box = $("#etBody");
+    if (box && location.hash === "#entry-test") EntryTest.mount(box);
+  }, function () {
+    const box = $("#etBody");
+    if (box) box.innerHTML = '<p class="page-wait">Тест не загрузился — похоже, пропал интернет.</p>';
+  });
+}
+
+/* ============================================================
    Отдельные страницы: к собеседованию, конспект, итог модуля
 
    Адреса выбраны так, чтобы не совпасть ни с одним id на странице:
@@ -70480,6 +70682,7 @@ const Pages = {
     if (id === "my-notes") return renderMyNotes;
     if (id === "mistakes") return renderMistakes;
     if (id === "sandbox") return renderSandbox;
+    if (id === "entry-test") return renderEntryTest;
     if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
     if (/^summary-m\d+$/.test(id)) return renderSummary;
     return null;
@@ -70981,11 +71184,12 @@ function renderHome(app) {
   const resumeHtml = resume
     ? '<a class="resume" href="#' + resume.lesson.id + '">' +
         '<span class="resume-txt">' +
-          '<span class="resume-k">' + (resume.fresh ? "Следующий урок" : "Вы остановились здесь") + "</span>" +
+          '<span class="resume-k">' + (resume.entry ? "Начать отсюда — по входному тесту"
+                                       : resume.fresh ? "Следующий урок" : "Вы остановились здесь") + "</span>" +
           '<span class="resume-t">' + resume.lesson.num + " " + esc(resume.lesson.title) + "</span>" +
           '<span class="resume-d">' + esc(resume.lesson.desc) + "</span>" +
         "</span>" +
-        '<span class="resume-go">Продолжить</span>' +
+        '<span class="resume-go">' + (resume.entry ? "Начать" : "Продолжить") + "</span>" +
       "</a>"
     : "";
 
@@ -71003,7 +71207,7 @@ function renderHome(app) {
   hero.innerHTML =
     '<div class="wrap hero-in has-margin">' +
       '<div class="aside"><p>' + (end ? "в вашем темпе — к " + Plan.date(end.date)
-                                     : planned ? "уроки вашего темпа пройдены"
+                                     : planned ? "уроки вашего темпа позади"
                                      : "за 2-3 месяца реально, если по часу-два в день") + "</p>" +
         "<p>начните с первого модуля, остальное подождёт</p></div>" +
       '<h1 id="heroTitle">Тетрадь аналитика данных</h1>' +
@@ -71012,6 +71216,10 @@ function renderHome(app) {
       resumeHtml +
       '<div class="map">' + mapHtml + "</div>" +
       paceHtml +
+      (done === 0 && !EntryTest.result()
+        ? '<p class="carry">Уже знакомы с SQL или Python? <a href="#entry-test">Входной тест</a> ' +
+          "на 10 минут подскажет, с какого урока начать.</p>"
+        : "") +
       /* Пустой курс — единственный момент, когда перенос вообще уместен:
          дальше эта строка только мешала бы. */
       (done === 0
@@ -71080,7 +71288,8 @@ function renderHome(app) {
         '<span class="toc-line">' +
           '<span class="toc-n">' + l.num + "</span>" +
           '<span class="toc-tt">' + esc(l.title) +
-            (fastPace && !Plan.inFast(l) && l.module.fast !== false
+            (!isDone && Plan.closed(l) ? ' <span class="toc-opt">закрыт итоговым тестом</span>'
+              : fastPace && !Plan.inFast(l) && l.module.fast !== false
               ? ' <span class="toc-opt">вне быстрого темпа</span>' : "") + "</span>" +
           '<span class="toc-lead" aria-hidden="true"></span>' +
           '<span class="toc-k">' + kind + "</span>" +
