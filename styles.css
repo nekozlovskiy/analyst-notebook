@@ -590,6 +590,10 @@ body.reading .hdr-bar { display: none; }
 .rv-next { margin-top: 14px; }
 .mt-back { margin: 4px 0 18px; padding-left: 22px; }
 .mt-back li { margin: 4px 0; }
+/* Входной тест: разбор по блокам. */
+.et-res { margin-top: 18px; }
+.et-list { margin: 0 0 22px; padding-left: 22px; max-width: 62ch; line-height: 1.55; }
+.et-list li { margin: 6px 0; }
 
 /* Пока подгружается модуль урока. */
 .lazy-wait { padding: 96px 0; font-size: 17px; color: var(--ink-2); }
