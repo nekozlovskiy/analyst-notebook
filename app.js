@@ -854,7 +854,7 @@ const Plan = {
   /* Куда ведёт кнопка «следующий урок» в конце урока: первый непройденный
      урок плана после этого — без уроков вне быстрого темпа и закрытых
      экстерном, по кругу, как карточка «продолжить». null — план пройден. */
-  next: function (id) {
+  after: function (id) {
     const from = Course.ready.findIndex(function (l) { return l.id === id; });
     const order = Course.ready.slice(from + 1).concat(Course.ready.slice(0, from + 1));
     return order.filter(function (l) { return l.id !== id && !Course.isDone(l.id) && Plan.inTrack(l); })[0] || null;
@@ -3511,7 +3511,7 @@ function linksBlockHtml(C) {
 /* Кнопка в конце урока называет, куда ведёт: в быстром темпе или после
    итогового теста следующий по плану урок — не обязательно соседний. */
 function nextLessonBtn(id) {
-  const n = Plan.next(id);
+  const n = Plan.after(id);
   return '<button class="linkbtn" id="nextBtn" type="button" data-go="#' + (n ? n.id : "") + '">' +
     (n ? "Следующий урок: " + n.num + " " + esc(n.title) : "Вернуться на главную") + "</button>";
 }
@@ -4918,7 +4918,7 @@ function renderLesson(app, id) {
      первый запуск кода не будет её ждать. И модуль следующего урока,
      если он в другом модуле, — переход дальше откроется сразу.     */
   if (L.kind !== "text") idle(function () { Lazy.data().catch(function () {}); });
-  const after = Plan.next(id);
+  const after = Plan.after(id);
   if (after && after.module !== L.module) {
     idle(function () { Lazy.content(after.module.id).catch(function () {}); });
   }
