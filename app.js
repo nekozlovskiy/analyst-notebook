@@ -1757,6 +1757,7 @@ function renderMyNotes(app) {
    больше; в группе — сначала самые частые. Отсюда ведёт ссылка назад
    к теории: ошибка чаще всего значит, что тему надо перечитать. */
 function renderMistakes(app) {
+  const again = takeRetry("mistakes");
   document.title = "Мои ошибки — Тетрадь аналитика";
   mountHeader("<b>Мои ошибки</b>");
   const all = Store.all().review || {};
@@ -1827,7 +1828,7 @@ function renderMistakes(app) {
     });
     box.innerHTML = h;
     Terms.mark(box);
-    refocus(box, "mistakes");
+    if (again) focusHere(box.firstElementChild);
   }).catch(function (e) {
     /* и сбой загрузки, и ошибка при отрисовке — иначе страница навсегда «собирает» */
     if (e) console.error(e);
@@ -1836,24 +1837,29 @@ function renderMistakes(app) {
     box.innerHTML = '<p class="page-wait">Не получилось собрать вопросы из уроков — чаще всего это ' +
       'пропавший интернет. <button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
     $("#mxRetry").addEventListener("click", function () { retried = "mistakes"; Router.render(true); });
+    if (again) focusHere($("#mxRetry"));
   });
 }
 
 /* После «Попробовать ещё раз» кнопка пропадает вместе со страницей, и
-   фокус ушёл бы в начало документа. Когда содержимое пришло, фокус —
-   на первую строку ответа: с клавиатуры и в дикторе понятно, что вышло. */
+   фокус ушёл бы в начало документа. Страница забирает отметку о повторе
+   в начале отрисовки (так она не переживёт уход на другую страницу) и
+   ставит фокус на первую строку ответа или, если снова сбой, на кнопку. */
 let retried = null;
-function refocus(box, page) {
-  if (retried !== page) return;
+function takeRetry(page) {
+  const was = retried === page;
   retried = null;
-  const t = box.firstElementChild;
+  return was;
+}
+function focusHere(t) {
   if (!t) return;
-  t.setAttribute("tabindex", "-1");
+  if (!t.matches("button, a")) t.setAttribute("tabindex", "-1");
   t.focus();
 }
 
 /* ---------- карта навыков ---------- */
 function renderSkills(app) {
+  const again = takeRetry("skills");
   document.title = "Карта навыков — Тетрадь аналитика";
   mountHeader("<b>Карта навыков</b>");
   const list = Skills.list();
@@ -1907,7 +1913,7 @@ function renderSkills(app) {
         '<ul class="sk-list">' + g.rows.map(row).join("") + "</ul></section>";
     });
     box.innerHTML = h;
-    refocus(box, "skills");
+    if (again) focusHere(box.firstElementChild);
   }).catch(function (e) {
     /* и сбой загрузки, и ошибка в расчёте — иначе страница навсегда «собирает» */
     if (e) console.error(e);
@@ -1916,6 +1922,7 @@ function renderSkills(app) {
     box.innerHTML = '<p class="page-wait">Не получилось собрать задачи из уроков — чаще всего это ' +
       'пропавший интернет. <button class="linkbtn" id="skRetry" type="button">Попробовать ещё раз</button></p>';
     $("#skRetry").addEventListener("click", function () { retried = "skills"; Router.render(true); });
+    if (again) focusHere($("#skRetry"));
   });
 }
 
