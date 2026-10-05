@@ -1438,7 +1438,7 @@ const Skills = {
     } else if (stage === 2 && fresh) {
       next = { text: "Самопроверка урока " + fresh.num, href: "#" + fresh.id };
     } else if (stage === 2 && due) {
-      next = due <= today ? { text: "Вопросы ждут в повторении сегодня", href: "#" }
+      next = due <= today ? { text: "Вопросы ждут в повторении на главной", href: "#" }
                           : { text: "Вопросы вернутся в повторении " + Review.when(due), href: null };
     }
     return { lessons: [done, ls.length], drills: [solved, drills], quiz: [hold, quiz], stage: stage, next: next };
@@ -1827,13 +1827,29 @@ function renderMistakes(app) {
     });
     box.innerHTML = h;
     Terms.mark(box);
-  }, function () {
+    refocus(box, "mistakes");
+  }).catch(function (e) {
+    /* и сбой загрузки, и ошибка при отрисовке — иначе страница навсегда «собирает» */
+    if (e) console.error(e);
     const box = $("#mxBody");
     if (!box) return;
-    box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
-      '<button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
-    $("#mxRetry").addEventListener("click", function () { Router.render(true); });
+    box.innerHTML = '<p class="page-wait">Не получилось собрать вопросы из уроков — чаще всего это ' +
+      'пропавший интернет. <button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#mxRetry").addEventListener("click", function () { retried = "mistakes"; Router.render(true); });
   });
+}
+
+/* После «Попробовать ещё раз» кнопка пропадает вместе со страницей, и
+   фокус ушёл бы в начало документа. Когда содержимое пришло, фокус —
+   на первую строку ответа: с клавиатуры и в дикторе понятно, что вышло. */
+let retried = null;
+function refocus(box, page) {
+  if (retried !== page) return;
+  retried = null;
+  const t = box.firstElementChild;
+  if (!t) return;
+  t.setAttribute("tabindex", "-1");
+  t.focus();
 }
 
 /* ---------- карта навыков ---------- */
@@ -1860,7 +1876,8 @@ function renderSkills(app) {
                                              : esc(v.next.text)) + "</p>";
     return '<li class="sk-item"><div class="sk-top">' +
         '<span class="sk-t">' + esc(r.s.title) + "</span>" +
-        '<span class="sk-lv" role="img" aria-label="ступень ' + k + " из 3: " + Skills.NAMES[k] + '">' + ticks + "</span>" +
+        /* ступень диктор слышит словом рядом — деления для глаз */
+        '<span class="sk-lv" aria-hidden="true">' + ticks + "</span>" +
         '<span class="sk-name">' + Skills.NAMES[k] + "</span></div>" +
       '<div class="sk-meta">уроки ' + v.lessons[0] + " из " + v.lessons[1] +
         " · тренажёр " + v.drills[0] + " из " + v.drills[1] +
@@ -1890,12 +1907,15 @@ function renderSkills(app) {
         '<ul class="sk-list">' + g.rows.map(row).join("") + "</ul></section>";
     });
     box.innerHTML = h;
-  }, function () {
+    refocus(box, "skills");
+  }).catch(function (e) {
+    /* и сбой загрузки, и ошибка в расчёте — иначе страница навсегда «собирает» */
+    if (e) console.error(e);
     const box = $("#skBody");
     if (!box) return;
-    box.innerHTML = '<p class="page-wait">Задачи не загрузились — похоже, пропал интернет. ' +
-      '<button class="linkbtn" id="skRetry" type="button">Попробовать ещё раз</button></p>';
-    $("#skRetry").addEventListener("click", function () { Router.render(true); });
+    box.innerHTML = '<p class="page-wait">Не получилось собрать задачи из уроков — чаще всего это ' +
+      'пропавший интернет. <button class="linkbtn" id="skRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#skRetry").addEventListener("click", function () { retried = "skills"; Router.render(true); });
   });
 }
 
@@ -3512,8 +3532,11 @@ function linksBlockHtml(C) {
    итогового теста следующий по плану урок — не обязательно соседний. */
 function nextLessonBtn(id) {
   const n = Plan.after(id);
-  return '<button class="linkbtn" id="nextBtn" type="button" data-go="#' + (n ? n.id : "") + '">' +
-    (n ? "Следующий урок: " + n.num + " " + esc(n.title) : "Вернуться на главную") + "</button>";
+  /* по кругу назад — к уроку, который пропустили, это не «следующий» */
+  const back = n && Course.ready.indexOf(n) < Course.ready.indexOf(Course.byId(id));
+  return '<button class="linkbtn next-go" id="nextBtn" type="button" data-go="#' + (n ? n.id : "") + '">' +
+    (!n ? "План пройден — на главную"
+      : (back ? "Вернуться к пропущенному: " : "Следующий урок: ") + n.num + " " + esc(n.title)) + "</button>";
 }
 
 function mountLessonNav(id, onUnmark) {

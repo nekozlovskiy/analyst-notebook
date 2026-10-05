@@ -138,7 +138,7 @@ else {
   state.review = rv("m1l1", [H, H, D, H]);
   eq("вопрос без ответа", Skills.level(sk("sql-join")).next, { text: "Самопроверка урока 1.2", href: "#m1l1" });
   state.review = rv("m1l1", [H, H, D, H, T, L1]);
-  eq("вопрос на сегодня", Skills.level(sk("sql-join")).next, { text: "Вопросы ждут в повторении сегодня", href: "#" });
+  eq("вопрос на сегодня", Skills.level(sk("sql-join")).next, { text: "Вопросы ждут в повторении на главной", href: "#" });
 
   /* ровно 80%: в навыке «Регрессия» 35 вопросов, 27 — мало, 28 — достаточно */
   const reg = ["m5l1", "m5l2", "m5l3", "m5l4", "m5l5"];
