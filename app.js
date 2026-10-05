@@ -367,7 +367,7 @@ const Progress = {
   },
 
   openMenu: function () {
-    const done = Course.doneCount(Course.flat);
+    const done = Course.doneCount(Course.flat), skills = Skills.list();
     const risky = Store.mode() === "memory";
     modal("Прогресс",
       '<div class="theory" style="font-size:14px">' +
@@ -381,7 +381,10 @@ const Progress = {
           : "<p>Всё сохраняется само: пройденные уроки, написанный код и заметки. " +
             "Специально ничего делать не нужно — просто закрывайте вкладку и возвращайтесь " +
             "когда удобно.</p>") +
-        "<p>Пройдено: <strong>" + done + " из " + Course.flat.length + "</strong>.</p>" +
+        "<p>Пройдено: <strong>" + done + " из " + Course.flat.length + "</strong>. " +
+          /* в шапке шестой ссылке нет места — к карте навыков ведёт счётчик */
+          "Навыки собеседования: изучено " + skills.filter(Skills.learned).length + " из " + skills.length +
+          ' — <a href="#skills">карта навыков</a>.</p>' +
         (Offline.ready()
           ? "<p>Курс уже открывается без интернета: страница и прочитанные уроки лежат " +
             "в браузере. Кнопка ниже докачает остальное — это около трёх мегабайт, " +
@@ -587,7 +590,7 @@ function mountHeader(crumbHtml) {
     /* на узком экране ссылки шапки и тема уходят сюда */
     '<nav class="hdr-menu" id="hdrMenu" aria-label="Меню разделов" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
-      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("glossary", "Словарь") +
+      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("skills", "Карта навыков") + navLink("glossary", "Словарь") +
       navLink("sandbox", "Песочница") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
     "</nav>" +
@@ -1833,9 +1836,9 @@ function renderSkills(app) {
   const main = el("main", { class: "wrap lesson-wrap page" });
   main.innerHTML = pageHead("Карта навыков",
     list.length + " " + plural(list.length, "навык", "навыка", "навыков") +
-      ", о которых спрашивают на собеседовании. Изучен — пройдены все уроки навыка, " +
-      "закреплён — решена половина его тренажёра, держится — 80% вопросов самопроверки " +
-      "дошли в повторении до интервала 7 дней.",
+      ", о которых спрашивают на собеседовании. Изучен — пройдены все уроки навыка " +
+      "или его модуль закрыт итоговым тестом, закреплён — решена половина его тренажёра, " +
+      "держится — 80% вопросов самопроверки дошли в повторении до интервала 7 дней или выучены.",
     "навык держится, когда его не надо вспоминать") +
     '<div id="skBody"><p class="page-wait">Собираю задачи из уроков…</p></div>';
   app.appendChild(main);
