@@ -1360,6 +1360,95 @@ const ModuleTest = {
 };
 
 /* ============================================================
+   Карта навыков (#skills)
+
+   Навык — несколько уроков (COURSE.skills в lessons.js). Ступени
+   считаются по всем урокам навыка, каждая требует предыдущую:
+   изучен — уроки пройдены (модуль, закрытый экстерном, засчитывает
+   свои); закреплён — решена половина тренажёра; держится — 80%
+   вопросов самопроверки дошли в повторении до интервала 7 дней или
+   выучены. Карточки не считаются: в повторение они попадают, только
+   если их оценили. Своего места в прогрессе у навыков нет — всё
+   берётся из done, drills, review и mtest.
+   ============================================================ */
+
+const Skills = {
+  HOLD: 2,                    /* ступень Review.STEPS с интервалом 7 дней */
+  NAMES: ["не изучен", "изучен", "закреплён", "держится"],
+
+  list: function () {
+    return (Course.data.skills || []).map(function (s) {
+      return { id: s.id, group: s.group, title: s.title,
+               lessons: s.lessons.map(Course.byId).filter(Boolean) };
+    }).filter(function (s) { return s.lessons.length > 0; });
+  },
+  passed: function (l) { return Course.isDone(l.id) || Plan.closed(l); },
+  learned: function (s) { return s.lessons.every(Skills.passed); },
+  modules: function (list) {
+    const ids = [];
+    list.forEach(function (s) {
+      s.lessons.forEach(function (l) { if (ids.indexOf(l.module.id) < 0) ids.push(l.module.id); });
+    });
+    return ids;
+  },
+
+  /* Нужно загруженное содержание уроков навыка: счёт задач и вопросов
+     лежит в window.CONTENT. */
+  level: function (s) {
+    const ls = s.lessons, today = isoDay();
+    let solved = 0, drills = 0, hold = 0, quiz = 0, due = null, fresh = null, weak = null;
+    ls.forEach(function (l) {
+      const C = window.CONTENT[l.id] || {};
+      const dn = (C.drills || []).length;
+      let ds = 0;
+      for (let i = 0; i < dn; i++) if (Store.get("drills", l.id + ":" + i, false)) ds++;
+      solved += ds; drills += dn;
+      if (dn && (!weak || ds < weak.n)) weak = { l: l, n: ds, of: dn };
+      (C.quiz || []).forEach(function (q, i) {
+        quiz++;
+        const r = Store.get("review", l.id + ":" + i, null);
+        if (!r) { if (!fresh) fresh = l; return; }
+        if (r.done || r.step >= Skills.HOLD) { hold++; return; }
+        if (r.due && (!due || r.due < due)) due = r.due;
+      });
+    });
+    const done = ls.filter(Skills.passed).length;
+    const stage = done < ls.length ? 0
+      : !(drills && solved * 2 >= drills) ? 1
+      : !(quiz && hold * 5 >= quiz * 4) ? 2 : 3;
+
+    let next = null;
+    if (stage === 0) {
+      const l = ls.filter(function (x) { return !Skills.passed(x); })[0];
+      next = { text: "Пройти урок " + l.num, href: "#" + l.id };
+    } else if (stage === 1 && weak) {
+      next = { text: "Тренажёр урока " + weak.l.num + ": решено " + weak.n + " из " + weak.of, href: "#" + weak.l.id };
+    } else if (stage === 2 && fresh) {
+      next = { text: "Самопроверка урока " + fresh.num, href: "#" + fresh.id };
+    } else if (stage === 2 && due) {
+      next = due <= today ? { text: "Вопросы ждут в повторении сегодня", href: "#" }
+                          : { text: "Вопросы вернутся в повторении " + Review.when(due), href: null };
+    }
+    return { lessons: [done, ls.length], drills: [solved, drills], quiz: [hold, quiz], stage: stage, next: next };
+  },
+
+  /* n — сколько навыков держится, закреплено и изучено (без старших ступеней) */
+  say: function (n, total) {
+    const verbs = [["держится", "держатся"], ["закреплён", "закреплены"], ["изучен", "изучены"]];
+    const parts = [];
+    n.forEach(function (k, i) {
+      if (!k) return;
+      const v = plural(k, verbs[i][0], verbs[i][1], verbs[i][1]);
+      parts.push(parts.length ? v + " ещё " + k
+        : v.charAt(0).toUpperCase() + v.slice(1) + " " + k + " " +
+          plural(k, "навык", "навыка", "навыков") + " из " + total);
+    });
+    return parts.length ? parts.join(", ") + "."
+      : "Пока ни один навык не изучен: для этого нужно пройти все его уроки.";
+  }
+};
+
+/* ============================================================
    Входной тест (#entry-test)
 
    Блоки и вопросы — COURSE.entry в lessons.js. Блоки идут подряд,
@@ -1511,6 +1600,7 @@ const Pages = {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
     if (id === "mistakes") return renderMistakes;
+    if (id === "skills") return renderSkills;
     if (id === "sandbox") return renderSandbox;
     if (id === "entry-test") return renderEntryTest;
     if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
@@ -1731,6 +1821,69 @@ function renderMistakes(app) {
     box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
       '<button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
     $("#mxRetry").addEventListener("click", function () { Router.render(true); });
+  });
+}
+
+/* ---------- карта навыков ---------- */
+function renderSkills(app) {
+  document.title = "Карта навыков — Тетрадь аналитика";
+  mountHeader("<b>Карта навыков</b>");
+  const list = Skills.list();
+
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = pageHead("Карта навыков",
+    list.length + " " + plural(list.length, "навык", "навыка", "навыков") +
+      ", о которых спрашивают на собеседовании. Изучен — пройдены все уроки навыка, " +
+      "закреплён — решена половина его тренажёра, держится — 80% вопросов самопроверки " +
+      "дошли в повторении до интервала 7 дней.",
+    "навык держится, когда его не надо вспоминать") +
+    '<div id="skBody"><p class="page-wait">Собираю задачи из уроков…</p></div>';
+  app.appendChild(main);
+
+  function row(r) {
+    const v = r.v, k = v.stage;
+    const ticks = [1, 2, 3].map(function (i) { return "<i" + (i <= k ? ' class="on"' : "") + "></i>"; }).join("");
+    const nx = !v.next ? ""
+      : '<p class="sk-next">' + (v.next.href ? '<a href="' + v.next.href + '">' + esc(v.next.text) + "</a>"
+                                             : esc(v.next.text)) + "</p>";
+    return '<li class="sk-item"><div class="sk-top">' +
+        '<span class="sk-t">' + esc(r.s.title) + "</span>" +
+        '<span class="sk-lv" role="img" aria-label="ступень ' + k + " из 3: " + Skills.NAMES[k] + '">' + ticks + "</span>" +
+        '<span class="sk-name">' + Skills.NAMES[k] + "</span></div>" +
+      '<div class="sk-meta">уроки ' + v.lessons[0] + " из " + v.lessons[1] +
+        " · тренажёр " + v.drills[0] + " из " + v.drills[1] +
+        " · вопросы " + v.quiz[0] + " из " + v.quiz[1] + "</div>" + nx + "</li>";
+  }
+
+  Promise.all(Skills.modules(list).map(function (m) { return Lazy.content(m); })).then(function () {
+    const box = $("#skBody");
+    if (!box || location.hash !== "#skills") return;
+    const rows = list.map(function (s) { return { s: s, v: Skills.level(s) }; });
+    const at = function (k) { return rows.filter(function (r) { return r.v.stage === k; }).length; };
+
+    let h = '<p class="prep-sum">' + Skills.say([at(3), at(2), at(1)], list.length) + "</p>";
+    if (at(0) === rows.length) {
+      const r = Stats.resume();
+      h += '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m0l1") + '">' +
+        (r ? "Продолжить урок " + r.lesson.num : "Открыть первый урок") + "</a></p>";
+    }
+    const groups = [];
+    rows.forEach(function (r) {
+      let g = groups.filter(function (x) { return x.t === r.s.group; })[0];
+      if (!g) groups.push(g = { t: r.s.group, rows: [] });
+      g.rows.push(r);
+    });
+    groups.forEach(function (g) {
+      h += '<section class="block"><div class="block-h"><h2>' + esc(g.t) + "</h2></div>" +
+        '<ul class="sk-list">' + g.rows.map(row).join("") + "</ul></section>";
+    });
+    box.innerHTML = h;
+  }, function () {
+    const box = $("#skBody");
+    if (!box) return;
+    box.innerHTML = '<p class="page-wait">Задачи не загрузились — похоже, пропал интернет. ' +
+      '<button class="linkbtn" id="skRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#skRetry").addEventListener("click", function () { Router.render(true); });
   });
 }
 
@@ -2082,10 +2235,16 @@ function renderHome(app) {
     main.appendChild(review);
   }
 
-  /* о страницах для собеседования — одна строка, а не ещё один блок карточек */
+  /* о страницах для собеседования — одна строка, а не ещё один блок карточек;
+     число навыков — только по пройденным урокам, без загрузки модулей */
+  const skills = Skills.list();
+  const skillsSay = Course.ready.some(Skills.passed)
+    ? 'на <a href="#skills">карте навыков</a>: изучено ' + skills.filter(Skills.learned).length + " из " + skills.length + "."
+    : 'покажет <a href="#skills">карта навыков</a>.';
   main.insertAdjacentHTML("beforeend",
     '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
+    "Как далеко вы от собеседования — " + skillsSay + " " +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
   main.appendChild(Route.section());
@@ -5411,6 +5570,10 @@ const Find = {
     out.push({ href: "#mistakes", title: "Мои ошибки", where: "Раздел",
                note: "вопросы и карточки, где вы ошибались",
                hay: "ошибки промахи трудные слабые места повторить" });
+    out.push({ href: "#skills", title: "Карта навыков", where: "Раздел",
+               note: "насколько вы готовы к собеседованию по " + Skills.list().length + " " +
+                     plural(Skills.list().length, "навыку", "навыкам", "навыкам"),
+               hay: "навыки умения готовность уровень собеседование карта" });
     out.push({ href: "#glossary", title: "Словарь", where: "Раздел",
                note: "все термины курса простыми словами",
                hay: "словарь термины глоссарий понятия слова что значит" });

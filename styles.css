@@ -1752,6 +1752,17 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .mx-a summary { cursor: pointer; font-size: 14px; color: var(--ink-3); min-height: 32px; display: flex; align-items: center; }
 .mx-a summary:hover { color: var(--pen); }
 .mx-a p { margin: 6px 0 0; }
+/* карта навыков: строка навыка и три деления ступени */
+.sk-list { list-style: none; margin: 0; padding: 0; }
+.sk-item { padding: 14px 0 16px; border-top: 1px solid var(--rule-soft); }
+.sk-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.sk-t { font-size: 17px; font-weight: 600; margin-right: auto; }
+.sk-lv { display: inline-flex; gap: 4px; }
+.sk-lv i { width: 22px; height: 7px; border-radius: 7px; border: 1px solid var(--pen-line); }
+.sk-lv i.on { background: var(--pen); border-color: var(--pen); }
+.sk-name { font-size: 14px; color: var(--ink-3); min-width: 6.5em; }
+.sk-meta { font-size: 13.5px; color: var(--ink-3); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.sk-next { margin: 6px 0 0; font-size: 14.5px; color: var(--ink-2); }
 .review-mx { margin: 14px 0 0; font-size: 14.5px; color: var(--ink-3); }
 .hdr-menu a, .hm-theme {
   display: flex; align-items: center; gap: 10px;
@@ -1766,7 +1777,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 .prep-line { margin: 30px 0 0; max-width: 62ch; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
 /* ссылка посреди фразы отличается не только цветом */
-.prep-line a, .review-mx a, .rt-note a, .carry a, .prep-more a {
+.prep-line a, .review-mx a, .rt-note a, .carry a, .prep-more a, .sk-next a {
   text-decoration: underline; text-decoration-color: var(--pen-line);
   text-decoration-thickness: 1.5px; text-underline-offset: 3px;
 }
