@@ -1779,6 +1779,17 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .mx-a summary { cursor: pointer; font-size: 14px; color: var(--ink-3); min-height: 32px; display: flex; align-items: center; }
 .mx-a summary:hover { color: var(--pen); }
 .mx-a p { margin: 6px 0 0; }
+/* карта навыков: строка навыка и три деления ступени */
+.sk-list { list-style: none; margin: 0; padding: 0; }
+.sk-item { padding: 14px 0 16px; border-top: 1px solid var(--rule-soft); }
+.sk-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.sk-t { font-size: 17px; font-weight: 600; margin-right: auto; }
+.sk-lv { display: inline-flex; gap: 4px; }
+.sk-lv i { width: 22px; height: 7px; border-radius: 7px; border: 1px solid var(--pen-line); }
+.sk-lv i.on { background: var(--pen); border-color: var(--pen); }
+.sk-name { font-size: 14px; color: var(--ink-3); min-width: 6.5em; }
+.sk-meta { font-size: 13.5px; color: var(--ink-3); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.sk-next { margin: 6px 0 0; font-size: 14.5px; color: var(--ink-2); }
 .review-mx { margin: 14px 0 0; font-size: 14.5px; color: var(--ink-3); }
 .hdr-menu a, .hm-theme {
   display: flex; align-items: center; gap: 10px;
@@ -1793,7 +1804,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 
 .prep-line { margin: 30px 0 0; max-width: 62ch; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
 /* ссылка посреди фразы отличается не только цветом */
-.prep-line a, .review-mx a, .rt-note a, .carry a, .prep-more a {
+.prep-line a, .review-mx a, .rt-note a, .carry a, .prep-more a, .sk-next a {
   text-decoration: underline; text-decoration-color: var(--pen-line);
   text-decoration-thickness: 1.5px; text-underline-offset: 3px;
 }
@@ -2319,6 +2330,7 @@ figure.fig figcaption {
    (план на день на главной): без 3.5, 3.6 и модуля 5.
    mins — оценка длительности урока в минутах для плана на день; без
    поля — 90. В модуле 0 по его weeks: 0.1 — 45 минут, 0.2–0.5 — по 30.
+   skills — карта навыков (#skills), описание у самого поля.
    Содержание готовых уроков лежит в content.js.
    ============================================================ */
 
@@ -2371,6 +2383,31 @@ window.COURSE = {
     { key: "st", title: "Статистика", module: "m3", qs: [
       { ref: "m3l2:1" }, { ref: "m3l1:0" }, { ref: "m3l1:3" }, { ref: "m3l3:0" }
     ] }
+  ],
+
+  /* Карта навыков (#skills): навыки собеседования и уроки, из которых
+     складывается каждый. Ступень навыка считается по всем его урокам:
+     изучен — уроки пройдены, закреплён — решена половина тренажёра,
+     держится — 80% вопросов самопроверки дошли в повторении до 7 дней.
+     Уроки — в порядке курса: первый непройденный станет ссылкой
+     «что дальше». В прогрессе навыки не хранятся — переставлять,
+     переименовывать и менять состав можно. Модуль 0, проекты 1.7 и 2.7
+     и карьерные 6.1, 6.2, 6.6 в карту не входят. */
+  skills: [
+    { id: "sql-agg",    group: "SQL",        title: "Агрегации и GROUP BY",        lessons: ["m1l3", "m6l3"] },
+    { id: "sql-join",   group: "SQL",        title: "JOIN",                        lessons: ["m1l1"] },
+    { id: "sql-window", group: "SQL",        title: "Оконные функции",             lessons: ["m1l2"] },
+    { id: "sql-cte",    group: "SQL",        title: "CTE и подзапросы",            lessons: ["m1l4", "m1l5"] },
+    { id: "cohorts",    group: "SQL",        title: "Даты и когорты",              lessons: ["m1l6", "m4l3"] },
+    { id: "clickhouse", group: "SQL",        title: "Большие данные: ClickHouse",  lessons: ["m1l7"] },
+    { id: "pd-group",   group: "Python",     title: "pandas: группировка и merge", lessons: ["m2l1", "m2l6", "m6l4"] },
+    { id: "pd-clean",   group: "Python",     title: "Очистка данных и выбросы",    lessons: ["m2l2", "m2l3"] },
+    { id: "pd-time",    group: "Python",     title: "Временные ряды и графики",    lessons: ["m2l4", "m2l5"] },
+    { id: "stat-tests", group: "Статистика", title: "Распределения, ДИ и тесты",   lessons: ["m3l2", "m3l1", "m3l3"] },
+    { id: "ab",         group: "Статистика", title: "Дизайн и разбор A/B",         lessons: ["m3l4", "m3l5", "m3l6", "m3l7"] },
+    { id: "regression", group: "Статистика", title: "Регрессия и причинность",     lessons: ["m5l1", "m5l2", "m5l3", "m5l4", "m5l5"] },
+    { id: "metrics",    group: "Продукт",    title: "Воронки и метрики",           lessons: ["m4l2", "m4l4", "m4l5"] },
+    { id: "case",       group: "Продукт",    title: "Продуктовый кейс и дашборд",  lessons: ["m4l1", "m4l6", "m4l7", "m6l5"] }
   ],
 
   modules: [
@@ -69537,7 +69574,7 @@ const Progress = {
   },
 
   openMenu: function () {
-    const done = Course.doneCount(Course.flat);
+    const done = Course.doneCount(Course.flat), skills = Skills.list();
     const risky = Store.mode() === "memory";
     modal("Прогресс",
       '<div class="theory" style="font-size:14px">' +
@@ -69551,7 +69588,10 @@ const Progress = {
           : "<p>Всё сохраняется само: пройденные уроки, написанный код и заметки. " +
             "Специально ничего делать не нужно — просто закрывайте вкладку и возвращайтесь " +
             "когда удобно.</p>") +
-        "<p>Пройдено: <strong>" + done + " из " + Course.flat.length + "</strong>.</p>" +
+        "<p>Пройдено: <strong>" + done + " из " + Course.flat.length + "</strong>. " +
+          /* в шапке шестой ссылке нет места — к карте навыков ведёт счётчик */
+          "Навыки собеседования: изучено " + skills.filter(Skills.learned).length + " из " + skills.length +
+          ' — <a href="#skills">карта навыков</a>.</p>' +
         (Offline.ready()
           ? "<p>Курс уже открывается без интернета: страница и прочитанные уроки лежат " +
             "в браузере. Кнопка ниже докачает остальное — это около трёх мегабайт, " +
@@ -69757,7 +69797,7 @@ function mountHeader(crumbHtml) {
     /* на узком экране ссылки шапки и тема уходят сюда */
     '<nav class="hdr-menu" id="hdrMenu" aria-label="Меню разделов" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
-      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("glossary", "Словарь") +
+      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("skills", "Карта навыков") + navLink("glossary", "Словарь") +
       navLink("sandbox", "Песочница") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
     "</nav>" +
@@ -70530,6 +70570,95 @@ const ModuleTest = {
 };
 
 /* ============================================================
+   Карта навыков (#skills)
+
+   Навык — несколько уроков (COURSE.skills в lessons.js). Ступени
+   считаются по всем урокам навыка, каждая требует предыдущую:
+   изучен — уроки пройдены (модуль, закрытый экстерном, засчитывает
+   свои); закреплён — решена половина тренажёра; держится — 80%
+   вопросов самопроверки дошли в повторении до интервала 7 дней или
+   выучены. Карточки не считаются: в повторение они попадают, только
+   если их оценили. Своего места в прогрессе у навыков нет — всё
+   берётся из done, drills, review и mtest.
+   ============================================================ */
+
+const Skills = {
+  HOLD: 2,                    /* ступень Review.STEPS с интервалом 7 дней */
+  NAMES: ["не изучен", "изучен", "закреплён", "держится"],
+
+  list: function () {
+    return (Course.data.skills || []).map(function (s) {
+      return { id: s.id, group: s.group, title: s.title,
+               lessons: s.lessons.map(Course.byId).filter(Boolean) };
+    }).filter(function (s) { return s.lessons.length > 0; });
+  },
+  passed: function (l) { return Course.isDone(l.id) || Plan.closed(l); },
+  learned: function (s) { return s.lessons.every(Skills.passed); },
+  modules: function (list) {
+    const ids = [];
+    list.forEach(function (s) {
+      s.lessons.forEach(function (l) { if (ids.indexOf(l.module.id) < 0) ids.push(l.module.id); });
+    });
+    return ids;
+  },
+
+  /* Нужно загруженное содержание уроков навыка: счёт задач и вопросов
+     лежит в window.CONTENT. */
+  level: function (s) {
+    const ls = s.lessons, today = isoDay();
+    let solved = 0, drills = 0, hold = 0, quiz = 0, due = null, fresh = null, weak = null;
+    ls.forEach(function (l) {
+      const C = window.CONTENT[l.id] || {};
+      const dn = (C.drills || []).length;
+      let ds = 0;
+      for (let i = 0; i < dn; i++) if (Store.get("drills", l.id + ":" + i, false)) ds++;
+      solved += ds; drills += dn;
+      if (dn && (!weak || ds < weak.n)) weak = { l: l, n: ds, of: dn };
+      (C.quiz || []).forEach(function (q, i) {
+        quiz++;
+        const r = Store.get("review", l.id + ":" + i, null);
+        if (!r) { if (!fresh) fresh = l; return; }
+        if (r.done || r.step >= Skills.HOLD) { hold++; return; }
+        if (r.due && (!due || r.due < due)) due = r.due;
+      });
+    });
+    const done = ls.filter(Skills.passed).length;
+    const stage = done < ls.length ? 0
+      : !(drills && solved * 2 >= drills) ? 1
+      : !(quiz && hold * 5 >= quiz * 4) ? 2 : 3;
+
+    let next = null;
+    if (stage === 0) {
+      const l = ls.filter(function (x) { return !Skills.passed(x); })[0];
+      next = { text: "Пройти урок " + l.num, href: "#" + l.id };
+    } else if (stage === 1 && weak) {
+      next = { text: "Тренажёр урока " + weak.l.num + ": решено " + weak.n + " из " + weak.of, href: "#" + weak.l.id };
+    } else if (stage === 2 && fresh) {
+      next = { text: "Самопроверка урока " + fresh.num, href: "#" + fresh.id };
+    } else if (stage === 2 && due) {
+      next = due <= today ? { text: "Вопросы ждут в повторении сегодня", href: "#" }
+                          : { text: "Вопросы вернутся в повторении " + Review.when(due), href: null };
+    }
+    return { lessons: [done, ls.length], drills: [solved, drills], quiz: [hold, quiz], stage: stage, next: next };
+  },
+
+  /* n — сколько навыков держится, закреплено и изучено (без старших ступеней) */
+  say: function (n, total) {
+    const verbs = [["держится", "держатся"], ["закреплён", "закреплены"], ["изучен", "изучены"]];
+    const parts = [];
+    n.forEach(function (k, i) {
+      if (!k) return;
+      const v = plural(k, verbs[i][0], verbs[i][1], verbs[i][1]);
+      parts.push(parts.length ? v + " ещё " + k
+        : v.charAt(0).toUpperCase() + v.slice(1) + " " + k + " " +
+          plural(k, "навык", "навыка", "навыков") + " из " + total);
+    });
+    return parts.length ? parts.join(", ") + "."
+      : "Пока ни один навык не изучен: для этого нужно пройти все его уроки.";
+  }
+};
+
+/* ============================================================
    Входной тест (#entry-test)
 
    Блоки и вопросы — COURSE.entry в lessons.js. Блоки идут подряд,
@@ -70681,6 +70810,7 @@ const Pages = {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
     if (id === "mistakes") return renderMistakes;
+    if (id === "skills") return renderSkills;
     if (id === "sandbox") return renderSandbox;
     if (id === "entry-test") return renderEntryTest;
     if (/^glossary(\/[\w-]+)?$/.test(id)) return renderGlossary;
@@ -70901,6 +71031,69 @@ function renderMistakes(app) {
     box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
       '<button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
     $("#mxRetry").addEventListener("click", function () { Router.render(true); });
+  });
+}
+
+/* ---------- карта навыков ---------- */
+function renderSkills(app) {
+  document.title = "Карта навыков — Тетрадь аналитика";
+  mountHeader("<b>Карта навыков</b>");
+  const list = Skills.list();
+
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = pageHead("Карта навыков",
+    list.length + " " + plural(list.length, "навык", "навыка", "навыков") +
+      ", о которых спрашивают на собеседовании. Изучен — пройдены все уроки навыка " +
+      "или его модуль закрыт итоговым тестом, закреплён — решена половина его тренажёра, " +
+      "держится — 80% вопросов самопроверки дошли в повторении до интервала 7 дней или выучены.",
+    "навык держится, когда его не надо вспоминать") +
+    '<div id="skBody"><p class="page-wait">Собираю задачи из уроков…</p></div>';
+  app.appendChild(main);
+
+  function row(r) {
+    const v = r.v, k = v.stage;
+    const ticks = [1, 2, 3].map(function (i) { return "<i" + (i <= k ? ' class="on"' : "") + "></i>"; }).join("");
+    const nx = !v.next ? ""
+      : '<p class="sk-next">' + (v.next.href ? '<a href="' + v.next.href + '">' + esc(v.next.text) + "</a>"
+                                             : esc(v.next.text)) + "</p>";
+    return '<li class="sk-item"><div class="sk-top">' +
+        '<span class="sk-t">' + esc(r.s.title) + "</span>" +
+        '<span class="sk-lv" role="img" aria-label="ступень ' + k + " из 3: " + Skills.NAMES[k] + '">' + ticks + "</span>" +
+        '<span class="sk-name">' + Skills.NAMES[k] + "</span></div>" +
+      '<div class="sk-meta">уроки ' + v.lessons[0] + " из " + v.lessons[1] +
+        " · тренажёр " + v.drills[0] + " из " + v.drills[1] +
+        " · вопросы " + v.quiz[0] + " из " + v.quiz[1] + "</div>" + nx + "</li>";
+  }
+
+  Promise.all(Skills.modules(list).map(function (m) { return Lazy.content(m); })).then(function () {
+    const box = $("#skBody");
+    if (!box || location.hash !== "#skills") return;
+    const rows = list.map(function (s) { return { s: s, v: Skills.level(s) }; });
+    const at = function (k) { return rows.filter(function (r) { return r.v.stage === k; }).length; };
+
+    let h = '<p class="prep-sum">' + Skills.say([at(3), at(2), at(1)], list.length) + "</p>";
+    if (at(0) === rows.length) {
+      const r = Stats.resume();
+      h += '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m0l1") + '">' +
+        (r ? "Продолжить урок " + r.lesson.num : "Открыть первый урок") + "</a></p>";
+    }
+    const groups = [];
+    rows.forEach(function (r) {
+      let g = groups.filter(function (x) { return x.t === r.s.group; })[0];
+      if (!g) groups.push(g = { t: r.s.group, rows: [] });
+      g.rows.push(r);
+    });
+    groups.forEach(function (g) {
+      h += '<section class="block"><div class="block-h"><h2>' + esc(g.t) + "</h2></div>" +
+        '<ul class="sk-list">' + g.rows.map(row).join("") + "</ul></section>";
+    });
+    box.innerHTML = h;
+  }, function () {
+    const box = $("#skBody");
+    if (!box) return;
+    box.innerHTML = '<p class="page-wait">Задачи не загрузились — похоже, пропал интернет. ' +
+      '<button class="linkbtn" id="skRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#skRetry").addEventListener("click", function () { Router.render(true); });
   });
 }
 
@@ -71252,10 +71445,16 @@ function renderHome(app) {
     main.appendChild(review);
   }
 
-  /* о страницах для собеседования — одна строка, а не ещё один блок карточек */
+  /* о страницах для собеседования — одна строка, а не ещё один блок карточек;
+     число навыков — только по пройденным урокам, без загрузки модулей */
+  const skills = Skills.list();
+  const skillsSay = Course.ready.some(Skills.passed)
+    ? 'на <a href="#skills">карте навыков</a>: изучено ' + skills.filter(Skills.learned).length + " из " + skills.length + "."
+    : 'покажет <a href="#skills">карта навыков</a>.';
   main.insertAdjacentHTML("beforeend",
     '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
+    "Как далеко вы от собеседования — " + skillsSay + " " +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
   main.appendChild(Route.section());
@@ -74581,6 +74780,10 @@ const Find = {
     out.push({ href: "#mistakes", title: "Мои ошибки", where: "Раздел",
                note: "вопросы и карточки, где вы ошибались",
                hay: "ошибки промахи трудные слабые места повторить" });
+    out.push({ href: "#skills", title: "Карта навыков", where: "Раздел",
+               note: "насколько вы готовы к собеседованию по " + Skills.list().length + " " +
+                     plural(Skills.list().length, "навыку", "навыкам", "навыкам"),
+               hay: "навыки умения готовность уровень собеседование карта" });
     out.push({ href: "#glossary", title: "Словарь", where: "Раздел",
                note: "все термины курса простыми словами",
                hay: "словарь термины глоссарий понятия слова что значит" });
