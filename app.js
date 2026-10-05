@@ -851,6 +851,15 @@ const Plan = {
   },
   track: function () { return Course.ready.filter(Plan.inTrack); },
 
+  /* Куда ведёт кнопка «следующий урок» в конце урока: первый непройденный
+     урок плана после этого — без уроков вне быстрого темпа и закрытых
+     экстерном, по кругу, как карточка «продолжить». null — план пройден. */
+  after: function (id) {
+    const from = Course.ready.findIndex(function (l) { return l.id === id; });
+    const order = Course.ready.slice(from + 1).concat(Course.ready.slice(0, from + 1));
+    return order.filter(function (l) { return l.id !== id && !Course.isDone(l.id) && Plan.inTrack(l); })[0] || null;
+  },
+
   base: function (l) { return l.mins || Plan.MINS; },
 
   /* k — личный коэффициент, n — по скольким урокам он посчитан */
@@ -3499,6 +3508,14 @@ function linksBlockHtml(C) {
 /* Нижняя навигация: соседние уроки и отметка «пройден».
    onUnmark — что ещё сбросить, когда отметку снимают (может быть null).
    Возвращает функцию перерисовки. */
+/* Кнопка в конце урока называет, куда ведёт: в быстром темпе или после
+   итогового теста следующий по плану урок — не обязательно соседний. */
+function nextLessonBtn(id) {
+  const n = Plan.after(id);
+  return '<button class="linkbtn" id="nextBtn" type="button" data-go="#' + (n ? n.id : "") + '">' +
+    (n ? "Следующий урок: " + n.num + " " + esc(n.title) : "Вернуться на главную") + "</button>";
+}
+
 function mountLessonNav(id, onUnmark) {
   function update() {
     const prev = Course.neighbour(id, -1), next = Course.neighbour(id, 1);
@@ -4520,11 +4537,8 @@ function renderStepsLesson(app, L, C) {
     fin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
         (fresh ? penTick(id, "draw") : ICON.ok) + "</span>" +
       '<span class="s-body"><b>Урок пройден</b>' + (C.finish || "Все шаги решены.") +
-        '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button></span>';
-    $("#nextBtn").addEventListener("click", function () {
-      const nx = Course.neighbour(id, 1);
-      Router.go(nx ? "#" + nx.id : "#");
-    });
+        "<br>" + nextLessonBtn(id) + "</span>";
+    $("#nextBtn").addEventListener("click", function () { Router.go(this.getAttribute("data-go")); });
     updateNav();
   }
 
@@ -4904,7 +4918,7 @@ function renderLesson(app, id) {
      первый запуск кода не будет её ждать. И модуль следующего урока,
      если он в другом модуле, — переход дальше откроется сразу.     */
   if (L.kind !== "text") idle(function () { Lazy.data().catch(function () {}); });
-  const after = Course.neighbour(id, 1);
+  const after = Plan.after(id);
   if (after && after.module !== L.module) {
     idle(function () { Lazy.content(after.module.id).catch(function () {}); });
   }
@@ -5364,12 +5378,9 @@ function renderLesson(app, id) {
       ? '<br><span style="color:var(--amber)">Браузер не сохраняет прогресс — выгрузите его ' +
         "в файл кнопкой вверху, иначе результат пропадёт.</span>" : "";
     setStatus("ok", "Задание выполнено", (extra || "") + remind + closedHtml +
-      '<br><button class="linkbtn" id="nextBtn" type="button">Перейти к следующему уроку</button>', true);
+      "<br>" + nextLessonBtn(id), true);
     const nb = $("#nextBtn");
-    if (nb) nb.addEventListener("click", function () {
-      const n = Course.neighbour(id, 1);
-      Router.go(n ? "#" + n.id : "#");
-    });
+    if (nb) nb.addEventListener("click", function () { Router.go(this.getAttribute("data-go")); });
     syncSolBtn();
     updateNav();
     refreshBar();
