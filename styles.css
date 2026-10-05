@@ -1074,6 +1074,12 @@ details.schema[open] > summary::before { transform: rotate(90deg); }
   text-underline-offset: 3px; transition: color .18s var(--ease);
   font-family: var(--sans);
 }
+/* «Следующий урок» — главный шаг после задачи: крупнее и в цвет пера;
+   строка своя, поэтому высоту до 44px добираем отступами, не накладкой */
+.linkbtn.next-go {
+  font-size: 15px; color: var(--pen); text-align: left;
+  min-height: 44px; padding: 10px 0; margin-top: 2px;
+}
 .linkbtn:hover { color: var(--pen); }
 
 /* Стили CodeMirror подгружаются после этого файла, и при равной
@@ -1758,7 +1764,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .sk-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .sk-t { font-size: 17px; font-weight: 600; margin-right: auto; }
 .sk-lv { display: inline-flex; gap: 4px; }
-.sk-lv i { width: 22px; height: 7px; border-radius: 7px; border: 1px solid var(--pen-line); }
+.sk-lv i { width: 22px; height: 7px; border-radius: 7px; border: 1px solid var(--ink-3); }
 .sk-lv i.on { background: var(--pen); border-color: var(--pen); }
 .sk-name { font-size: 14px; color: var(--ink-3); min-width: 6.5em; }
 .sk-meta { font-size: 13.5px; color: var(--ink-3); margin-top: 6px; font-variant-numeric: tabular-nums; }
@@ -1920,9 +1926,9 @@ body.no-scroll { overflow: hidden; }
   .cmp { grid-template-columns: 1fr; }
 }
 
-/* Четыре ссылки шапки с поиском, счётчиком и темой занимают ~960px:
+/* Пять ссылок шапки с поиском, счётчиком и темой занимают ~1020px:
    уже этого разделы и тема уходят в «Меню». */
-@media (max-width: 1000px) {
+@media (max-width: 1020px) {
   .hdr-nav { display: none; }
   .hdr #themeBtn { display: none; }
   .hdr #menuBtn { display: inline-flex; }
