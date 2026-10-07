@@ -262,7 +262,7 @@ LEFT JOIN orders o ON o.user_id = u.user_id
         title: "Две таблицы «многие» — сумма раздувается",
         body: `
 <p>У пользователя 31 два оплаченных заказа на 5 813,20 ₽ и пять событий в журнале. Если соединить заказы с событиями по <code>user_id</code>, каждый заказ встанет в пару с каждым событием: 2 × 5 = 10 строк. <code>SUM(o.revenue)</code> по этим строкам сложит каждый заказ пять раз.</p>
-<p>Ошибка не видна по коду: запрос выглядит разумно и возвращает число. Выдают её две вещи — строк больше, чем заказов, и сумма подозрительно большая. Лечат тем, что каждую таблицу сначала сворачивают до одной строки на пользователя и только потом соединяют. Как это удобно записать — в уроке 1.4 про <code>WITH</code>.</p>`,
+<p>Ошибка не видна по коду: запрос выглядит разумно и возвращает число. Выдают её две вещи — строк больше, чем заказов, и сумма подозрительно большая. Лечат тем, что каждую таблицу сначала сворачивают до одной строки на пользователя и только потом соединяют. Как это удобно записать — в уроке 1.5 про <code>WITH</code>.</p>`,
         ba: {
           before: { columns: ["order_id", "revenue"], rows: [[26, 3670.6], [27, 2142.6]] },
           after: { columns: ["order_id", "revenue", "event_id"], rows: [[26, 3670.6, "1-е событие"], [26, 3670.6, "…"], [26, 3670.6, "5-е"], [27, 2142.6, "1-е"], [27, 2142.6, "…"]] },
@@ -518,7 +518,509 @@ ORDER BY revenue DESC;`,
 };
 
 /* ---------------------------------------------------------- */
-/* 1.3 — оконные функции                                        */
+/* 1.3 — строки, NULL и UNION                                   */
+/* ---------------------------------------------------------- */
+
+window.CONTENT.m1l9 = {
+  intro: "Приводим грязные строки к одному написанию, отличаем пропуск от значения и склеиваем ответы двух запросов. Любая выгрузка, которую заполняли люди, требует этого раньше, чем любого JOIN.",
+  duration: "≈ 2 часа",
+  plan: [
+    { m: "30 мин", w: "Теория и карточки: шаблоны LIKE, строковые функции, три ловушки NULL, UNION" },
+    { m: "35 мин", w: "Практикум: семь шагов от LIKE до CASE со списком на событиях и лидах" },
+    { m: "30 мин", w: "Основная задача: лиды по городам для отдела продаж" },
+    { m: "25 мин", w: "Тренажёр: 8 задач на ту же выгрузку и базу магазина" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "5 мин",  w: "Заметки и ссылки на разбор" }
+  ],
+
+  theory: `
+<p class="lead">В таблицах магазина каждое значение записано одинаково: <code>organic</code> всегда <code>organic</code>, пустых ячеек нет. Выгрузки, которые заполняют люди, устроены иначе. В таблице <code>leads</code> 63 заявки из CRM: источник там записан десятью способами, хотя разных источников шесть, а у 13 заявок не указан менеджер. Прежде чем считать, такие строки приводят к одному виду.</p>
+
+<h3>Поиск по шаблону: LIKE</h3>
+<p><code>=</code> сравнивает строку целиком. Когда нужна часть строки — «события, где есть слово cart», «города на -бург», — пишут <code>LIKE</code> с шаблоном. В шаблоне два особых знака:</p>
+<table>
+  <tr><th>Знак</th><th>Что значит</th><th>Пример</th></tr>
+  <tr><td><code>%</code></td><td>любая строка, в том числе пустая</td><td><code>event_name LIKE '%cart%'</code> — <code>add_to_cart</code></td></tr>
+  <tr><td><code>_</code></td><td>ровно один любой символ</td><td><code>city LIKE 'Каза_ь'</code> — <code>Казань</code></td></tr>
+</table>
+<p>Шаблон без знаков работает почти как <code>=</code> — в SQLite разница только в том, что <code>LIKE</code> не различает регистр латиницы. <code>NOT LIKE</code> отбирает всё, что под шаблон не подходит.</p>
+
+<div class="callout trap">
+  <span class="ct">Подчёркивание — тоже шаблон</span>
+  <p>Задача «найти события, в названии которых есть <code>_</code>» на первый взгляд решается так: <code>event_name LIKE '%_%'</code>. Запрос вернёт все 5 названий, включая <code>visit</code> и <code>checkout</code>: <code>_</code> значит «любой символ», а символ есть в любом непустом названии.</p>
+  <p style="margin-bottom:0">Чтобы искать сам знак, его экранируют: <code>LIKE '%\\_%' ESCAPE '\\'</code> — «символ после <code>\\</code> понимай буквально». Так остаются 2 названия: <code>add_to_cart</code> (279 строк) и <code>view_product</code> (433).</p>
+</div>
+
+<h3>Строковые функции</h3>
+<table>
+  <tr><th>Функция</th><th>Что делает</th><th>Пример</th></tr>
+  <tr><td><code>TRIM(s)</code></td><td>убирает пробелы по краям</td><td><code>TRIM(' Москва ')</code> → <code>'Москва'</code>: 8 символов → 6</td></tr>
+  <tr><td><code>LOWER(s)</code>, <code>UPPER(s)</code></td><td>меняют регистр</td><td><code>LOWER('ORGANIC')</code> → <code>'organic'</code></td></tr>
+  <tr><td><code>REPLACE(s, что, на что)</code></td><td>заменяет все вхождения</td><td><code>REPLACE('22 250,28', ' ', '')</code> → <code>'22250,28'</code></td></tr>
+  <tr><td><code>SUBSTR(s, с какого, сколько)</code></td><td>вырезает кусок, счёт с 1</td><td><code>SUBSTR('2024-05-13', 1, 7)</code> → <code>'2024-05'</code></td></tr>
+  <tr><td><code>LENGTH(s)</code></td><td>число символов</td><td><code>LENGTH(' Москва ')</code> → 8</td></tr>
+  <tr><td><code>a || b</code></td><td>склеивает строки</td><td><code>'лид ' || lead_id</code> → <code>'лид 1001'</code></td></tr>
+</table>
+<p>Функции вкладываются друг в друга и читаются изнутри наружу: <code>LOWER(TRIM(source))</code> — сначала убрать пробелы, потом опустить регистр. Так 10 написаний источника в <code>leads</code> сводятся к 6 значениям: <code>' Organic'</code>, <code>'ORGANIC'</code> и <code>'organic'</code> становятся одним <code>'organic'</code>.</p>
+<p>Число, записанное текстом, превращают в число через <code>CAST(… AS REAL)</code>. Но в SQLite <code>CAST</code> читает строку слева, пока она похожа на число, и молча отбрасывает остальное: <code>CAST('22 250,28' AS REAL)</code> вернёт 22, без ошибки. PostgreSQL на такой строке остановит запрос ошибкой — это хотя бы заметно. Сначала убирают пробел и меняют запятую на точку: <code>CAST(REPLACE(REPLACE(deal_sum, ' ', ''), ',', '.') AS REAL)</code> → 22250.28.</p>
+
+<div class="callout trap">
+  <span class="ct">Кириллица в SQLite</span>
+  <p><code>LOWER</code> и <code>UPPER</code> в SQLite меняют регистр только у латиницы: <code>LOWER('Москва')</code> вернёт <code>'Москва'</code>. С <code>LIKE</code> то же самое: <code>'ORGANIC' LIKE 'organic'</code> — истина, а <code>'Москва' LIKE 'москва'</code> — ложь.</p>
+  <p style="margin-bottom:0">В PostgreSQL <code>LOWER</code> работает с кириллицей, но <code>LIKE</code> там, наоборот, учитывает регистр — без учёта регистра ищет <code>ILIKE</code>. Поэтому русские написания надёжнее сводить явно, через <code>CASE</code>: <code>WHEN TRIM(city) IN ('Москва', 'москва') THEN 'Москва'</code>. Синоним <code>СПб</code> регистром не решается ни в одной базе — его сводят так же.</p>
+</div>
+
+<h3>NULL: три ловушки</h3>
+<p>В уроке 1.2 <code>NULL</code> появлялся после <code>LEFT JOIN</code>. В выгрузке он стоит прямо в таблице: в <code>leads</code> пустая ячейка — это <code>NULL</code>. Любое сравнение с ним даёт «неизвестно», а <code>WHERE</code> пропускает только «истину». Отсюда три ловушки.</p>
+<table>
+  <tr><th>Запрос к leads</th><th>Строк</th><th>Почему</th></tr>
+  <tr><td><code>WHERE source = NULL</code></td><td>0</td><td>«равно неизвестному» — неизвестно; нужен <code>IS NULL</code>, он даёт 6</td></tr>
+  <tr><td><code>WHERE TRIM(city) &lt;&gt; 'Москва'</code></td><td>37</td><td>ещё 11 лидов без города тоже не из Москвы, но не прошли: для <code>NULL</code> ответ «неизвестно, не Москва ли»</td></tr>
+  <tr><td><code>COUNT(*)</code> против <code>COUNT(manager)</code></td><td>63 и 50</td><td><code>COUNT(столбец)</code> пропускает 13 пустых</td></tr>
+</table>
+<p>Две функции переводят между значением и <code>NULL</code> в обе стороны:</p>
+<ul>
+  <li><code>COALESCE(a, b, …)</code> — первое непустое: <code>COALESCE(manager, 'не назначен')</code> подставит текст вместо пропуска;</li>
+  <li><code>NULLIF(a, b)</code> — <code>NULL</code>, если <code>a = b</code>, иначе <code>a</code>. Так заглушку превращают в честный пропуск: в <code>leads</code> 3 источника записаны как <code>'n/a'</code>, и <code>NULLIF(source, 'n/a')</code> делает их такими же пустыми, как 6 настоящих пропусков. Второе частое применение — знаменатель: <code>x / NULLIF(n, 0)</code> вернёт <code>NULL</code> вместо деления на ноль. SQLite при делении на ноль и сам молча вернёт <code>NULL</code>, а PostgreSQL остановит запрос ошибкой, поэтому <code>NULLIF</code> в знаменателе пишут по привычке в любой базе.</li>
+</ul>
+<p>Ещё одна ловушка с <code>NULL</code> — <code>NOT IN</code> по списку, где есть пропуск. Её разбирает урок 1.6 про подзапросы.</p>
+
+<h3>UNION и UNION ALL: строки друг под другом</h3>
+<p><code>JOIN</code> ставит таблицы рядом, <code>UNION</code> — друг под другом: результат второго запроса дописывается под первым.</p>
+<pre><code>SELECT channel FROM users                    -- 220 строк
+UNION ALL
+SELECT LOWER(TRIM(source)) FROM leads;       -- 63 строки</code></pre>
+<ul>
+  <li><code>UNION ALL</code> оставляет все строки: 220 + 63 = 283;</li>
+  <li><code>UNION</code> убирает повторы и возвращает список разных значений. На этих данных — 8: 6 каналов магазина, <code>n/a</code> и <code>NULL</code>. Чтобы убрать повторы, базе нужно сравнить все строки между собой, поэтому без нужды пишут <code>UNION ALL</code>;</li>
+  <li>столбцы сопоставляются по позиции, а не по имени, имена берутся из первого запроса. Число столбцов в обоих запросах должно совпадать.</li>
+</ul>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Выгрузки из CRM, анкеты, справочники партнёров, всё, что вбивали руками, приходит с пробелами, разным регистром и заглушками вида <code>n/a</code>, <code>-</code>, <code>0</code>. Отчёт по такой таблице без нормализации покажет «Москву» три раза, и каждая строка будет недосчитывать. <code>UNION ALL</code> нужен, когда одно и то же лежит в нескольких таблицах: заказы сайта и приложения, события старой и новой версии трекинга.</p>
+</div>
+
+<div class="callout jobs">
+  <span class="ct">Что закрывает урок в вакансиях</span>
+  <ul>
+    <li>«Опыт очистки и подготовки данных» — почти в каждой вакансии Junior Data Analyst</li>
+    <li>Устный вопрос: «чем <code>UNION</code> отличается от <code>UNION ALL</code>»</li>
+    <li>Устный вопрос: «что вернёт <code>WHERE x = NULL</code>» и «чем <code>COUNT(*)</code> отличается от <code>COUNT(x)</code>»</li>
+    <li>Задача с секции SQL: «посчитай по городам, где город записан по-разному»</li>
+  </ul>
+</div>
+`,
+
+  ticket: {
+    from: "Дима, руководитель отдела продаж",
+    subj: "Лиды по городам — перед планёркой",
+    body: `
+<p>Привет. Завтра планёрка, хочу показать, откуда идут заявки. Выгрузил лидов из CRM в таблицу <code>leads</code>, но города менеджеры пишут кто как: где-то с пробелами, где-то маленькими буквами, где-то «СПб».</p>
+<p>Нужно по каждому городу:</p>
+<ul>
+  <li><code>city</code> — город, в одном написании: «СПб» — это <code>Санкт-Петербург</code>;</li>
+  <li><code>leads_cnt</code> — сколько лидов;</li>
+  <li><code>with_sum</code> — у скольких указана сумма сделки.</li>
+</ul>
+<p>Лиды без города не выкидывай, пусть будут одной строкой <code>не указан</code> — мне важно видеть, сколько менеджеры не заполняют. Отсортируй по числу лидов от большего к меньшему, при равенстве — по названию города.</p>
+`
+  },
+
+  schema: window.SH.sqlSchema + window.SH.leadsSchema,
+
+  /* Практикум — семь шагов: LIKE на названиях событий, нормализация
+     источников лидов (не городов — города в основной задаче), NULL на
+     менеджерах, UNION каналов магазина с источниками лидов и CASE со
+     списком кириллических написаний на статусах.
+     Решения: node инструменты/checksteps.js m1l9 */
+  practicum: {
+    intro: "Семь коротких шагов перед основной задачей. Первые два — поиск по шаблону на названиях событий магазина, следующие пять — на выгрузке лидов: источники, менеджеры, общий список с каналами и статусы. Города лидов здесь не трогаем: это основная задача.",
+    schema: window.SH.sqlSchema + window.SH.leadsSchema,
+    done: "Все семь шагов решены. Основная задача собирает их на городах: <code>TRIM</code> по краям → <code>CASE</code> с перечнем написаний, потому что <code>LOWER</code> кириллицу не меняет → <code>IS NULL</code> отдельной веткой → <code>COUNT(deal_sum)</code> для лидов с суммой.",
+    steps: [
+      {
+        title: "LIKE: часть слова",
+        body: `
+<p><code>=</code> сравнивает строку целиком: <code>event_name = 'add_to_cart'</code> найдёт только это название, а <code>event_name = 'cart'</code> — ничего, такого названия нет. Часть строки ищут через <code>LIKE</code> с шаблоном, где <code>%</code> — «любые символы, сколько угодно, хоть ни одного». <code>'%cart%'</code> — «где-то внутри есть cart».</p>`,
+        ba: {
+          before: { columns: ["event_name"], rows: [["visit"], ["add_to_cart"], ["checkout"], ["purchase"]] },
+          after: { columns: ["event_name"], rows: [["add_to_cart"], ["checkout"]] },
+          hl: ["event_name"],
+          note: "Под <code>'%cart%'</code> подходит <code>add_to_cart</code>, под <code>'%out%'</code> — <code>checkout</code>."
+        },
+        task: "<p><strong>Задание.</strong> Посчитайте <code>events_cnt</code> — число строк <code>events</code> по каждому <code>event_name</code>, в названии которого есть <code>cart</code> или <code>out</code>.</p>",
+        starter: "SELECT event_name, COUNT(*) AS events_cnt\nFROM events\nWHERE event_name = 'add_to_cart'\nGROUP BY event_name;",
+        expected: { ordered: false, columns: ["event_name", "events_cnt"], rows: [["add_to_cart", 279], ["checkout", 155]] },
+        hint: "Замените условие на <code>WHERE event_name LIKE '%cart%' OR event_name LIKE '%out%'</code>. У каждого <code>LIKE</code> свой столбец слева — <code>LIKE '%cart%' OR '%out%'</code> не сработает.",
+        solution: "SELECT event_name, COUNT(*) AS events_cnt\nFROM events\nWHERE event_name LIKE '%cart%' OR event_name LIKE '%out%'\nGROUP BY event_name;"
+      },
+      {
+        title: "Подчёркивание — тоже шаблон",
+        body: `
+<p>Второй особый знак шаблона — <code>_</code>, ровно один любой символ. Поэтому <code>LIKE '%_%'</code> значит не «есть подчёркивание», а «есть хотя бы один символ» — под это подходит любое непустое название.</p>
+<p>Чтобы искать сам знак, перед ним ставят метку и объявляют её через <code>ESCAPE</code>: <code>LIKE '%\\_%' ESCAPE '\\'</code> — «знак после обратной черты понимай буквально».</p>`,
+        ba: {
+          before: { columns: ["event_name"], rows: [["visit"], ["view_product"], ["add_to_cart"], ["checkout"], ["purchase"]] },
+          after: { columns: ["event_name"], rows: [["view_product"], ["add_to_cart"]] },
+          hl: ["event_name"],
+          note: "«Было» — <code>LIKE '%_%'</code>: прошли все 5 названий. «Стало» — с <code>ESCAPE</code>: только 2, где подчёркивание есть на самом деле."
+        },
+        task: "<p><strong>Задание.</strong> Заготовка должна считать события, в названии которых есть подчёркивание, но находит все пять названий. Исправьте шаблон.</p>",
+        starter: "SELECT event_name, COUNT(*) AS events_cnt\nFROM events\nWHERE event_name LIKE '%_%'\nGROUP BY event_name;",
+        expected: { ordered: false, columns: ["event_name", "events_cnt"], rows: [["add_to_cart", 279], ["view_product", 433]] },
+        hint: "Поставьте обратную черту перед подчёркиванием и объявите её: <code>WHERE event_name LIKE '%\\_%' ESCAPE '\\'</code>.",
+        solution: "SELECT event_name, COUNT(*) AS events_cnt\nFROM events\nWHERE event_name LIKE '%\\_%' ESCAPE '\\'\nGROUP BY event_name;"
+      },
+      {
+        title: "TRIM и LOWER: одно написание",
+        body: `
+<p>В <code>leads</code> один источник записан по-разному: <code>' Organic'</code>, <code>'ORGANIC'</code>, <code>'organic'</code>. Для группировки это три разных значения. <code>TRIM</code> снимает пробелы по краям, <code>LOWER</code> опускает регистр латиницы, и вместе — <code>LOWER(TRIM(source))</code>, читается изнутри наружу — они сводят написания к одному.</p>
+<p>Группировать придётся по новому выражению, и тут ловушка: если написать <code>GROUP BY source</code>, SQLite возьмёт сырой столбец <code>source</code> из таблицы, а не выражение с тем же именем из <code>SELECT</code>, и строк останется 11. Поэтому выражение повторяют в <code>GROUP BY</code> целиком или пишут номер столбца в <code>SELECT</code>: <code>GROUP BY 1</code> — «по первому столбцу».</p>`,
+        ba: {
+          before: { columns: ["source", "leads_cnt"], rows: [[" Organic", 4], ["ORGANIC", 4], ["organic", 3]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["organic", 11]] },
+          hl: ["source", "leads_cnt"],
+          note: "Три строки «было» — одна строка «стало»: 4 + 4 + 3 = 11 лидов."
+        },
+        task: "<p><strong>Задание.</strong> Заготовка группирует лиды по сырому <code>source</code> и даёт 11 строк. Сгруппируйте по <code>LOWER(TRIM(source))</code> и назовите столбец <code>source</code>.</p>",
+        starter: "SELECT source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY source;",
+        expected: { ordered: false, columns: ["source", "leads_cnt"],
+          rows: [[null, 6], ["email", 8], ["n/a", 3], ["organic", 11], ["paid_search", 16], ["referral", 8], ["social", 11]] },
+        hint: "В <code>SELECT</code> — <code>LOWER(TRIM(source)) AS source</code>, в <code>GROUP BY</code> — номер столбца: <code>GROUP BY 1</code>. <code>GROUP BY source</code> сгруппирует по сырому столбцу и даст те же 11 строк.",
+        solution: "SELECT LOWER(TRIM(source)) AS source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;"
+      },
+      {
+        title: "NULLIF и COALESCE: заглушка — тоже пропуск",
+        body: `
+<p>После прошлого шага осталось две строки «источник неизвестен»: 6 лидов с <code>NULL</code> и 3 с заглушкой <code>'n/a'</code>. По смыслу это одно и то же.</p>
+<p><code>NULLIF(a, b)</code> возвращает <code>NULL</code>, если <code>a</code> равно <code>b</code>, иначе само <code>a</code>: <code>NULLIF(…, 'n/a')</code> превращает заглушку в честный пропуск. <code>COALESCE(a, b)</code> делает обратное — возвращает первое непустое: <code>COALESCE(…, 'не указан')</code> подставит текст вместо <code>NULL</code>.</p>
+<p>Целиком выражение читается изнутри наружу, по слоям:</p>
+<pre><code>LOWER(TRIM(source))           -- ' n/a' → 'n/a',  NULL → NULL
+NULLIF(…, 'n/a')              -- 'n/a' → NULL
+COALESCE(…, 'не указан')      -- NULL → 'не указан'</code></pre>`,
+        ba: {
+          before: { columns: ["source", "leads_cnt"], rows: [[null, 6], ["n/a", 3], ["email", 8]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["не указан", 9], ["email", 8]] },
+          hl: ["source", "leads_cnt"],
+          note: "6 пропусков и 3 заглушки стали одной строкой из 9 лидов."
+        },
+        task: "<p><strong>Задание.</strong> Сведите <code>NULL</code> и <code>'n/a'</code> в одну строку <code>не указан</code>, остальное оставьте как в прошлом шаге.</p>",
+        starter: "SELECT LOWER(TRIM(source)) AS source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;",
+        expected: { ordered: false, columns: ["source", "leads_cnt"],
+          rows: [["email", 8], ["organic", 11], ["paid_search", 16], ["referral", 8], ["social", 11], ["не указан", 9]] },
+        hint: "Оберните выражение дважды: <code>COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') AS source</code>. Сначала <code>NULLIF</code> делает из заглушки <code>NULL</code>, потом <code>COALESCE</code> заменяет все <code>NULL</code> текстом.",
+        solution: "SELECT COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') AS source,\n       COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;"
+      },
+      {
+        title: "= NULL не находит ничего",
+        body: `
+<p><code>NULL</code> значит «неизвестно», и <code>manager = NULL</code> — тоже «неизвестно», а не «истина». <code>WHERE</code> пропускает только истину, поэтому такой фильтр не находит ни одной строки. Пропуск проверяют через <code>IS NULL</code>.</p>
+<p>Посчитать пропуски можно и без <code>WHERE</code>: <code>COUNT(*)</code> считает все строки, <code>COUNT(manager)</code> — только непустые, а <code>SUM(manager IS NULL)</code> складывает единицы там, где менеджера нет. В SQLite условие — это число: у заявки 1001 менеджера нет, и <code>manager IS NULL</code> для неё даёт 1, у заявки 1003 менеджер есть — 0. Сумма таких единиц и есть число пропусков.</p>`,
+        ba: {
+          before: { columns: ["rows_cnt"], rows: [[0]] },
+          after: { columns: ["rows_cnt", "with_manager", "no_manager"], rows: [[63, 50, 13]] },
+          hl: ["with_manager", "no_manager"],
+          note: "«Было» — <code>WHERE manager = NULL</code>: 0 строк. «Стало» — три счётчика без фильтра, 50 + 13 = 63."
+        },
+        task: "<p><strong>Задание.</strong> Одной строкой выведите <code>rows_cnt</code> — сколько всего лидов, <code>with_manager</code> — у скольких указан менеджер, и <code>no_manager</code> — у скольких нет.</p>",
+        starter: "SELECT COUNT(*) AS rows_cnt\nFROM leads\nWHERE manager = NULL;",
+        expected: { ordered: false, columns: ["rows_cnt", "with_manager", "no_manager"], rows: [[63, 50, 13]] },
+        hint: "Уберите <code>WHERE</code> целиком и добавьте в <code>SELECT</code> ещё два столбца: <code>COUNT(manager) AS with_manager</code> и <code>SUM(manager IS NULL) AS no_manager</code>.",
+        solution: "SELECT COUNT(*) AS rows_cnt,\n       COUNT(manager) AS with_manager,\n       SUM(manager IS NULL) AS no_manager\nFROM leads;"
+      },
+      {
+        title: "UNION убирает повторы, UNION ALL — нет",
+        body: `
+<p><code>UNION ALL</code> ставит ответ второго запроса под ответом первого: 220 каналов пользователей и 63 источника лидов дают 283 строки. <code>UNION</code> делает то же и убирает повторы — остаётся список разных значений. Столбцы склеиваются по позиции, имя берётся из первого запроса.</p>`,
+        ba: {
+          before: { columns: ["channel"], rows: [["organic"], ["organic"], ["partner"], ["не указан"]] },
+          after: { columns: ["channel"], rows: [["organic"], ["partner"], ["не указан"]] },
+          hl: ["channel"],
+          note: "<code>organic</code> есть и у пользователей, и у лидов — после <code>UNION</code> он один."
+        },
+        task: "<p><strong>Задание.</strong> Получите общий список разных каналов: <code>channel</code> из <code>users</code> и нормализованный источник из <code>leads</code>, как в шаге 4. Заготовка даёт 283 строки с повторами.</p>",
+        starter: "SELECT channel FROM users\nUNION ALL\nSELECT COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') FROM leads;",
+        expected: { ordered: false, columns: ["channel"],
+          rows: [["email"], ["organic"], ["paid_search"], ["partner"], ["referral"], ["social"], ["не указан"]] },
+        hint: "Замените <code>UNION ALL</code> на <code>UNION</code> — больше ничего менять не нужно.",
+        solution: "SELECT channel FROM users\nUNION\nSELECT COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') FROM leads;"
+      },
+      {
+        title: "Кириллицу сводят списком",
+        body: `
+<p>С латиницей помог <code>LOWER</code>. С русскими словами в SQLite он не работает: <code>LOWER('НОВЫЙ')</code> вернёт <code>'НОВЫЙ'</code>, и условие <code>LOWER(status) = 'новый'</code> найдёт только те заявки, где статус уже записан строчными.</p>
+<p>Надёжный способ — перечислить написания: <code>CASE WHEN status IN ('Новый', 'НОВЫЙ', 'новый') THEN 'новый' … END</code>. <code>IN</code> проверяет совпадение с любым значением из списка, а сам список видно группировкой по сырому столбцу.</p>`,
+        ba: {
+          before: { columns: ["status_group", "leads_cnt"], rows: [["новый", 7], ["другой", 56]] },
+          after: { columns: ["status_group", "leads_cnt"], rows: [["новый", 26], ["другой", 37]] },
+          hl: ["leads_cnt"],
+          note: "«Было» — через <code>LOWER</code>: нашлись только 7 заявок со статусом «новый» строчными. «Стало» — списком: все 26."
+        },
+        task: "<p><strong>Задание.</strong> Заготовка делит лиды на новые и все остальные, но через <code>LOWER</code> находит только 7 новых. Перепишите условие списком написаний: <code>Новый</code>, <code>НОВЫЙ</code>, <code>новый</code>.</p>",
+        starter: "SELECT CASE WHEN LOWER(status) = 'новый' THEN 'новый' ELSE 'другой' END AS status_group,\n       COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;",
+        expected: { ordered: false, columns: ["status_group", "leads_cnt"], rows: [["новый", 26], ["другой", 37]] },
+        hint: "Замените <code>LOWER(status) = 'новый'</code> на <code>status IN ('Новый', 'НОВЫЙ', 'новый')</code> — остальное не меняется.",
+        solution: "SELECT CASE WHEN status IN ('Новый', 'НОВЫЙ', 'новый') THEN 'новый' ELSE 'другой' END AS status_group,\n       COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;"
+      }
+    ]
+  },
+
+  starter: `-- Лиды по городам
+-- Сначала посмотрите, как на самом деле записаны города:
+SELECT city, COUNT(*) AS leads_cnt
+FROM leads
+GROUP BY city;
+
+-- Дальше: одно написание на город, пустой город — 'не указан',
+-- число лидов с суммой, сортировка.
+`,
+
+  expected: {
+    ordered: true,
+    columns: ["city", "leads_cnt", "with_sum"],
+    rows: [
+      ["Москва", 21, 19],
+      ["Санкт-Петербург", 15, 13],
+      ["не указан", 11, 8],
+      ["Екатеринбург", 8, 8],
+      ["Казань", 4, 4],
+      ["Новосибирск", 4, 3]
+    ]
+  },
+
+  hints: [
+    "Запустите заготовку: строк получится 9, а городов в выгрузке пять. Какие строки на самом деле один и тот же город, и чем отличаются их написания — пробелами, регистром или словом целиком?",
+    "Пробелы снимает <code>TRIM</code>. Регистр кириллицы <code>LOWER</code> в SQLite не меняет, а «СПб» регистром и не исправить, поэтому город сводят через <code>CASE</code>: <code>WHEN TRIM(city) IN ('Москва', 'москва') THEN 'Москва'</code>. Пустой город — это <code>NULL</code>: его ловит <code>WHEN city IS NULL THEN 'не указан'</code>, и эту ветку удобно поставить первой.",
+    "Лиды с суммой — <code>COUNT(deal_sum)</code>: <code>COUNT</code> по столбцу пропускает <code>NULL</code>. Группируйте по нормализованному городу — <code>GROUP BY 1</code>, номер столбца в <code>SELECT</code>, как в практикуме. Сортировка: <code>ORDER BY leads_cnt DESC, city</code>."
+  ],
+
+  solution: `-- Лиды по городам
+SELECT
+    CASE
+        -- пустая ячейка выгрузки — NULL; ловим её первой
+        WHEN city IS NULL THEN 'не указан'
+        -- LOWER кириллицу в SQLite не меняет, поэтому написания перечисляем
+        WHEN TRIM(city) IN ('Москва', 'москва') THEN 'Москва'
+        -- синоним регистром не исправить ни в одной базе
+        WHEN TRIM(city) IN ('СПб', 'Санкт-Петербург') THEN 'Санкт-Петербург'
+        ELSE TRIM(city)
+    END AS city,
+    COUNT(*) AS leads_cnt,
+    -- COUNT по столбцу пропускает NULL — это и есть «с суммой»
+    COUNT(deal_sum) AS with_sum
+FROM leads
+GROUP BY 1
+ORDER BY leads_cnt DESC, city;`,
+
+  solutionNote: `
+<p><strong>Что здесь важно понять, а не запомнить:</strong></p>
+<ul>
+  <li>нормализация начинается с группировки по сырому столбцу, как в заготовке: 8 написаний города и пропуск видно за один запрос, а угадать их заранее нельзя;</li>
+  <li>ветка <code>IS NULL</code> стоит первой и пишется явно: <code>TRIM(NULL)</code> — тоже <code>NULL</code>, и без этой ветки пропуск ушёл бы в <code>ELSE</code> строкой без названия;</li>
+  <li>в <code>ELSE</code> — <code>TRIM(city)</code>, а не <code>city</code>: город, который никто не перечислил, всё равно попадёт в отчёт без пробелов.</li>
+</ul>
+<p><strong>Проверка здравым смыслом.</strong> Сумма <code>leads_cnt</code> — 63, как строк в <code>leads</code>, сумма <code>with_sum</code> — 55, как <code>COUNT(deal_sum)</code> по всей таблице. Если меньше — какая-то группа потерялась, если городов больше пяти и «не указан» — какое-то написание не сведено.</p>
+`,
+
+  drills: [
+    {
+      title: "Города на «-бург»",
+      level: "easy",
+      body: `<p>Региональный менеджер магазина собирает статистику по городам, которые заканчиваются на «-бург», — для шутливого слайда на планёрке.</p>
+<p>Выведите <code>city</code> и <code>users_cnt</code> — число пользователей из <code>users</code> в каждом таком городе.</p>`,
+      solution: `SELECT city, COUNT(*) AS users_cnt
+FROM users
+WHERE city LIKE '%бург'      -- % в начале: перед «бург» что угодно, после — ничего
+GROUP BY city;`,
+      note: `<p>Под шаблон попадает не только Екатеринбург, но и Санкт-Петербург: 43 и 42 пользователя. Шаблон проверяет буквы, а не смысл, поэтому список совпадений стоит посмотреть глазами, прежде чем считать по нему.</p>`
+    },
+    {
+      title: "Заявки без менеджера",
+      level: "easy",
+      body: `<p>Дима из продаж подозревает, что заявки без ответственного менеджера теряются, хотя по многим из них уже названа сумма.</p>
+<p>Одной строкой выведите <code>no_manager</code> — сколько лидов в <code>leads</code> без менеджера, и <code>with_sum</code> — у скольких из них указана сумма сделки.</p>`,
+      solution: `SELECT COUNT(*) AS no_manager,
+       COUNT(deal_sum) AS with_sum   -- COUNT по столбцу пропускает NULL
+FROM leads
+WHERE manager IS NULL;           -- = NULL не нашёл бы ни одной строки`,
+      note: `<p>13 заявок без менеджера, и у 12 из них уже есть сумма. С <code>WHERE manager = NULL</code> запрос вернул бы 0 и 0 — и вывод «проблемы нет».</p>`
+    },
+    {
+      title: "Статус в одном написании",
+      level: "mid",
+      body: `<p>В <code>leads.status</code> 8 разных написаний для четырёх статусов: «Новый», «НОВЫЙ», «новый», «Закрыт» и «закрыт» и так далее.</p>
+<p>Выведите <code>status</code> строчными буквами — <code>новый</code>, <code>в работе</code>, <code>закрыт</code>, <code>отказ</code> — и <code>leads_cnt</code>. Сортировка — по числу лидов убыванием.</p>
+<p><strong>Пригодится.</strong> Сначала посмотрите все написания: <code>SELECT status, COUNT(*) FROM leads GROUP BY status</code>. Как сводить кириллицу списком — шаг 7 практикума.</p>`,
+      solution: `SELECT CASE
+           -- LOWER кириллицу в SQLite не меняет: перечисляем написания
+           WHEN status IN ('Новый', 'НОВЫЙ', 'новый') THEN 'новый'
+           WHEN status IN ('в работе', 'В работе') THEN 'в работе'
+           WHEN status IN ('Закрыт', 'закрыт') THEN 'закрыт'
+           ELSE status
+       END AS status,
+       COUNT(*) AS leads_cnt
+FROM leads
+GROUP BY 1
+ORDER BY leads_cnt DESC;`,
+      note: `<p>Получится 26 новых, 19 закрытых, 13 в работе и 5 отказов — в сумме 63. Вариант <code>GROUP BY LOWER(status)</code> оставил бы все 8 строк: в SQLite <code>LOWER('НОВЫЙ')</code> — снова <code>'НОВЫЙ'</code>. В PostgreSQL сработал бы и он.</p>`
+    },
+    {
+      title: "Сумма из текста",
+      level: "mid",
+      body: `<p>Диме нужна общая сумма сделок по всей выгрузке. Суммы в <code>deal_sum</code> записаны текстом и по-разному: <code>54546.00</code>, <code>22 250,28</code>.</p>
+<p>Выведите <code>total</code> — сумму всех <code>deal_sum</code>, переведённых в число, с двумя знаками.</p>`,
+      solution: `SELECT ROUND(SUM(
+           -- пробел-разделитель тысяч убрать, запятую заменить точкой
+           CAST(REPLACE(REPLACE(deal_sum, ' ', ''), ',', '.') AS REAL)
+       ), 2) AS total
+FROM leads;`,
+      note: `<p>Ответ — 11 358 798,34. С голым <code>CAST(deal_sum AS REAL)</code> вышло бы 11 104 461: <code>CAST('22 250,28' AS REAL)</code> читает строку до пробела и возвращает 22 без всякой ошибки. Потерю в 254 тысячи такой запрос не покажет — её находят только сверкой.</p>`
+    },
+    {
+      title: "Отрицательные суммы",
+      level: "mid",
+      body: `<p>Сумма сделки не может быть меньше нуля, но в выгрузке такие есть.</p>
+<p>Выведите <code>lead_id</code> и <code>deal</code> — сумму, переведённую в число, для всех строк выгрузки с отрицательной суммой, повторы не убирайте. Сортировка по <code>lead_id</code>.</p>`,
+      solution: `SELECT lead_id,
+       CAST(REPLACE(REPLACE(deal_sum, ' ', ''), ',', '.') AS REAL) AS deal
+FROM leads
+WHERE CAST(REPLACE(REPLACE(deal_sum, ' ', ''), ',', '.') AS REAL) < 0
+ORDER BY lead_id;`,
+      note: `<p>Четыре строки, но лида три: заявка 1025 выгружена дважды. Повторы в выгрузке — отдельная тема урока 2.2 про очистку. SQLite разрешает написать в <code>WHERE</code> имя <code>deal</code> из <code>SELECT</code>, а PostgreSQL — нет, поэтому, чтобы запрос работал везде, выражение повторяют целиком.</p>`
+    },
+    {
+      title: "Три счётчика одной таблицей",
+      level: "easy",
+      body: `<p>Для справки на первой странице отчёта нужна таблица из двух столбцов: <code>metric</code> — название, <code>value</code> — число. Строки: <code>пользователей</code>, <code>заказов</code>, <code>событий</code> — сколько строк в <code>users</code>, <code>orders</code> и <code>events</code>.</p>`,
+      solution: `SELECT 'пользователей' AS metric, COUNT(*) AS value FROM users
+UNION ALL                         -- повторов нет и быть не может: ALL быстрее
+SELECT 'заказов', COUNT(*) FROM orders
+UNION ALL
+SELECT 'событий', COUNT(*) FROM events;`,
+      note: `<p>220, 215 и 1488. Имена столбцов берутся из первого запроса, у остальных их можно не писать. <code>UNION</code> здесь дал бы тот же ответ, но заставил бы базу искать повторы, которых нет.</p>`
+    },
+    {
+      title: "Закрытых на один отказ",
+      level: "hard",
+      body: `<p>Руководитель продаж сравнивает менеджеров: сколько закрытых сделок приходится на один отказ.</p>
+<p>Для каждого менеджера выведите <code>manager</code> (пустого назовите <code>не назначен</code>), <code>closed</code> — число лидов со статусом «Закрыт» в любом написании, <code>refused</code> — со статусом <code>отказ</code>, и <code>per_refusal</code> — <code>closed</code>, делённое на <code>refused</code>, с двумя знаками. Если отказов нет, в <code>per_refusal</code> должен быть <code>NULL</code>.</p>
+<p><strong>Пригодится.</strong> Число лидов с условием — <code>SUM(условие)</code>, как в шаге 5 практикума. Целое, делённое на целое, в SQLite остаётся целым: <code>5 / 2</code> — 2, а <code>5 * 1.0 / 2</code> — 2.5, поэтому числитель умножают на <code>1.0</code>.</p>`,
+      solution: `SELECT COALESCE(manager, 'не назначен') AS manager,
+       SUM(status IN ('Закрыт', 'закрыт')) AS closed,
+       SUM(status = 'отказ') AS refused,
+       -- NULLIF: нет отказов — делим на NULL и честно получаем NULL
+       ROUND(SUM(status IN ('Закрыт', 'закрыт')) * 1.0
+             / NULLIF(SUM(status = 'отказ'), 0), 2) AS per_refusal
+FROM leads
+GROUP BY 1;`,
+      note: `<p>У Мещерякова 5 закрытых и 0 отказов. SQLite при делении на ноль молча вернул бы <code>NULL</code> и без <code>NULLIF</code>, а PostgreSQL остановит весь запрос ошибкой <code>division by zero</code>. <code>NULLIF</code> в знаменателе — привычка, с которой деление безопасно в любой базе. <code>* 1.0</code> нужен, чтобы деление целых не отбросило дробную часть.</p>`
+    },
+    {
+      title: "Каналы, из которых не пришло ни одного лида",
+      level: "hard",
+      body: `<p>Маркетинг хочет знать, какие каналы привлечения магазина ни разу не встречаются среди источников лидов.</p>
+<p>Выведите <code>channel</code> — каналы из <code>users</code>, которых нет среди нормализованных источников <code>leads</code> (<code>LOWER(TRIM(source))</code>).</p>
+<p>Пригодится <code>EXCEPT</code>: он устроен как <code>UNION</code>, только оставляет строки первого запроса, которых нет во втором, — и тоже без повторов.</p>`,
+      solution: `SELECT channel FROM users
+EXCEPT                            -- строки первого запроса, которых нет во втором
+SELECT LOWER(TRIM(source)) FROM leads;`,
+      note: `<p>Ответ — один канал, <code>partner</code>. Тот же вопрос через <code>WHERE channel NOT IN (SELECT LOWER(TRIM(source)) FROM leads)</code> вернул бы 0 строк: среди источников есть <code>NULL</code>, а сравнение с ним даёт «неизвестно». Эту ловушку подробно разбирает урок 1.6.</p>`
+    }
+  ],
+
+  quiz: [
+    {
+      q: "Что вернёт <code>SELECT COUNT(*) FROM leads WHERE manager = NULL</code>, если менеджер не указан у 13 лидов из 63?",
+      opts: ["13", "50", "0", "Ошибку синтаксиса"],
+      right: 2,
+      why: "Сравнение с <code>NULL</code> даёт «неизвестно», а <code>WHERE</code> пропускает только истину, поэтому строк 0. Пропуски находят через <code>IS NULL</code> — это 13."
+    },
+    {
+      q: "Первый запрос возвращает 220 строк, второй — 63. Сколько строк вернёт <code>UNION ALL</code> этих запросов?",
+      opts: [
+        "283",
+        "Не больше 220",
+        "Столько, сколько разных значений в обоих",
+        "63"
+      ],
+      right: 0,
+      why: "<code>UNION ALL</code> дописывает строки второго запроса под первым, ничего не убирая: 220 + 63 = 283. Разные значения оставил бы <code>UNION</code>."
+    },
+    {
+      q: "Какие названия найдёт <code>event_name LIKE '%_%'</code> среди <code>visit</code>, <code>view_product</code>, <code>add_to_cart</code>, <code>checkout</code>, <code>purchase</code>?",
+      opts: [
+        "Только view_product и add_to_cart",
+        "Ни одного",
+        "Только visit",
+        "Все пять"
+      ],
+      right: 3,
+      why: "<code>_</code> в шаблоне — «любой один символ», а не подчёркивание. Под <code>'%_%'</code> подходит любая непустая строка. Сам знак ищут с <code>ESCAPE</code>: <code>LIKE '%\\_%' ESCAPE '\\'</code>."
+    },
+    {
+      q: "В таблице 63 строки, у 13 <code>manager</code> равен <code>NULL</code>. Что вернут <code>COUNT(*)</code> и <code>COUNT(manager)</code>?",
+      opts: ["63 и 63", "63 и 50", "50 и 50", "63 и 13"],
+      right: 1,
+      why: "<code>COUNT(*)</code> считает строки, <code>COUNT(столбец)</code> — только непустые значения: 63 − 13 = 50."
+    },
+    {
+      q: "Что вернёт <code>LOWER('Москва')</code> в SQLite?",
+      opts: [
+        "'москва'",
+        "NULL",
+        "'Москва' — без изменений",
+        "Ошибку: функция работает только с латиницей"
+      ],
+      right: 2,
+      why: "В SQLite <code>LOWER</code> и <code>UPPER</code> меняют регистр только у латиницы, остальные символы возвращают как есть, без ошибки. Поэтому русские написания сводят через <code>CASE</code>. В PostgreSQL получилось бы <code>'москва'</code>."
+    },
+    {
+      q: "Что вернёт <code>NULLIF(source, 'n/a')</code>?",
+      opts: [
+        "'n/a' вместо пустых значений",
+        "Количество строк со значением 'n/a'",
+        "Истину, если source не равен 'n/a'",
+        "NULL там, где source равен 'n/a', иначе сам source"
+      ],
+      right: 3,
+      why: "<code>NULLIF(a, b)</code> превращает значение <code>b</code> в <code>NULL</code> — так заглушка становится честным пропуском. Обратное делает <code>COALESCE</code>: подставляет значение вместо <code>NULL</code>."
+    }
+  ],
+
+  cards: [
+    { q: "Чем <code>UNION</code> отличается от <code>UNION ALL</code>?",
+      a: "Оба ставят ответ второго запроса под первым. <code>UNION</code> убирает повторы и тратит на это время, <code>UNION ALL</code> оставляет все строки. Если повторов быть не может или они нужны — <code>UNION ALL</code>." },
+    { q: "Почему <code>WHERE x = NULL</code> не находит ни одной строки?",
+      a: "<code>NULL</code> — «неизвестно», и сравнение с ним тоже «неизвестно», а <code>WHERE</code> пропускает только истину. Пропуск проверяют через <code>IS NULL</code>." },
+    { q: "Чем <code>COALESCE</code> отличается от <code>NULLIF</code>?",
+      a: "<code>COALESCE(a, b)</code> возвращает первое непустое — подставляет значение вместо <code>NULL</code>. <code>NULLIF(a, b)</code> возвращает <code>NULL</code>, если <code>a = b</code>, — превращает заглушку вроде <code>'n/a'</code> или 0 в пропуск." },
+    { q: "Что значат <code>%</code> и <code>_</code> в <code>LIKE</code>?",
+      a: "<code>%</code> — любая строка, в том числе пустая, <code>_</code> — ровно один любой символ. Чтобы искать сам знак, его экранируют: <code>LIKE '%\\_%' ESCAPE '\\'</code>." },
+    { q: "Чем опасен <code>CAST('22 250,28' AS REAL)</code>?",
+      a: "В SQLite он вернёт 22 без ошибки: <code>CAST</code> читает строку, пока она похожа на число. PostgreSQL остановит запрос ошибкой. Сначала убирают пробел и меняют запятую на точку: <code>CAST(REPLACE(REPLACE(s, ' ', ''), ',', '.') AS REAL)</code>." },
+    { q: "Как привести к одному виду город, записанный как «Москва», « Москва », «москва» и «СПб»?",
+      a: "Посмотреть все написания группировкой по сырому столбцу, снять пробелы <code>TRIM</code>, затем свести <code>CASE</code>: регистр (в SQLite кириллицу <code>LOWER</code> не меняет) и синонимы вроде «СПб». Пропуск — отдельной веткой <code>IS NULL</code>." }
+  ],
+
+  links: [
+    { t: "Встроенные функции SQLite", url: "https://www.sqlite.org/lang_corefunc.html", src: "sqlite.org", lang: "EN",
+      d: "Полный список строковых функций диалекта курса: trim, replace, substr, instr, coalesce, nullif — с точным описанием поведения на NULL." },
+    { t: "LIKE, GLOB и ESCAPE в SQLite", url: "https://www.sqlite.org/lang_expr.html#like", src: "sqlite.org", lang: "EN",
+      d: "Короткий раздел о том, почему LIKE в SQLite не различает регистр только у латиницы и как работает ESCAPE." },
+    { t: "Строковые функции PostgreSQL", url: "https://www.postgresql.org/docs/current/functions-string.html", src: "postgresql.org", lang: "EN",
+      d: "То же в базе, которая чаще всего стоит в компаниях. Рядом — раздел о LIKE и ILIKE: в PostgreSQL LIKE регистр различает." },
+    { t: "COALESCE и NULLIF в PostgreSQL", url: "https://www.postgresql.org/docs/current/functions-conditional.html", src: "postgresql.org", lang: "EN",
+      d: "Одна страница о CASE, COALESCE и NULLIF с примерами — всё, что нужно для подстановки и деления без ошибки." },
+    { t: "SQL UNION", url: "https://mode.com/sql-tutorial/sql-union/", src: "Mode Analytics", lang: "EN",
+      d: "Разбор UNION и UNION ALL на живом датасете с упражнениями в браузере." },
+    { t: "Задачи по SQL с проверкой", url: "https://www.sql-ex.ru/", src: "sql-ex.ru", lang: "RU",
+      d: "Русскоязычный тренажёр: среди первых задач есть поиск по шаблону и работа с NULL." }
+  ]
+};
+
+/* ---------------------------------------------------------- */
+/* 1.4 — оконные функции                                        */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l2 = {
@@ -1172,7 +1674,7 @@ FROM orders;</code></pre>
 </div>
 `,
 
-  /* Практикум по CASE WHEN — тем же форматом, что в 1.3 (см. там).
+  /* Практикум по CASE WHEN — тем же форматом, что в 1.4 (см. там).
      Решения проверены: node инструменты/checksteps.js m1l3 */
   practicum: {
     intro: "CASE WHEN встречается в каждом втором рабочем запросе, а в теории выше — только одной строкой. Шесть коротких шагов: от подписи «крупный / обычный» до подсчёта по условию. В каждом — таблица «было → стало» на настоящих строках базы и запрос, который курс проверит сам.",
@@ -1566,7 +2068,7 @@ WHERE rn IN ((total + 1) / 2, (total + 2) / 2);`,
 };
 
 /* ---------------------------------------------------------- */
-/* 1.4 — CTE и читаемость запроса                               */
+/* 1.5 — CTE и читаемость запроса                               */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l4 = {
@@ -1677,13 +2179,13 @@ SELECT * FROM calendar;</code></pre>
 </div>
 `,
 
-  /* Практикум по WITH — тем же форматом, что в 1.3 (см. там). Шаги
+  /* Практикум по WITH — тем же форматом, что в 1.4 (см. там). Шаги
      учат части основной задачи на платформах, задача — на каналах.
      Решения проверены: node инструменты/checksteps.js m1l4 */
   practicum: {
     intro: "Шесть коротких шагов: от одного именованного шага до доли от общего — ровно те части, из которых собирается основная задача. Здесь всё считается по платформам, в задаче то же самое понадобится для каналов. В каждом шаге — таблица «было → стало» на настоящих строках базы и запрос, который курс проверит сам.",
     schema: window.SH.sqlSchema,
-    done: "Все шесть шагов решены. В основной задаче — то же самое для каналов: выручка канала в <code>WITH</code>, общая сумма одной строкой, доля. Новое там одно — накопленная доля, это <code>SUM() OVER (ORDER BY …)</code> из урока 1.3.",
+    done: "Все шесть шагов решены. В основной задаче — то же самое для каналов: выручка канала в <code>WITH</code>, общая сумма одной строкой, доля. Новое там одно — накопленная доля, это <code>SUM() OVER (ORDER BY …)</code> из урока 1.4.",
     steps: [
       {
         title: "Дать шагу имя: WITH … AS",
@@ -1781,7 +2283,7 @@ SELECT ... FROM per_user;</code></pre>
       {
         title: "То же окном: SUM() OVER ()",
         body: `
-<p>Общую сумму можно не считать отдельным шагом. В уроке 1.3 была <code>SUM(revenue) OVER ()</code> — она ставит сумму всех строк рядом с каждой. Значит, делить можно прямо на неё:</p>
+<p>Общую сумму можно не считать отдельным шагом. В уроке 1.4 была <code>SUM(revenue) OVER ()</code> — она ставит сумму всех строк рядом с каждой. Значит, делить можно прямо на неё:</p>
 <pre><code>ROUND(revenue * 100.0 / SUM(revenue) OVER (), 1) AS share_pct</code></pre>
 <p>Ответ тот же, запрос короче. Какой способ выбрать — дело вкуса: с шагом <code>total</code> общая сумма видна отдельно и её легко проверить, с окном меньше текста. В основной задаче подойдёт любой.</p>`,
         ba: {
@@ -2140,7 +2642,7 @@ ORDER BY revenue DESC;`,
 };
 
 /* ---------------------------------------------------------- */
-/* 1.5 — подзапросы и когда они лишние                          */
+/* 1.6 — подзапросы и когда они лишние                          */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l5 = {
@@ -2362,7 +2864,7 @@ GROUP BY u.user_id;</code></pre>
     SELECT MAX(o2.order_date) FROM orders o2
     WHERE o2.user_id = o.user_id
 )</code></pre>
-<p>Внутри таблица та же, поэтому у неё другое имя — <code>o2</code>. На больших данных такой запрос медленный: подзапрос выполняется столько раз, сколько строк. Ту же задачу окно из урока 1.3 решает за один проход.</p>`,
+<p>Внутри таблица та же, поэтому у неё другое имя — <code>o2</code>. На больших данных такой запрос медленный: подзапрос выполняется столько раз, сколько строк. Ту же задачу окно из урока 1.4 решает за один проход.</p>`,
         ba: {
           before: { columns: ["user_id", "order_id", "order_date"], rows: [[65, 51, "2024-03-27"], [65, 52, "2024-04-05"], [65, 53, "2024-04-27"], [76, 69, "2024-05-02"], [76, 70, "2024-06-12"], [76, 71, "2024-07-03"]] },
           after: { columns: ["user_id", "order_id", "order_date"], rows: [[65, 53, "2024-04-27"], [76, 71, "2024-07-03"]] },
@@ -2698,7 +3200,7 @@ ORDER BY cr DESC;`,
 };
 
 /* ---------------------------------------------------------- */
-/* 1.6 — даты и когорты в SQL                                   */
+/* 1.7 — даты и когорты в SQL                                   */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l6 = {
@@ -2915,7 +3417,7 @@ GROUP BY u.channel;</code></pre>
       {
         title: "Прошлый месяц рядом: LAG от итога",
         body: `
-<p>Чтобы сравнить месяц с предыдущим, значение прошлой строки ставят рядом. Это делает оконная <code>LAG</code> из урока 1.3: <code>LAG(x) OVER (ORDER BY …)</code> — «значение <code>x</code> из строки выше» при заданном порядке.</p>
+<p>Чтобы сравнить месяц с предыдущим, значение прошлой строки ставят рядом. Это делает оконная <code>LAG</code> из урока 1.4: <code>LAG(x) OVER (ORDER BY …)</code> — «значение <code>x</code> из строки выше» при заданном порядке.</p>
 <p>Тонкость в том, что сравнивать надо итоги месяцев, а не строки таблицы. Окна выполняются после <code>GROUP BY</code>, поэтому внутри <code>LAG</code> можно поставить сам агрегат: <code>LAG(COUNT(*)) OVER (ORDER BY …)</code>. У первого месяца строки выше нет, и там будет <code>NULL</code> — это честно: сравнивать не с чем.</p>
 <p>Одна деталь SQLite: имя <code>ym</code> из <code>SELECT</code> внутри <code>OVER</code> не видно — база ответит <code>no such column: ym</code>. Поэтому в скобках окна выражение месяца пишут целиком: <code>OVER (ORDER BY strftime('%Y-%m', signup_date))</code>.</p>`,
         ba: {
@@ -3102,7 +3604,7 @@ ORDER BY avg_days;`,
       title: "Недельная динамика без дыр",
       level: "hard",
       body: `<p>Постройте недельную динамику заказов с начала апреля по конец июля: <code>week_start</code> (понедельник недели), <code>orders_cnt</code>, <code>revenue</code>. Недели без заказов должны быть в таблице с нулями.</p>
-<p>Понадобится рекурсивный календарь недель из урока 1.4.</p>`,
+<p>Понадобится рекурсивный календарь недель из урока 1.5.</p>`,
       solution: `WITH RECURSIVE weeks(week_start) AS (
     -- 1 апреля 2024 — понедельник
     SELECT '2024-04-01'
@@ -3234,7 +3736,7 @@ ORDER BY w.week_start;`,
 };
 
 /* ---------------------------------------------------------- */
-/* 1.8 — ClickHouse: чем отличается                             */
+/* 1.9 — ClickHouse: чем отличается                             */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l7 = {
@@ -3667,7 +4169,7 @@ WHERE event_date >= '2024-07-01'
 };
 
 /* ---------------------------------------------------------- */
-/* 1.7 — проект: анализ поведения пользователей                 */
+/* 1.8 — проект: анализ поведения пользователей                 */
 /* ---------------------------------------------------------- */
 
 window.CONTENT.m1l8 = {

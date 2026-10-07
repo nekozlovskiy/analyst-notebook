@@ -94,13 +94,31 @@ function usesMiss(code, uses) {
 
 const db = new DatabaseSync(":memory:");
 db.exec(ctx.window.DATA.shopSQL);
+/* копия csvCells из app.js: поле в кавычках может содержать запятую — "22 250,28" */
+function csvCells(line) {
+  const out = [];
+  let cur = "", q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch !== '"') cur += ch;
+      else if (line[i + 1] === '"') { cur += '"'; i++; }
+      else q = false;
+    } else if (ch === '"') q = true;
+    else if (ch === ",") { out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 /* журнал мобильного приложения (модуль 4) лежит в data.js CSV-строками —
    заливаем так же, как Engine.sql в app.js */
 function fillFromCsv(csv, sql, conv) {
   if (!csv) throw new Error("нет CSV для: " + sql);
   const st = db.prepare(sql);
   db.exec("BEGIN");
-  csv.split("\n").slice(1).forEach(function (line) { if (line) st.run.apply(st, conv(line.split(","))); });
+  csv.split("\n").slice(1).forEach(function (line) { if (line) st.run.apply(st, conv(csvCells(line))); });
   db.exec("COMMIT");
 }
 fillFromCsv(ctx.window.DATA.appUsersCSV, "INSERT INTO app_users VALUES (?,?,?,?,?)",
@@ -109,6 +127,8 @@ fillFromCsv(ctx.window.DATA.appActivityCSV, "INSERT INTO app_activity VALUES (?,
   function (c) { return [+c[0], c[1]]; });
 fillFromCsv(ctx.window.DATA.appOrdersCSV, "INSERT INTO app_orders VALUES (?,?,?)",
   function (c) { return [+c[0], c[1], +c[2]]; });
+fillFromCsv(ctx.window.DATA.leadsCSV, "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
+  function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
 
 function query(sql) {
   const st = db.prepare(sql);

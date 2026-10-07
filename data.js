@@ -2001,6 +2001,15 @@ CREATE TABLE app_orders (
   order_date TEXT NOT NULL,
   revenue    REAL NOT NULL
 );
+CREATE TABLE leads (
+  lead_id   INTEGER NOT NULL,
+  created   TEXT,
+  source    TEXT,
+  city      TEXT,
+  deal_sum  TEXT,
+  status    TEXT,
+  manager   TEXT
+);
 CREATE INDEX ix_act_user ON app_activity(user_id);
 CREATE INDEX ix_ord_user ON app_orders(user_id);`,
 

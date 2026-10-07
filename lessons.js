@@ -76,11 +76,12 @@ window.COURSE = {
      держится — 80% вопросов самопроверки дошли в повторении до 7 дней.
      Уроки — в порядке курса: первый непройденный станет ссылкой
      «что дальше». В прогрессе навыки не хранятся — переставлять,
-     переименовывать и менять состав можно. Модуль 0, проекты 1.7 и 2.7
+     переименовывать и менять состав можно. Модуль 0, проекты 1.8 и 2.7
      и карьерные 6.1, 6.2, 6.6 в карту не входят. */
   skills: [
     { id: "sql-agg",    group: "SQL",        title: "Агрегации и GROUP BY",        lessons: ["m1l3", "m6l3"] },
     { id: "sql-join",   group: "SQL",        title: "JOIN",                        lessons: ["m1l1"] },
+    { id: "sql-strings", group: "SQL",       title: "Строки и NULL",               lessons: ["m1l9"] },
     { id: "sql-window", group: "SQL",        title: "Оконные функции",             lessons: ["m1l2"] },
     { id: "sql-cte",    group: "SQL",        title: "CTE и подзапросы",            lessons: ["m1l4", "m1l5"] },
     { id: "cohorts",    group: "SQL",        title: "Даты и когорты",              lessons: ["m1l6", "m4l3"] },
@@ -149,6 +150,11 @@ window.COURSE = {
           say: "ON и WHERE — разные вещи. Здесь валятся чаще всего",
           sayTask: "канал без заказов обязан остаться в ответе",
           sayDrills: "«Размножение строк» — ради неё всё и затевалось" },
+        { id: "m1l9", title: "Строки, NULL и UNION", kind: "sql", ready: true,
+          desc: "LIKE, TRIM и CASE для грязных строк, IS NULL, COALESCE, NULLIF, UNION",
+          say: "«= NULL» не найдёт ни одной строки — частый устный вопрос",
+          sayTask: "сначала посмотрите все написания города, потом пишите CASE",
+          sayDrills: "«Сумма из текста» — CAST в SQLite молча отрежет всё после пробела" },
         { id: "m1l2", title: "Оконные функции", kind: "sql", ready: true,
           desc: "ROW_NUMBER, LAG/LEAD, накопительные суммы",
           say: "если поймёте окна, SQL-секция уже не страшна",
