@@ -2405,6 +2405,22 @@ function fillFromCsv(db, csv, sql, conv) {
   st.free();
 }
 
+/* Результат последнего выражения запроса, у которого есть столбцы.
+   db.exec на SELECT без строк не отдаёт даже заголовков, и пустой ответ
+   нельзя было отличить от CREATE или UPDATE; здесь столбцы есть всегда,
+   а строк может быть 0. null — ни одно выражение таблицы не вернуло. */
+function sqlLast(db, code) {
+  let last = null;
+  for (const st of db.iterateStatements(code)) {
+    try {
+      const columns = st.getColumnNames(), values = [];
+      while (st.step()) values.push(st.get());
+      if (columns.length) last = { columns: columns, values: values };
+    } finally { st.free(); }
+  }
+  return last;
+}
+
 const Engine = {
   db: null,
   py: null,
@@ -2894,6 +2910,13 @@ const Check = {
         return { ok: false, why: "столбец " + (i + 1) + " называется «" + res.columns[i] +
                  "», а в задаче просят «" + exp.columns[i] + "» — задайте имя через AS" };
       }
+    }
+
+    if (!res.values.length && exp.rows.length) {
+      return { ok: false, why: "запрос не нашёл ни одной строки",
+        hint: /\b(WHERE|JOIN|HAVING)\b/i.test(code)
+          ? "Условие в WHERE, ON или HAVING ничего не пропустило: проверьте значения в кавычках, регистр и написание."
+          : "Проверьте, из той ли таблицы идёт выборка и нет ли LIMIT 0." };
     }
 
     /* ---- строки: сначала как мультимножества ---- */
@@ -4102,7 +4125,7 @@ function renderSandbox(app) {
           out.innerHTML = renderTable(r.res.columns, r.res.values, -1);
           $("#sbOutH").textContent = "результат: " + n + " " + plural(n, "строка", "строки", "строк");
         } else {
-          out.innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          out.innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
           $("#sbOutH").textContent = "результат";
         }
       } else {
@@ -4381,8 +4404,7 @@ const Steps = {
         try {
           const db = await Engine.sql();
           if (open !== n || !document.body.contains(li)) return false;
-          let res;
-          try { res = db.exec(code); }
+          try { last = sqlLast(db, code); }
           catch (e) {
             last = null;
             q(".st-res").innerHTML = '<pre><span class="err">' + esc("SQLite: " + e.message) + "</span></pre>";
@@ -4390,9 +4412,8 @@ const Steps = {
               "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась.");
             return false;
           }
-          last = res.length ? res[res.length - 1] : null;
           if (last) showRows(-1);
-          else q(".st-res").innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          else q(".st-res").innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
           return true;
         } catch (e) {
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
@@ -4633,8 +4654,7 @@ const Run = {
   sql: async function (code) {
     const db = await Engine.sql();
     try {
-      const r = db.exec(code);
-      return { res: r.length ? r[r.length - 1] : null };
+      return { res: sqlLast(db, code) };
     } catch (e) { return { err: "SQLite: " + e.message }; }
   },
   /* pre — код, который выполняется до кода ученика молча (его вывод не
@@ -4874,7 +4894,7 @@ const Drills = {
           res.innerHTML = renderTable(r.res.columns, r.res.values, -1) +
             '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
         } else {
-          res.innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+          res.innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
         }
         return r;
       } catch (e) {
@@ -5360,18 +5380,17 @@ function renderLesson(app, id) {
     loader(true, "Поднимаю базу в браузере...");
     const db = await Engine.sql();
     loader(false);
-    let res;
+    let last;
     try {
-      res = db.exec(code);
+      last = sqlLast(db, code);
     } catch (e) {
       lastSqlResult = null;
       showError("SQLite: " + e.message);
       return;
     }
-    const last = res.length ? res[res.length - 1] : null;
     lastSqlResult = last;
     if (!last) {
-      $("#outBox").innerHTML = '<div class="empty">Запрос выполнен, но не вернул ни одной строки.</div>';
+      $("#outBox").innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
       return;
     }
     $("#outBox").innerHTML = renderTable(last.columns, last.values, -1) +
