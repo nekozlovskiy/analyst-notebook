@@ -160,7 +160,7 @@ else {
   state = {}; closed = new Set(["m3"]);
   v = Skills.level(sk("stat-tests"));
   eq("закрытый модуль: ступень", v.stage, 1);
-  eq("закрытый модуль: уроки", v.lessons, [3, 3]);
+  eq("закрытый модуль: уроки", v.lessons, [4, 4]);
   eq("закрытый модуль: изучен", Skills.learned(sk("stat-tests")), true);
   closed = new Set();
 
