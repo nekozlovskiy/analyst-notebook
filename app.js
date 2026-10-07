@@ -2373,6 +2373,24 @@ function renderHome(app) {
    Движки исполнения кода
    ============================================================ */
 
+/* строка CSV: поле в кавычках может содержать запятую — "22 250,28" */
+function csvCells(line) {
+  const out = [];
+  let cur = "", q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch !== '"') cur += ch;
+      else if (line[i + 1] === '"') { cur += '"'; i++; }
+      else q = false;
+    } else if (ch === '"') q = true;
+    else if (ch === ",") { out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 /* Заливает CSV в подготовленный запрос одной транзакцией:
    28 тысяч строк по одной вставке заняли бы секунды. */
 function fillFromCsv(db, csv, sql, conv) {
@@ -2381,7 +2399,7 @@ function fillFromCsv(db, csv, sql, conv) {
   db.run("BEGIN");
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i]) continue;
-    st.run(conv(lines[i].split(",")));
+    st.run(conv(csvCells(lines[i])));
   }
   db.run("COMMIT");
   st.free();
@@ -2411,6 +2429,11 @@ const Engine = {
     fillFromCsv(db, window.DATA.appOrdersCSV,
       "INSERT INTO app_orders VALUES (?,?,?)",
       function (c) { return [+c[0], c[1], +c[2]]; });
+    /* Выгрузка лидов из CRM (урок 1.3, в pandas — 2.2) грязная нарочно:
+       пустая ячейка — NULL, остальное как в выгрузке */
+    fillFromCsv(db, window.DATA.leadsCSV,
+      "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
+      function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
     Engine.db = db;
     return db;
   },
@@ -3976,7 +3999,7 @@ const Sandbox = {
              data: window.SH.pyData.concat(window.SH.appData),
              prelude: window.SH.pyPrelude + "\n" + window.SH.appPrelude };
   },
-  tables: function () { return CodeKit.parse(window.SH.sqlSchema + window.SH.appSchema); },
+  tables: function () { return CodeKit.parse(window.SH.sqlSchema + window.SH.appSchema + window.SH.leadsSchema); },
   hist: function () { return Store.get("sandbox", "hist", []) || []; },
   remember: function (k, code) {
     if (!code.trim()) return;
@@ -4156,7 +4179,7 @@ function renderSandbox(app) {
    шага: на телефоне восемь редакторов сразу были бы лишними.
    Пройденные шаги — корзина steps («урок:номер»), код шага —
    корзина code («урок:sномер»).
-   Тот же движок ведёт практикум внутри обычного урока (1.3): у его
+   Тот же движок ведёт практикум внутри обычного урока (1.4): у его
    ключей метка tag = "p" — «m1l2:p0» и «m1l2:ps0», — чтобы шаги
    практикума не смешались с шагами урока.
    ============================================================ */
