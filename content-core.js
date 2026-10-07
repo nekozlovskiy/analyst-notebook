@@ -138,7 +138,7 @@ def median(v):
 
 window.SH.statsDataPrelude = window.SH.pyPrelude + "\n" + window.SH.statsPrelude;
 
-/* Пролог для проекта 3.7: итоги A/B-теста новой страницы оплаты.
+/* Пролог для проекта 3.8: итоги A/B-теста новой страницы оплаты.
    Данные собираются генератором с фиксированным зерном, поэтому у всех
    получаются одни и те же числа, а файл курса не растёт на мегабайт.
    В генераторе только random() и choice(): обе операции построены на
@@ -179,6 +179,54 @@ def _build_ab():
 
 
 ab = _build_ab()
+`;
+
+
+/* Пролог урока 3.7: эксперимент с апселлом в корзине для ratio-метрик.
+   У каждого пользователя свой уровень чека и своя частота покупок,
+   поэтому его заказы похожи между собой — на этом держится ловушка
+   наивного теста по заказам. pre_revenue — выручка за три таких же
+   периода до теста, ковариата для CUPED. Только random() и math:
+   результат одинаков в любом браузере и в любой версии pandas. */
+window.SH.ratioPrelude = `import warnings
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+
+` + window.SH.statsPrelude + `
+
+def _build_ratio(seed=39, n=12000, lift=0.035):
+    """Эксперимент с апселлом в корзине: пользователи и их заказы."""
+    rnd = random.Random(seed)
+
+    def n_orders(lam):
+        # число заказов за период: пуассон через произведение равномерных
+        k, p, edge = 0, 1.0, math.exp(-lam)
+        while True:
+            p *= rnd.random()
+            if p <= edge:
+                return k
+            k += 1
+
+    users, orders = [], []
+    for i in range(n):
+        user_id = 50000 + i
+        group = "test" if rnd.random() < 0.5 else "control"
+        # у каждого свой уровень чека и своя частота покупок
+        price = 2500 * math.exp(rnd.random() * 1.6 - 0.8)
+        r = rnd.random()
+        lam = 0.0 if r < 0.55 else (0.6 if r < 0.85 else 2.2)
+        pre_k = n_orders(lam) + n_orders(lam) + n_orders(lam)
+        pre = sum(price * (0.6 + 0.8 * rnd.random()) for _ in range(pre_k))
+        mult = 1 + lift if group == "test" else 1.0
+        for _ in range(n_orders(lam)):
+            orders.append((user_id, round(price * mult * (0.6 + 0.8 * rnd.random()), 2)))
+        users.append((user_id, group, round(pre, 2)))
+    return (pd.DataFrame(users, columns=["user_id", "group", "pre_revenue"]),
+            pd.DataFrame(orders, columns=["user_id", "revenue"]))
+
+
+exp_users, exp_orders = _build_ratio()
 `;
 
 /* ============================================================

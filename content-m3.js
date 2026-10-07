@@ -3595,7 +3595,718 @@ MDE и его обоснование
 };
 
 /* ------------------------------------------------------------------ */
-/* 3.7 Проект: разбор результатов A/B-теста                             */
+/* 3.7 Ratio-метрики и CUPED                                            */
+/* ------------------------------------------------------------------ */
+
+window.CONTENT.m3l8 = {
+  intro: "Средний чек, CTR, сессии на пользователя — отношения, у которых делят на заказы, а рандомизируют по людям. Обычный t-тест на них врёт в сторону «значимо». Разбираем, как считать честно и как сузить интервал без новых пользователей.",
+  duration: "≈ 2,5 часа",
+  math: true,
+  plan: [
+    { m: "35 мин", w: "Теория и карточки: почему тест по заказам врёт, бутстрап, дельта-метод, CUPED" },
+    { m: "40 мин", w: "Практикум: семь шагов на A/A-разбиении контроля" },
+    { m: "35 мин", w: "Основная задача: апселл в корзине — раскатывать или нет" },
+    { m: "25 мин", w: "Тренажёр: 5 задач" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "5 мин",  w: "Заметки и ссылки на разбор" }
+  ],
+
+  theory: `
+<p class="lead">В тесте апселла в корзине средний чек вырос на 2,9%. t-тест по 5911 заказам даёт p = 0,038 — «значимо». Тот же рост, посчитанный по 12 000 пользователям, даёт p = 0,161. Ошибается первый расчёт, и этот урок — о том, почему и как считать правильно.</p>
+
+<h3>Что такое ratio-метрика</h3>
+<p>Метрика-отношение — это сумма одного, делённая на сумму другого: средний чек = выручка / заказы, CTR = клики / показы, глубина = просмотры / сессии. В A/B-тесте пользователей делят на группы целиком, а знаменатель у метрики — не пользователи, а заказы, показы, сессии. У одного человека их бывает несколько.</p>
+<table>
+  <tr><th>Метрика</th><th>Числитель</th><th>Знаменатель</th><th>Единица рандомизации</th></tr>
+  <tr><td>средний чек</td><td>выручка</td><td>заказы</td><td>пользователь</td></tr>
+  <tr><td>CTR</td><td>клики</td><td>показы</td><td>пользователь</td></tr>
+  <tr><td>просмотров за сессию</td><td>просмотры</td><td>сессии</td><td>пользователь</td></tr>
+</table>
+<p>Если единица рандомизации и знаменатель совпадают — конверсия пользователя, выручка на пользователя, — это обычное среднее, и тесты из уроков 3.2–3.3 работают как есть.</p>
+
+<h3>Почему тест по заказам врёт</h3>
+<p>t-тест считает каждый заказ независимым наблюдением. Но заказы одного человека похожи: кто покупает дорого, покупает дорого каждый раз. В данных урока у 48,6% покупателей больше одного заказа. Независимых источников разброса — пользователей — меньше, чем заказов, а формула ошибки этого не знает и делит на число заказов. Ошибка выходит заниженной, интервал — узким, p-value — маленьким.</p>
+<p>Проверить это можно A/A-тестом: разбить на две половины одну и ту же контрольную группу, где разницы нет по построению, и посмотреть, как часто тест её «находит». На 300 случайных разбиениях контроля этого урока тест по заказам нашёл разницу при p &lt; 0,05 в 66 случаях — 22%, а не 5%; на других случайных разбиениях выходит 16–22%. Честный расчёт по пользователям — в 16 случаях, 5,3%.</p>
+
+<div class="callout trap">
+  <span class="ct">Признак ловушки</span>
+  <p style="margin-bottom:0">Рандомизировали людей, а в формуле ошибки стоит число заказов, сессий или показов. Значит, ошибку надо считать по пользователям — бутстрапом или дельта-методом.</p>
+</div>
+
+<h3>Честная ошибка: бутстрап по пользователям</h3>
+<p>Бутстрап из урока 3.2, только выбирать с возвращением не заказы, а пользователей — со всеми их заказами, — и каждый раз считать средний чек как сумму выручки на сумму заказов. Разброс этих чеков и есть ошибка. Минус бутстрапа — время: тысячи повторов на миллионе пользователей идут минутами. Подробно этот случай разобран в задаче тренажёра «Зависимые наблюдения» урока 3.1.</p>
+
+<h3>Дельта-метод: та же ошибка одной формулой</h3>
+<p>Для каждого пользователя есть два числа: выручка \\(x_i\\) и число заказов \\(y_i\\), включая нули у тех, кто не купил. Средний чек — отношение средних \\(R = \\bar x / \\bar y\\).</p>
+<p>Понадобится одно новое понятие — <strong>ковариация</strong>: насколько два столбца отклоняются от своих средних вместе. Для каждого пользователя перемножают отклонения — выручки от средней выручки и заказов от среднего числа заказов — и усредняют, деля на \\(n - 1\\), как в дисперсии. У кого заказов больше среднего, у того обычно и выручка больше средней: оба отклонения одного знака, произведение положительное, ковариация положительна. <strong>Корреляция</strong> \\(\\rho\\) — та же ковариация, делённая на произведение стандартных отклонений: число от −1 до 1, где 0 — никакой связи, 1 — столбцы растут строго вместе.</p>
+<p>Дельта-метод приближает дисперсию отношения через дисперсии числителя и знаменателя и их ковариацию. «Приближает» — потому что при большом \\(n\\) отношение средних ведёт себя почти как обычное среднее:</p>
+<p>\\[ \\operatorname{Var}(R) \\approx \\frac{s_x^2 - 2R\\,s_{xy} + R^2 s_y^2}{n\\,\\bar y^{2}} \\]</p>
+<p>где \\(n\\) — число пользователей, \\(s_x^2\\), \\(s_y^2\\) — дисперсии, \\(s_{xy}\\) — ковариация. Все три считаются по пользователям, поэтому зависимость заказов одного человека учтена сама собой. Минус перед ковариацией — потому что выручка и заказы растут вместе: пользователь с лишним заказом добавляет и в числитель, и в знаменатель, и отношение от этого почти не меняется. Ошибка — корень из дисперсии. На половине контроля (шаги 4–5 практикума) бутстрап из 300 повторов даёт ошибку чека 58,49, дельта-метод — 58,59, тест по заказам — 39,12.</p>
+<p>Дальше всё как обычно: ошибка разницы двух групп — корень из суммы дисперсий, \\(z = (R_t - R_c) / SE\\).</p>
+
+<h3>CUPED: интервал уже без новых пользователей</h3>
+<p>Выручка на пользователя очень шумная: у одних 0, у других десятки тысяч. Но большая часть этого шума предсказуема — кто тратил много до теста, тратит много и во время. CUPED вычитает предсказуемую часть:</p>
+<p>\\[ Y_{cuped} = Y - \\theta\\,(X - \\bar X), \\qquad \\theta = \\frac{\\operatorname{cov}(X, Y)}{\\operatorname{var}(X)} \\]</p>
+<p>где \\(Y\\) — метрика во время теста, \\(X\\) — величина у того же пользователя до теста, обычно та же метрика. \\(X\\) измерен до теста, поэтому тест на него не влияет, и в обеих группах он в среднем одинаков: вычитая его, убирают шум, а не эффект. \\(\\theta\\) считают один на всех пользователей обеих групп, чтобы группы корректировались одинаково. Дисперсия \\(Y_{cuped}\\) равна \\(1 - \\rho^2\\) от исходной, где \\(\\rho\\) — корреляция \\(X\\) и \\(Y\\). На всех 12 000 пользователях урока \\(\\rho = 0{,}657\\): дисперсия падает до 0,568 от исходной, то есть на 43%, а ошибка разницы выручки на пользователя — с 58,82 до 44,37. Такое же сужение без CUPED стоило бы в 1 / 0,568 = 1,76 раза больше пользователей.</p>
+
+<div class="callout trap">
+  <span class="ct">Ковариата — только из прошлого</span>
+  <p style="margin-bottom:0">\\(X\\) обязан быть измерен до начала теста. Если взять величину, на которую тест мог повлиять, — например, число визитов во время теста, — CUPED вычтет часть самого эффекта, и оценка станет смещённой.</p>
+</div>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Платформы экспериментов в крупных компаниях считают ratio-метрики дельта-методом или линеаризацией по умолчанию, а CUPED включают для денежных метрик почти всегда. Аналитику нужно не писать это с нуля, а понимать, почему «значимый» средний чек в самописном отчёте коллеги может оказаться шумом.</p>
+</div>
+
+<div class="callout jobs">
+  <span class="ct">Что закрывает урок в вакансиях</span>
+  <ul>
+    <li>«Опыт проведения и анализа A/B-тестов» — с вопросом на собеседовании «как проверить средний чек»</li>
+    <li>Устный вопрос: «что такое CUPED и откуда берётся сокращение дисперсии»</li>
+    <li>Устный вопрос: «почему нельзя считать t-тест по заказам, если делили пользователей»</li>
+  </ul>
+</div>
+`,
+
+  ticket: {
+    from: "Продакт-менеджер корзины",
+    subj: "Апселл в корзине: раскатываем?",
+    body: `
+<p>Две недели держали тест: в корзине показываем «добавьте к заказу» с аксессуарами. Цель — поднять средний чек. В дашборде средний чек в тесте выше на 3%, коллега прогнал t-тест по заказам — p меньше 0,05. Хочу раскатывать на всех.</p>
+<p>Проверь, пожалуйста, перед решением. И посмотри заодно выручку на пользователя: у нас есть выручка каждого за шесть недель до теста, говорят, с ней можно точнее.</p>
+`
+  },
+
+  schema: `
+<p>Две таблицы в переменных, 12 000 пользователей, 5911 заказов:</p>
+<pre><code>exp_users     одна строка на пользователя
+  user_id       50000..61999
+  group         control (5940) или test (6060)
+  pre_revenue   выручка за шесть недель до теста, у 60% — 0
+
+exp_orders    одна строка на заказ во время теста
+  user_id       кто заказал; у одного человека бывает до 7 заказов
+  revenue       сумма заказа</code></pre>
+<p>Пользователи без заказов есть только в <code>exp_users</code>. Шесть строк вывода:</p>
+<pre><code>== средний чек ==
+control=X test=X (+X%)
+по заказам: se=X z=X p=X
+дельта-метод: se=X z=X p=X
+== выручка на пользователя ==
+без CUPED: разница=+X se=X p=X
+с CUPED: theta=X разница=+X se=X p=X</code></pre>
+<p>Точность: суммы, разницы и ошибки — два знака, z — два, p — четыре, theta — три, прирост чека — один знак со знаком плюс или минус. Средний чек — сумма выручки на сумму заказов. Разница и z везде — test минус control. CUPED — по <code>pre_revenue</code>, <code>theta</code> — один по всем 12 000 пользователям. <code>mean</code>, <code>var</code>, <code>sd</code> и <code>norm_cdf</code> уже есть в прологе.</p>
+`,
+
+  data: [],
+  packages: ["pandas"],
+  prelude: window.SH.ratioPrelude,
+
+  /* Практикум — семь шагов на A/A-разбиении контроля по чётности user_id:
+     настоящей разницы нет, поэтому видно, какую ошибку даёт каждый способ.
+     Основная задача сравнивает test и control.
+     Решения: node инструменты/checksteps.js m3l8 */
+  practicum: {
+    intro: "Семь шагов перед основной задачей. Все — на одной контрольной группе, поделённой пополам по чётности user_id: обе половины видели одно и то же, поэтому любая «разница» между ними — шум, и хорошо видно, какой способ считает ошибку честно.",
+    schema: `
+<p>Те же таблицы <code>exp_users</code> и <code>exp_orders</code>, что в основной задаче; в шагах берётся только контрольная группа. <code>mean</code>, <code>var</code>, <code>sd</code>, <code>norm_cdf</code>, <code>math</code> и <code>random</code> — из пролога.</p>
+`,
+    data: [],
+    packages: ["pandas"],
+    prelude: window.SH.ratioPrelude,
+    done: "Все семь шагов решены. Основная задача — те же расчёты на настоящем тесте: средний чек сумма на сумму, тест по заказам, дельта-метод для двух групп (дисперсия разницы — сумма дисперсий) и CUPED с <code>theta</code> по всем пользователям обеих групп.",
+    steps: [
+      {
+        title: "Средний чек — сумма на сумму",
+        body: `
+<p>Практикум идёт на A/A-разбиении: контрольную группу делим на половины по чётности <code>user_id</code>. Обе половины видели одно и то же, поэтому настоящей разницы между ними нет, и любой «эффект» здесь — шум.</p>
+<p>Средний чек половины — вся её выручка, делённая на число её заказов. Это и есть ratio-метрика: числитель и знаменатель — суммы по многим заказам многих людей.</p>`,
+        ba: { before: { columns: ["user_id", "revenue"], rows: [[50054, 883.23], [50088, 2192.94], [50088, 1722.0]] },
+          after: { columns: ["половина", "заказов", "чек"], rows: [["A", 1448, 2761.87], ["B", 1459, 2787.01]] },
+          hl: ["чек"],
+          note: "Заказы чётных <code>user_id</code> — половина A, нечётных — B." },
+        task: `<p><strong>Задание.</strong> Для половин A (чётные <code>user_id</code>) и B (нечётные) напечатайте число заказов и средний чек как сумму выручки, делённую на число заказов.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+a_ord = co[co["user_id"] % 2 == 0]
+b_ord = co[co["user_id"] % 2 == 1]
+# print(f"A: {…} заказов, чек {…:.2f}") — и так же для B
+`,
+        expected: { stdout: `A: 1448 заказов, чек 2761.87
+B: 1459 заказов, чек 2787.01` },
+        hint: "Число заказов — <code>len(a_ord)</code>, выручка — <code>a_ord['revenue'].sum()</code>. Внутри f-строки в двойных кавычках имя столбца пишите в одинарных: <code>a_ord['revenue']</code>.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+a_ord = co[co["user_id"] % 2 == 0]
+b_ord = co[co["user_id"] % 2 == 1]
+print(f"A: {len(a_ord)} заказов, чек {a_ord['revenue'].sum() / len(a_ord):.2f}")
+print(f"B: {len(b_ord)} заказов, чек {b_ord['revenue'].sum() / len(b_ord):.2f}")
+`
+      },
+      {
+        title: "t-тест по заказам",
+        body: `
+<p>Так считают, когда каждый заказ принимают за независимое наблюдение: ошибка разницы — корень из суммы <code>var / n</code> двух половин, где <code>n</code> — число заказов. <code>var</code>, <code>mean</code> и <code>norm_cdf</code> уже есть в прологе.</p>`,
+        ba: { before: { columns: ["половина", "заказов", "чек"], rows: [["A", 1448, 2761.87], ["B", 1459, 2787.01]] },
+          after: { columns: ["se", "z", "p"], rows: [[53.97, -0.47, 0.6414]] },
+          hl: ["se"],
+          note: "Здесь разницы нет — и тест её не нашёл. Вопрос в том, правильная ли у него ошибка: 53,97." },
+        task: `<p><strong>Задание.</strong> Посчитайте ошибку разницы средних чеков половин по заказам, <code>z</code> и двусторонний p-value.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+ra = [float(v) for v in co[co["user_id"] % 2 == 0]["revenue"]]
+rb = [float(v) for v in co[co["user_id"] % 2 == 1]["revenue"]]
+# se = …, z = (mean(ra) - mean(rb)) / se
+# print(f"se={se:.2f} z={z:.2f} p={…:.4f}")
+`,
+        expected: { stdout: `se=53.97 z=-0.47 p=0.6414` },
+        hint: "<code>se = math.sqrt(var(ra) / len(ra) + var(rb) / len(rb))</code>, p-value — <code>2 * (1 - norm_cdf(abs(z)))</code>.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+ra = [float(v) for v in co[co["user_id"] % 2 == 0]["revenue"]]
+rb = [float(v) for v in co[co["user_id"] % 2 == 1]["revenue"]]
+se = math.sqrt(var(ra) / len(ra) + var(rb) / len(rb))
+z = (mean(ra) - mean(rb)) / se
+print(f"se={se:.2f} z={z:.2f} p={2 * (1 - norm_cdf(abs(z))):.4f}")
+`
+      },
+      {
+        title: "Одна строка на пользователя",
+        body: `
+<p>Честный расчёт идёт по пользователям, потому что делили на группы их. Нужна таблица «одна строка на человека»: сколько заказов и сколько выручки, причём с нулями у тех, кто ничего не купил, — они тоже часть группы.</p>
+<p>Средний чек от этого не меняется: сумма выручки по людям, делённая на сумму заказов по людям, — то же самое, что по заказам. Меняется только то, что считается одним наблюдением.</p>`,
+        ba: { before: { columns: ["user_id", "revenue"], rows: [[50054, 883.23], [50088, 2192.94], [50088, 1722.0]] },
+          after: { columns: ["user_id", "orders", "revenue"], rows: [[50002, 0, 0], [50054, 1, 883.23], [50088, 2, 3914.94]] },
+          hl: ["orders", "revenue"],
+          note: "Пользователь без заказов попадает в таблицу из <code>exp_users</code> через <code>how='left'</code> и <code>fillna</code>." },
+        task: `<p><strong>Задание.</strong> Заготовка уже собрала таблицу <code>u</code>. Для половины A напечатайте число пользователей, число пользователей с заказами и число заказов, затем средние заказы и выручку на пользователя и средний чек как сумму на сумму.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+# print(f"пользователей {…}, с заказами {…}, заказов {…}")
+# print(f"на пользователя: заказов {…:.3f}, выручки {…:.2f}")
+# print(f"чек {…:.2f}")
+`,
+        expected: { stdout: `пользователей 2928, с заказами 763, заказов 1448
+на пользователя: заказов 0.495, выручки 1365.84
+чек 2761.87` },
+        hint: "С заказами — <code>int((ua['orders'] > 0).sum())</code>: условие даёт True и False, а сумма считает True. <code>int(…)</code> нужен, чтобы число напечаталось без <code>.0</code>.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+print(f"пользователей {len(ua)}, с заказами {int((ua['orders'] > 0).sum())}, заказов {int(ua['orders'].sum())}")
+print(f"на пользователя: заказов {ua['orders'].mean():.3f}, выручки {ua['revenue'].mean():.2f}")
+print(f"чек {ua['revenue'].sum() / ua['orders'].sum():.2f}")
+`
+      },
+      {
+        title: "Бутстрап по пользователям",
+        body: `
+<p>Чтобы узнать настоящий разброс чека, пересобирают половину A много раз: выбирают <code>n</code> пользователей с возвращением — каждого со всеми его заказами — и каждый раз считают чек как сумму выручки на сумму заказов. Стандартное отклонение этих чеков — ошибка чека.</p>
+<p>Случайный номер пользователя — <code>int(rnd.random() * n)</code>: то же, что <code>rnd.choice</code>, только выбирается номер, по которому берут и выручку, и заказы одного человека. Генератор с зерном в заготовке, чтобы у всех вышли одни и те же числа. Для сравнения заготовка печатает ошибку чека одной половины A по заказам — корень из <code>var(ra) / len(ra)</code>; в шаге 2 считалась ошибка разницы двух половин, поэтому там число больше.</p>`,
+        ba: { before: { columns: ["способ", "se чека A"], rows: [["по заказам", 39.12]] },
+          after: { columns: ["способ", "se чека A"], rows: [["по заказам", 39.12], ["бутстрап по пользователям", 58.49]] },
+          hl: ["se чека A"],
+          note: "Честная ошибка в 1,5 раза больше той, что считает тест по заказам." },
+        task: `<p><strong>Задание.</strong> Допишите тело цикла: накопите выручку и заказы выбранных пользователей и добавьте в <code>boot</code> их отношение. Напечатайте ошибку по заказам и бутстрапа.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+x = [float(v) for v in ua["revenue"]]
+y = [float(v) for v in ua["orders"]]
+n = len(x)
+ra = [float(v) for v in co[co["user_id"] % 2 == 0]["revenue"]]
+rnd = random.Random(23)
+boot = []
+for _ in range(300):
+    sx = sy = 0.0
+    for j in range(n):
+        i = int(rnd.random() * n)
+        # прибавьте выручку и заказы пользователя i к sx и sy
+    # boot.append(…)
+# print(f"по заказам se={math.sqrt(var(ra) / len(ra)):.2f}, бутстрап по пользователям se={sd(boot):.2f}")
+`,
+        expected: { stdout: `по заказам se=39.12, бутстрап по пользователям se=58.49`, uses: [["sx\\s*/\\s*sy", "Чек в каждом повторе — сумма выручки, делённая на сумму заказов: <code>sx / sy</code>."]] },
+        hint: "Внутри цикла: <code>sx += x[i]</code> и <code>sy += y[i]</code>. После внутреннего цикла, с отступом внешнего: <code>boot.append(sx / sy)</code>, и раскомментируйте последнюю строку. Порядок вызовов <code>rnd.random()</code> менять нельзя — иначе числа не совпадут с эталоном.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+x = [float(v) for v in ua["revenue"]]
+y = [float(v) for v in ua["orders"]]
+n = len(x)
+ra = [float(v) for v in co[co["user_id"] % 2 == 0]["revenue"]]
+rnd = random.Random(23)
+boot = []
+for _ in range(300):
+    sx = sy = 0.0
+    for j in range(n):
+        i = int(rnd.random() * n)
+        sx += x[i]
+        sy += y[i]
+    boot.append(sx / sy)
+print(f"по заказам se={math.sqrt(var(ra) / len(ra)):.2f}, бутстрап по пользователям se={sd(boot):.2f}")
+`
+      },
+      {
+        title: "Дельта-метод",
+        body: `
+<p>Та же ошибка без тысяч повторов — по формуле из теории: дисперсии выручки и заказов по пользователям и их ковариация.</p>
+<p><strong>Порядок действий.</strong></p>
+<ol class="order">
+<li><code>mx, my = mean(x), mean(y)</code> и <code>r = mx / my</code>.</li>
+<li>Ковариация: <code>sum((p - mx) * (q - my) for p, q in zip(x, y)) / (n - 1)</code>.</li>
+<li><code>se = math.sqrt((var(x) - 2 * r * cov + r * r * var(y)) / (my * my * n))</code>.</li>
+</ol>`,
+        ba: { before: { columns: ["способ", "se чека A"], rows: [["бутстрап, 300 повторов", 58.49]] },
+          after: { columns: ["способ", "se чека A"], rows: [["бутстрап, 300 повторов", 58.49], ["дельта-метод", 58.59]] },
+          hl: ["se чека A"],
+          note: "Почти то же, что бутстрап, — без 300 повторов." },
+        task: `<p><strong>Задание.</strong> Посчитайте ошибку среднего чека половины A дельта-методом.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+x = [float(v) for v in ua["revenue"]]
+y = [float(v) for v in ua["orders"]]
+n = len(x)
+# mx, my, r = …
+# cov = …
+# se = …
+# print(f"дельта-метод se={se:.2f}")
+`,
+        expected: { stdout: `дельта-метод se=58.59`, uses: [["cov", "Нужна ковариация выручки и заказов — переменная <code>cov</code>."]] },
+        hint: "Три строки из «Порядка действий» по очереди. <code>var</code> из пролога делит на <code>n - 1</code>, ковариацию делите так же.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+ua = u[u["user_id"] % 2 == 0]
+x = [float(v) for v in ua["revenue"]]
+y = [float(v) for v in ua["orders"]]
+n = len(x)
+mx, my = mean(x), mean(y)
+r = mx / my
+cov = sum((p - mx) * (q - my) for p, q in zip(x, y)) / (n - 1)
+se = math.sqrt((var(x) - 2 * r * cov + r * r * var(y)) / (my * my * n))
+print(f"дельта-метод se={se:.2f}")
+`
+      },
+      {
+        title: "θ для CUPED",
+        body: `
+<p>CUPED вычитает из выручки во время теста ту часть, что предсказывается выручкой до теста. Коэффициент — <code>theta = cov(X, Y) / var(X)</code>, где <code>X</code> — <code>pre_revenue</code>, <code>Y</code> — выручка во время теста. Корреляция <code>rho = cov / (sd(X) * sd(Y))</code> говорит, насколько упадёт дисперсия: она станет <code>1 - rho ** 2</code> от исходной.</p>`,
+        ba: { before: { columns: ["user_id", "pre_revenue", "revenue"], rows: [[50005, 5799.12, 1478.33], [50007, 3049.61, 966.79], [50013, 0, 2536.95]] },
+          after: { columns: ["theta", "rho", "1 - rho²"], rows: [[0.252, 0.633, 0.599]] },
+          hl: ["theta", "rho"],
+          note: "Дисперсия выручки в контроле упадёт до 0,599 от исходной." },
+        task: `<p><strong>Задание.</strong> По всем пользователям контроля посчитайте <code>theta</code>, <code>rho</code> и <code>1 - rho ** 2</code>.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+X = [float(v) for v in u["pre_revenue"]]
+Y = [float(v) for v in u["revenue"]]
+# mX, mY = …; c_xy = ковариация X и Y
+# theta = …; rho = …
+# print(f"theta={theta:.3f} rho={rho:.3f} 1-rho2={1 - rho ** 2:.3f}")
+`,
+        expected: { stdout: `theta=0.252 rho=0.633 1-rho2=0.599` },
+        hint: "Ковариация — как в прошлом шаге, только для <code>X</code> и <code>Y</code>. <code>theta = c_xy / var(X)</code>, <code>rho = c_xy / (sd(X) * sd(Y))</code>.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+X = [float(v) for v in u["pre_revenue"]]
+Y = [float(v) for v in u["revenue"]]
+mX, mY = mean(X), mean(Y)
+c_xy = sum((p - mX) * (q - mY) for p, q in zip(X, Y)) / (len(X) - 1)
+theta = c_xy / var(X)
+rho = c_xy / (sd(X) * sd(Y))
+print(f"theta={theta:.3f} rho={rho:.3f} 1-rho2={1 - rho ** 2:.3f}")
+`
+      },
+      {
+        title: "Ошибка после CUPED",
+        body: `
+<p>Новый столбец — <code>revenue - theta * (pre_revenue - mX)</code>. Его среднее в половинах сравнивают так же, как обычную выручку на пользователя: ошибка разницы — корень из суммы <code>var / n</code>, где <code>n</code> — число пользователей.</p>`,
+        ba: { before: { columns: ["метрика", "se разницы"], rows: [["выручка на пользователя", 82.71]] },
+          after: { columns: ["метрика", "se разницы"], rows: [["выручка на пользователя", 82.71], ["она же с CUPED", 64.07]] },
+          hl: ["se разницы"],
+          note: "Те же пользователи, ошибка меньше на 23%." },
+        task: `<p><strong>Задание.</strong> Добавьте столбец <code>cuped</code> и напечатайте ошибку разницы половин A и B для <code>revenue</code> и для <code>cuped</code>.</p>`,
+        starter: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+mX = u["pre_revenue"].mean()
+theta = 0.252   # из прошлого шага
+# u["cuped"] = …
+
+
+def se_diff(col):
+    a = [float(v) for v in u[u["user_id"] % 2 == 0][col]]
+    b = [float(v) for v in u[u["user_id"] % 2 == 1][col]]
+    return math.sqrt(var(a) / len(a) + var(b) / len(b))
+
+
+print(f"без CUPED se={se_diff('revenue'):.2f}")
+# print(f"с CUPED se={…:.2f}")
+`,
+        expected: { stdout: `без CUPED se=82.71
+с CUPED se=64.07` },
+        hint: "<code>u['cuped'] = u['revenue'] - theta * (u['pre_revenue'] - mX)</code>, затем вторая строка печати с <code>se_diff('cuped')</code>.",
+        solution: `ctrl = exp_users[exp_users["group"] == "control"]
+co = exp_orders[exp_orders["user_id"].isin(ctrl["user_id"])]
+per = co.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+u = ctrl[["user_id", "pre_revenue"]].merge(per, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+mX = u["pre_revenue"].mean()
+theta = 0.252   # из прошлого шага
+u["cuped"] = u["revenue"] - theta * (u["pre_revenue"] - mX)
+
+
+def se_diff(col):
+    a = [float(v) for v in u[u["user_id"] % 2 == 0][col]]
+    b = [float(v) for v in u[u["user_id"] % 2 == 1][col]]
+    return math.sqrt(var(a) / len(a) + var(b) / len(b))
+
+
+print(f"без CUPED se={se_diff('revenue'):.2f}")
+print(f"с CUPED se={se_diff('cuped'):.2f}")
+`
+      }
+    ]
+  },
+
+  starter: `# Разбор апселла: средний чек и выручка на пользователя
+# Шаг 1: по каждому пользователю — число заказов и выручка (нули тоже)
+
+# Шаг 2: средний чек по группам как сумма на сумму
+
+# Шаг 3: t-тест по заказам — как сделал коллега
+
+# Шаг 4: дельта-метод по пользователям
+
+# Шаг 5: выручка на пользователя без CUPED и с CUPED
+`,
+
+  expected: {
+    stdout: `== средний чек ==
+control=2774.49 test=2853.73 (+2.9%)
+по заказам: se=38.28 z=2.07 p=0.0384
+дельта-метод: se=56.56 z=1.40 p=0.1612
+== выручка на пользователя ==
+без CUPED: разница=+56.81 se=58.82 p=0.3341
+с CUPED: theta=0.264 разница=+69.87 se=44.37 p=0.1153`
+  },
+
+  hints: [
+    "Сначала таблица «одна строка на пользователя»: <code>exp_orders.groupby(\"user_id\").agg(orders=(\"revenue\", \"size\"), revenue=(\"revenue\", \"sum\"))</code>, затем <code>exp_users.merge(…, on=\"user_id\", how=\"left\")</code> и <code>fillna</code> нулями: без нулей пропадут пользователи, которые ничего не купили, и дельта-метод посчитает не то.",
+    "Для дельта-метода в каждой группе нужны пять чисел по пользователям: средние выручки и заказов, их дисперсии и ковариация. Ковариация — как дисперсия, только произведение отклонений двух столбцов: <code>sum((a - mx) * (b - my) for a, b in zip(x, y)) / (n - 1)</code>. Дисперсия разницы групп — сумма дисперсий. Удобно оформить расчёт как функцию от таблицы одной группы и вызвать её для control и test.",
+    "Для CUPED <code>theta</code> считается один раз по всем пользователям обеих групп: ковариация выручки и <code>pre_revenue</code>, делённая на дисперсию <code>pre_revenue</code>. Новый столбец — <code>revenue - theta * (pre_revenue - среднее pre_revenue)</code>, дальше та же разница средних и ошибка по раздельным дисперсиям, что и без CUPED."
+  ],
+
+  solution: `# Разбор апселла: средний чек и выручка на пользователя
+per_user = exp_orders.groupby("user_id").agg(
+    orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+d = exp_users.merge(per_user, on="user_id", how="left").fillna({"orders": 0, "revenue": 0})
+c = d[d["group"] == "control"]
+t = d[d["group"] == "test"]
+
+
+def p_value(z):
+    return 2 * (1 - norm_cdf(abs(z)))
+
+
+# 1. Средний чек = сумма выручки / сумма заказов
+aov_c = c["revenue"].sum() / c["orders"].sum()
+aov_t = t["revenue"].sum() / t["orders"].sum()
+print("== средний чек ==")
+print(f"control={aov_c:.2f} test={aov_t:.2f} ({(aov_t / aov_c - 1) * 100:+.1f}%)")
+
+# 2. Наивно: каждый заказ — независимое наблюдение
+oc = [float(x) for x in exp_orders[exp_orders["user_id"].isin(c["user_id"])]["revenue"]]
+ot = [float(x) for x in exp_orders[exp_orders["user_id"].isin(t["user_id"])]["revenue"]]
+se_naive = math.sqrt(var(oc) / len(oc) + var(ot) / len(ot))
+z = (mean(ot) - mean(oc)) / se_naive
+print(f"по заказам: se={se_naive:.2f} z={z:.2f} p={p_value(z):.4f}")
+
+
+# 3. Дельта-метод: единица наблюдения — пользователь
+def ratio_var(g):
+    x = [float(v) for v in g["revenue"]]
+    y = [float(v) for v in g["orders"]]
+    n, mx, my = len(x), mean(x), mean(y)
+    r = mx / my
+    cov = sum((a - mx) * (b - my) for a, b in zip(x, y)) / (n - 1)
+    return (var(x) - 2 * r * cov + r * r * var(y)) / (my * my * n)
+
+
+se_delta = math.sqrt(ratio_var(c) + ratio_var(t))
+z = (aov_t - aov_c) / se_delta
+print(f"дельта-метод: se={se_delta:.2f} z={z:.2f} p={p_value(z):.4f}")
+
+# 4. Выручка на пользователя: без CUPED и с CUPED
+print("== выручка на пользователя ==")
+y = [float(v) for v in d["revenue"]]
+x = [float(v) for v in d["pre_revenue"]]
+mx, my = mean(x), mean(y)
+theta = sum((a - mx) * (b - my) for a, b in zip(x, y)) / (len(x) - 1) / var(x)
+d["cuped"] = d["revenue"] - theta * (d["pre_revenue"] - mx)
+for col, name in (("revenue", "без CUPED"), ("cuped", "с CUPED")):
+    a = [float(v) for v in d[d["group"] == "control"][col]]
+    b = [float(v) for v in d[d["group"] == "test"][col]]
+    se = math.sqrt(var(a) / len(a) + var(b) / len(b))
+    z = (mean(b) - mean(a)) / se
+    extra = f" theta={theta:.3f}" if col == "cuped" else ""
+    print(f"{name}:{extra} разница={mean(b) - mean(a):+.2f} se={se:.2f} p={p_value(z):.4f}")`,
+
+  solutionNote: `
+<p><strong>Что здесь важно понять, а не запомнить:</strong></p>
+<ul>
+  <li>на одних данных тест по заказам говорит «значимо» (p = 0,0384), а честный по пользователям — нет (p = 0,1612). Ошибка выросла с 38,28 до 56,56 — в 1,48 раза, и рост чека на 2,9% оказался в пределах шума;</li>
+  <li>CUPED не меняет вывод сам по себе, он сужает ошибку выручки на пользователя с 58,82 до 44,37. Разница +69,87 при p = 0,1153 всё ещё не доказана, но тот же тест с CUPED доберёт мощность быстрее, чем без него;</li>
+  <li>ответ продакту: раскатывать по этим данным нельзя — рост не отличим от шума. Варианты — продлить тест или заранее объявить ключевой метрикой выручку на пользователя с CUPED и посчитать, сколько ещё нужно данных.</li>
+</ul>
+<p><strong>Почему CUPED сдвинул разницу с +56,81 до +69,87.</strong> До теста тестовая группа тратила в среднем на 49,50 меньше контрольной — случайный перекос рандомизации. CUPED его вычитает: 0,264 · 49,50 ≈ 13,07, и 56,81 + 13,07 = 69,88 — совпадает с точностью до округления. В среднем по многим тестам такой поправки нет, в конкретном она есть, и это делает оценку точнее.</p>
+<p><strong>Проверка здравым смыслом.</strong> Дельта-метод меняет только ошибку, не оценку: <code>z</code> в строках «по заказам» и «дельта-метод» считается от тех же двух чеков из второй строки. Если для дельта-метода получился другой чек — где-то посчитано среднее средних.</p>
+`,
+
+  drills: [
+    {
+      title: "Среднее чеков против суммы на сумму",
+      level: "easy",
+      body: `<p>Коллега посчитал средний чек контроля так: чек каждого покупателя (его выручка на его заказы), потом среднее по покупателям. Сравните с ratio-метрикой — вся выручка на все заказы — и напечатайте число покупателей и сколько из них с одним заказом. Три строки: <code>сумма на сумму: X</code>, <code>среднее чеков покупателей: X</code> (оба с двумя знаками) и <code>покупателей N, из них с одним заказом N</code>.</p>`,
+      solution: `per = exp_orders.groupby("user_id").agg(orders=("revenue", "size"), revenue=("revenue", "sum")).reset_index()
+ctrl = exp_users[exp_users["group"] == "control"]
+buyers = per[per["user_id"].isin(ctrl["user_id"])]
+
+# средний чек как ratio-метрика: вся выручка на все заказы
+ratio = buyers["revenue"].sum() / buyers["orders"].sum()
+# среднее средних: сначала чек каждого покупателя, потом среднее по людям
+mean_of_means = (buyers["revenue"] / buyers["orders"]).mean()
+print(f"сумма на сумму: {ratio:.2f}")
+print(f"среднее чеков покупателей: {mean_of_means:.2f}")
+print(f"покупателей {len(buyers)}, из них с одним заказом {int((buyers['orders'] == 1).sum())}")`,
+      note: `<p>2774,49 против 2767,89: здесь разница 0,2%, но это разные метрики. У 812 из 1564 покупателей один заказ — для них оба способа дают одно и то же, расходятся они только на остальных 752. Среднее чеков даёт каждому покупателю одинаковый вес, а сумма на сумму — каждому заказу. Продакт под «средним чеком» почти всегда имеет в виду второе. Если покупатели с многими заказами покупают дороже или дешевле остальных, числа разойдутся сильно, и сравнивать между отчётами можно только одну и ту же формулу.</p>`
+    },
+    {
+      title: "Группы до теста",
+      level: "easy",
+      body: `<p>Перед CUPED полезно убедиться, что группы похожи до теста. Сравните среднюю <code>pre_revenue</code> в контроле и тесте: разница, ошибка по раздельным дисперсиям и p-value.</p>`,
+      solution: `pc = [float(v) for v in exp_users[exp_users["group"] == "control"]["pre_revenue"]]
+pt = [float(v) for v in exp_users[exp_users["group"] == "test"]["pre_revenue"]]
+se = math.sqrt(var(pc) / len(pc) + var(pt) / len(pt))
+z = (mean(pt) - mean(pc)) / se
+print(f"до теста: control={mean(pc):.2f} test={mean(pt):.2f}")
+print(f"разница={mean(pt) - mean(pc):+.2f} se={se:.2f} p={2 * (1 - norm_cdf(abs(z))):.4f}")`,
+      note: `<p>Разница −49,50 при ошибке 146,38, p = 0,7353: до теста группы неотличимы, рандомизация в порядке. Если бы разница была заметной, сырая выручка на пользователя унаследовала бы этот перекос, а CUPED убрал бы его — это вторая польза метода, кроме сужения интервала.</p>`
+    },
+    {
+      title: "A/A на своих данных",
+      level: "hard",
+      body: `<p>Проверьте, как часто два способа находят разницу там, где её нет. Сто раз поделите пользователей контроля на две случайные половины и для каждой посчитайте <code>z</code> разницы средних чеков по заказам и дельта-методом. Сколько раз |z| &gt; 1,96?</p>
+<p><strong>Пригодится.</strong> Быстрее всего хранить у каждого пользователя контроля список его заказов и делить людей, а не строки:</p>
+<pre><code>orders_of = {uid: [] for uid in ctrl_ids}      # пустой список на человека
+for uid, rev in zip(exp_orders["user_id"], exp_orders["revenue"]):
+    if int(uid) in orders_of:
+        orders_of[int(uid)].append(float(rev))
+people = list(orders_of.values())
+# разбиение: каждый человек — в a или в b
+a, b = [], []
+for p in people:
+    if rnd.random() &lt; 0.5:
+        a.append(p)
+    else:
+        b.append(p)</code></pre>
+<p>Дальше две функции: <code>z</code> по заказам (все списки склеить в один) и <code>z</code> дельта-методом (у человека выручка — <code>sum(p)</code>, заказов — <code>len(p)</code>). Генератор — <code>random.Random(7)</code>, разбиений 100, чтобы числа совпали с разбором.</p>`,
+      solution: `# по каждому пользователю контроля: список заказов, выручка, число заказов
+ctrl_ids = [int(v) for v in exp_users[exp_users["group"] == "control"]["user_id"]]
+orders_of = {uid: [] for uid in ctrl_ids}
+for uid, rev in zip(exp_orders["user_id"], exp_orders["revenue"]):
+    if int(uid) in orders_of:
+        orders_of[int(uid)].append(float(rev))
+people = list(orders_of.values())
+
+
+def z_naive(a, b):
+    ra = [r for p in a for r in p]
+    rb = [r for p in b for r in p]
+    return (mean(ra) - mean(rb)) / math.sqrt(var(ra) / len(ra) + var(rb) / len(rb))
+
+
+def ratio_var(g):
+    x = [sum(p) for p in g]
+    y = [len(p) for p in g]
+    n, mx, my = len(x), mean(x), mean(y)
+    r = mx / my
+    cov = sum((a - mx) * (b - my) for a, b in zip(x, y)) / (n - 1)
+    return r, (var(x) - 2 * r * cov + r * r * var(y)) / (my * my * n)
+
+
+def z_delta(a, b):
+    ra, va = ratio_var(a)
+    rb, vb = ratio_var(b)
+    return (ra - rb) / math.sqrt(va + vb)
+
+
+rnd = random.Random(7)
+naive = delta = 0
+for _ in range(100):
+    a, b = [], []
+    for p in people:
+        (a if rnd.random() < 0.5 else b).append(p)
+    naive += abs(z_naive(a, b)) > 1.96
+    delta += abs(z_delta(a, b)) > 1.96
+print(f"A/A, 100 разбиений: по заказам «значимо» {naive}, дельта-метод {delta}")`,
+      note: `<p>По заказам — 22 «значимых» результата из 100 при уровне 5%, дельта-методом — 6. Это и есть цена ошибки единицы анализа: каждый пятый тест без всякого эффекта отчитался бы об успехе. A/A на исторических данных — лучший способ проверить, что метод расчёта в вашей компании держит заявленные 5%.</p>`
+    },
+    {
+      title: "Ковариата из самого теста",
+      level: "mid",
+      body: `<p>Сравните три оценки разницы выручки на пользователя: без CUPED, с CUPED по <code>pre_revenue</code> и с CUPED по сумме первого заказа во время теста (у кого заказов нет — 0).</p>
+<p><strong>Пригодится.</strong> <code>agg(first=("revenue", "first"))</code> в <code>groupby</code> берёт первую строку каждой группы.</p>`,
+      solution: `per = exp_orders.groupby("user_id").agg(revenue=("revenue", "sum"), first=("revenue", "first")).reset_index()
+d = exp_users.merge(per, on="user_id", how="left").fillna({"revenue": 0, "first": 0})
+
+
+def cuped_diff(cov_col):
+    x = [float(v) for v in d[cov_col]]
+    y = [float(v) for v in d["revenue"]]
+    mx, my = mean(x), mean(y)
+    theta = sum((a - mx) * (b - my) for a, b in zip(x, y)) / (len(x) - 1) / var(x)
+    adj = d["revenue"] - theta * (d[cov_col] - mx)
+    return adj[d["group"] == "test"].mean() - adj[d["group"] == "control"].mean()
+
+
+raw = d[d["group"] == "test"]["revenue"].mean() - d[d["group"] == "control"]["revenue"].mean()
+print(f"без CUPED: {raw:+.2f}")
+print(f"CUPED по выручке до теста: {cuped_diff('pre_revenue'):+.2f}")
+print(f"CUPED по первому заказу в тесте: {cuped_diff('first'):+.2f}")`,
+      note: `<p>Без CUPED +56,81, с выручкой до теста +69,87, с первым заказом +5,12. Первый заказ случился уже в тесте, и апселл на него повлиял: CUPED вычел вместе с шумом почти весь эффект. Правило из теории в цифрах — ковариата только из периода до теста.</p>`
+    },
+    {
+      title: "Сколько пользователей экономит CUPED",
+      level: "mid",
+      body: `<p>По расчёту мощности без CUPED нужно 6000 пользователей в группе. Корреляция выручки до и во время теста — 0,657. Сколько пользователей нужно с CUPED и во сколько раз уже станет ошибка, если оставить 6000?</p>
+<p><strong>Пригодится.</strong> Нужная выборка пропорциональна дисперсии, а ошибка — корню из неё. <code>math.ceil</code> округляет вверх.</p>`,
+      solution: `rho = 0.657           # корреляция выручки до теста и во время, из теории урока
+need = 6000           # пользователей в группе нужно без CUPED
+share = 1 - rho ** 2
+print(f"дисперсия с CUPED: {share:.3f} от исходной")
+print(f"пользователей в группе с CUPED: {math.ceil(need * share)}")
+print(f"при той же выборке ошибка меньше в {1 / math.sqrt(share):.2f} раза")`,
+      note: `<p>Дисперсия падает до 0,568 от исходной, значит, той же мощности хватает 3411 пользователей в группе вместо 6000 — тест короче на 43%. При 6000 пользователях ошибка меньше в 1,33 раза. Поэтому CUPED включают ещё на этапе дизайна: он меняет срок теста, а не только отчёт.</p>`
+    }
+  ],
+
+  quiz: [
+    {
+      q: "Пользователей поделили на группы, а средний чек сравнили t-тестом по всем заказам. Что не так?",
+      opts: [
+        "Ничего: заказов больше, чем пользователей, поэтому тест только точнее",
+        "t-тест нельзя применять к деньгам, нужен только Манна-Уитни",
+        "Заказы одного человека зависимы, ошибка занижена, и p-value выходит слишком маленьким",
+        "Средний чек вообще нельзя сравнивать в A/B"
+      ],
+      right: 2,
+      why: "Независимые единицы — пользователи, потому что делили их. Формула ошибки по заказам считает каждый заказ отдельным наблюдением и занижает разброс. В данных урока ошибка выросла с 38,28 до 56,56, когда её посчитали по пользователям."
+    },
+    {
+      q: "В A/A-тесте на 300 разбиениях из теории тест по заказам нашёл «значимую» разницу 66 раз. Что это значит?",
+      opts: [
+        "Метод ошибается в 22% случаев вместо заявленных 5%",
+        "В контроле есть настоящий эффект",
+        "300 разбиений мало, вывод делать нельзя",
+        "Нужно взять уровень значимости 22%"
+      ],
+      right: 0,
+      why: "В A/A настоящей разницы нет по построению, поэтому каждая «находка» — ложное срабатывание. При корректном методе их около 5%: дельта-метод на тех же разбиениях нашёл разницу 16 раз из 300."
+    },
+    {
+      q: "Что нужно, чтобы посчитать ошибку среднего чека дельта-методом?",
+      opts: [
+        "Только число заказов в каждой группе",
+        "По пользователям: средние и дисперсии выручки и числа заказов и их ковариация",
+        "Медиану чека и межквартильный размах",
+        "Выручку каждого заказа и тысячу повторов"
+      ],
+      right: 1,
+      why: "Формула дельта-метода собирается из пяти чисел по пользователям: средних выручки и заказов, их дисперсий и ковариации. Тысяча повторов — это бутстрап, он даёт близкий ответ, но дольше."
+    },
+    {
+      q: "Корреляция метрики до теста и во время — 0,6. Как изменится дисперсия после CUPED?",
+      opts: [
+        "Упадёт на 60%",
+        "Упадёт в 0,6 раза",
+        "Не изменится, изменится только среднее",
+        "Станет 0,64 от исходной"
+      ],
+      right: 3,
+      why: "Дисперсия умножается на \\(1 - \\rho^2 = 1 - 0{,}36 = 0{,}64\\). Ту же мощность даёт выборка на 36% меньше."
+    },
+    {
+      q: "Какую ковариату нельзя брать для CUPED?",
+      opts: [
+        "Выручку пользователя за месяц до теста",
+        "Число визитов пользователя за время теста",
+        "Число заказов пользователя за прошлый квартал",
+        "Число дней от регистрации до начала теста"
+      ],
+      right: 1,
+      why: "Ковариата должна быть измерена до теста: тогда тест не может на неё повлиять. Визиты во время теста могли измениться из-за самой фичи, и CUPED вычтет вместе с шумом часть самого эффекта."
+    },
+    {
+      q: "CUPED сузил ошибку разницы, но p-value всё ещё 0,12. Что сказать продакту?",
+      opts: [
+        "Эффект доказан: CUPED уже учёл шум",
+        "Эффекта точно нет, фичу надо выключить",
+        "Эффект не доказан; можно продлить тест — с CUPED нужно меньше данных, чем без него",
+        "Надо поменять ковариату, пока p-value не станет меньше 0,05"
+      ],
+      right: 2,
+      why: "CUPED даёт честную оценку с меньшей ошибкой, но не превращает шум в эффект. Подбирать ковариату под нужный p-value — подгонка; выбор ковариаты, как и метрики, объявляют до теста."
+    }
+  ],
+
+  cards: [
+    { q: "Что такое ratio-метрика в A/B-тесте?",
+      a: "Отношение двух сумм, у которого знаменатель — не единица рандомизации: средний чек = выручка / заказы, CTR = клики / показы, а делили на группы пользователей." },
+    { q: "Почему t-тест по заказам врёт на среднем чеке?",
+      a: "Заказы одного пользователя зависимы: кто покупает дорого, покупает дорого каждый раз. Независимых наблюдений меньше, чем заказов, ошибка занижена, ложных «значимых» результатов больше 5%." },
+    { q: "Как посчитать ошибку ratio-метрики честно?",
+      a: "По пользователям: бутстрапом (пересобирать пользователей со всеми их заказами) или дельта-методом — формулой из дисперсий числителя и знаменателя по пользователям и их ковариации." },
+    { q: "Что делает CUPED?",
+      a: "Вычитает из метрики предсказуемую часть: <code>Y − θ·(X − среднее X)</code>, где X — величина до теста, обычно та же метрика, θ = cov(X, Y) / var(X). Оценка эффекта не смещается, а дисперсия становится 1 − ρ² от исходной." },
+    { q: "Какое главное условие для ковариаты в CUPED?",
+      a: "Она измерена до начала теста, и тест на неё повлиять не мог. Иначе CUPED вычтет часть самого эффекта." },
+    { q: "Как проверить, что метод расчёта A/B не врёт?",
+      a: "A/A-тестом на исторических данных: много раз поделить одну группу пополам и посчитать, как часто метод находит «значимую» разницу. При уровне 5% это должно случаться примерно в 5% разбиений." }
+  ],
+
+  links: [
+    { t: "Improving the Sensitivity of Online Controlled Experiments (CUPED)", url: "https://exp-platform.com/Documents/2013-02-CUPED-ImprovingSensitivityOfControlledExperiments.pdf", src: "Microsoft, 2013", lang: "EN",
+      d: "Статья, из которой пошёл CUPED. Первые четыре страницы читаются без подготовки и объясняют метод лучше пересказов." },
+    { t: "Applying the Delta Method in Metric Analytics", url: "https://arxiv.org/abs/1803.06336", src: "arXiv", lang: "EN",
+      d: "Практическое руководство по дельта-методу для ratio-метрик от команды экспериментов Microsoft, с примерами ошибок." },
+    { t: "Trustworthy Online Controlled Experiments", url: "https://experimentguide.com/", src: "Kohavi, Tang, Xu", lang: "EN",
+      d: "Главная книга про A/B-тесты. Глава про дисперсию метрик и единицы анализа — ровно тема этого урока." },
+    { t: "Как улучшить ваши A/B-тесты: лайфхаки аналитиков Авито", url: "https://habr.com/ru/companies/avito/articles/571094/", src: "Авито на Хабре", lang: "RU",
+      d: "Приёмы, которыми аналитики маркетплейса делают тесты чувствительнее: про шум метрик и способы его снизить." }
+  ]
+};
+
+/* ------------------------------------------------------------------ */
+/* 3.8 Проект: разбор результатов A/B-теста                             */
 /* ------------------------------------------------------------------ */
 
 window.CONTENT.m3l7 = {
