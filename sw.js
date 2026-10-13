@@ -23,7 +23,7 @@
    у тех, кто уже заходил, останется старая страница из кеша.
    ============================================================ */
 
-const VERSION = "2026-10-13g";
+const VERSION = "2026-10-13h";
 const CACHE = "notebook-" + VERSION;
 
 /* На своей машине курс правят и обновляют страницу — и «сначала кеш»
@@ -104,7 +104,7 @@ self.addEventListener("fetch", function (e) {
      сказать, что связи нет. */
   function lastResort(err) {
     /* скачивание файла урока — тоже переход по адресу: оболочка
-       сохранилась бы под именем delta-market.xlsx. Ошибка честнее. */
+       сохранилась бы под именем delta-market.xlsx или app-journal.xlsx. Ошибка честнее. */
     if (/\.xlsx$/.test(url.pathname)) return new Response("", { status: 503, statusText: "Offline" });
     if (req.mode === "navigate") return caches.match("./index.html");
     throw err;

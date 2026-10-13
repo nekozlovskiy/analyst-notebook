@@ -283,7 +283,7 @@ const Lazy = {
   }
 };
 
-/* Файлы для скачивания (xlsx урока 6.6). В собранном офлайн-файле
+/* Файлы для скачивания (xlsx уроков 4.7 и 6.6). В собранном офлайн-файле
    рядом ничего нет — build.py кладёт их в window.FILES data:-ссылками. */
 const Files = {
   url: function (name) { return (window.FILES && window.FILES[name]) || name; }
@@ -526,7 +526,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "data-taxi.js", "interview.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "app-journal.xlsx", "data-taxi.js", "interview.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",

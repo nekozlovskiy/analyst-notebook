@@ -89,7 +89,7 @@ lazy = "".join("<script>\n" + read(n) + "\n</script>\n" for n in LAZY)
 # файлы для скачивания из уроков — data:-ссылками, app.js берёт их из window.FILES
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 files = "<script>\nwindow.FILES = %s;\n</script>\n" % json.dumps(
-    {"delta-market.xlsx": data_uri("delta-market.xlsx", XLSX)})
+    {n: data_uri(n, XLSX) for n in ("delta-market.xlsx", "app-journal.xlsx")})
 html = swap(html, '<script src="app.js"></script>',
             files + lazy + "<script>\n" + read("app.js") + "\n</script>")
 

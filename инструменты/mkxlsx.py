@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Собирает delta-market.xlsx для урока 6.6 из data.js.
+"""Собирает delta-market.xlsx (урок 6.6) и app-journal.xlsx (урок 4.7) из data.js.
 
-    python3 инструменты/mkxlsx.py           # записать файл в корень сайта
-    python3 инструменты/mkxlsx.py --check   # сверить с файлом в ветке
+    python3 инструменты/mkxlsx.py           # записать файлы в корень сайта
+    python3 инструменты/mkxlsx.py --check   # сверить с файлами в ветке
 
 Листы orders, users — как в базе (даты — датами Excel, суммы — числами),
-leads — сырые строки выгрузки CRM, для задач на чистку. Сверка идёт по
+leads — сырые строки выгрузки CRM, для задач на чистку. В app-journal —
+журнал приложения app_users, app_activity, app_orders: даты — датами
+Excel, revenue — числом. Сверка идёт по
 распакованному содержимому листов, а не по байтам: zlib на разных
 системах сжимает по-разному.
 """
@@ -14,7 +16,6 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / "delta-market.xlsx"
 STAMP = datetime.datetime(2024, 9, 30)
 SRC = (ROOT / "data.js").read_text(encoding="utf-8")
 
@@ -28,24 +29,34 @@ def day(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d")
 
 
-def build():
+BOOKS = {
+    "delta-market.xlsx": (
+        ("orders", "ordersCSV", (int, int, day, float, str), ((3, "yyyy-mm-dd"), (4, "0.00"))),
+        ("users", "usersCSV", (int, day, str, str, str), ((2, "yyyy-mm-dd"),)),
+        ("leads", "leadsCSV", None, ()),   # как есть: текст, пустые — пустые
+    ),
+    "app-journal.xlsx": (
+        ("app_users", "appUsersCSV", (int, day, str, str, str), ((2, "yyyy-mm-dd"),)),
+        ("app_activity", "appActivityCSV", (int, day), ((2, "yyyy-mm-dd"),)),
+        ("app_orders", "appOrdersCSV", (int, day, float), ((2, "yyyy-mm-dd"), (3, "0.00"))),
+    ),
+}
+
+
+def build(sheets):
     wb = Workbook()
     wb.properties.creator = "Тетрадь аналитика"
     wb.properties.created = wb.properties.modified = STAMP
-    sheets = (
-        ("orders", rows("ordersCSV"), (int, int, day, float, str)),
-        ("users", rows("usersCSV"), (int, day, str, str, str)),
-        ("leads", rows("leadsCSV"), None),   # как есть: текст, пустые — пустые
-    )
     wb.remove(wb.active)
-    for name, data, cast in sheets:
+    for name, key, cast, fmts in sheets:
+        data = rows(key)
         ws = wb.create_sheet(name)
         ws.append(data[0])
         for c in ws[1]:
             c.font = Font(bold=True)
         for r in data[1:]:
             ws.append([f(v) for f, v in zip(cast, r)] if cast else [v if v != "" else None for v in r])
-        for col, fmt in ((3, "yyyy-mm-dd"), (4, "0.00")) if name == "orders" else ((2, "yyyy-mm-dd"),) if name == "users" else ():
+        for col, fmt in fmts:
             for (c,) in ws.iter_rows(min_row=2, min_col=col, max_col=col):
                 c.number_format = fmt
         ws.freeze_panes = "A2"
@@ -72,11 +83,16 @@ def parts(blob):
 
 
 if __name__ == "__main__":
-    blob = build()
-    if "--check" in sys.argv:
-        if not OUT.exists() or parts(OUT.read_bytes()) != parts(blob):
-            sys.exit("delta-market.xlsx устарел: python3 инструменты/mkxlsx.py")
-        print("delta-market.xlsx совпадает с data.js")
-    else:
-        OUT.write_bytes(blob)
-        print("Готово: %s — %.0f КБ" % (OUT.name, OUT.stat().st_size / 1024))
+    stale = []
+    for name, sheets in BOOKS.items():
+        out, blob = ROOT / name, build(sheets)
+        if "--check" in sys.argv:
+            if not out.exists() or parts(out.read_bytes()) != parts(blob):
+                stale.append(name)
+            else:
+                print("%s совпадает с data.js" % name)
+        else:
+            out.write_bytes(blob)
+            print("Готово: %s — %.0f КБ" % (name, out.stat().st_size / 1024))
+    if stale:
+        sys.exit("%s устарел: python3 инструменты/mkxlsx.py" % ", ".join(stale))
