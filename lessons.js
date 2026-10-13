@@ -77,7 +77,7 @@ window.COURSE = {
      Уроки — в порядке курса: первый непройденный станет ссылкой
      «что дальше». В прогрессе навыки не хранятся — переставлять,
      переименовывать и менять состав можно. Модуль 0, проекты 1.8 и 2.7
-     и карьерные 6.1, 6.2, 6.7 в карту не входят. */
+     и карьерные 6.1, 6.2, 6.8 в карту не входят. */
   skills: [
     { id: "sql-agg",    group: "SQL",        title: "Агрегации и GROUP BY",        lessons: ["m1l3", "m6l3"] },
     { id: "sql-join",   group: "SQL",        title: "JOIN",                        lessons: ["m1l1"] },
@@ -86,6 +86,7 @@ window.COURSE = {
     { id: "sql-cte",    group: "SQL",        title: "CTE и подзапросы",            lessons: ["m1l4", "m1l5"] },
     { id: "cohorts",    group: "SQL",        title: "Даты и когорты",              lessons: ["m1l6", "m4l3"] },
     { id: "clickhouse", group: "SQL",        title: "Большие данные: ClickHouse",  lessons: ["m1l7"] },
+    { id: "sql-schema", group: "SQL",        title: "Незнакомая схема",            lessons: ["m6l8"] },
     { id: "pd-group",   group: "Python",     title: "pandas: группировка и merge", lessons: ["m2l1", "m2l6", "m6l4"] },
     { id: "pd-clean",   group: "Python",     title: "Очистка данных и выбросы",    lessons: ["m2l2", "m2l3"] },
     { id: "pd-time",    group: "Python",     title: "Временные ряды и графики",    lessons: ["m2l4", "m2l5"] },
@@ -393,6 +394,11 @@ window.COURSE = {
           say: "пятнадцать задач, которые дают чаще прочих",
           sayTask: "проговаривайте вслух, даже когда уже пишете",
           sayDrills: "«Вторая по величине» — просят чаще всех остальных" },
+        { id: "m6l8", title: "Чужая схема: такси", kind: "sql", base: "taxi", ready: true,
+          desc: "незнакомая база за десять минут и типовые задачи такси",
+          say: "на собеседовании схема всегда чужая",
+          sayTask: "сначала посчитайте строки и статусы, потом решайте",
+          sayDrills: "«Перерыв водителя» — LAG по дням без повторов" },
         { id: "m6l4", title: "Python на собеседовании", kind: "python", ready: true,
           desc: "что спрашивают и как думать вслух",
           say: "думать вслух важнее, чем сразу написать верно",

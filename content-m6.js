@@ -617,6 +617,969 @@ ORDER BY share;
 };
 
 
+window.CONTENT.m6l8 = {
+  intro: "На собеседовании база всегда чужая. Первые десять минут решают больше, чем сам запрос: что лежит в таблицах, что значит одна строка, где пусто и почему. Здесь — база такси, которую вы видите впервые.",
+
+  duration: "≈ 2,5 часа",
+  plan: [
+    { m: "30 мин", w: "Теория и карточки: десять минут с чужой базой и метрики такси" },
+    { m: "30 мин", w: "Практикум: знакомство со схемой по шагам" },
+    { m: "35 мин", w: "Задача: где и когда теряем заказы" },
+    { m: "45 мин", w: "Тренажёр: одиннадцать задач с собеседований" },
+    { m: "10 мин", w: "Самопроверка вопросами" }
+  ],
+
+  theory: `
+<p class="lead">В этом уроке новая база — «Дельта Такси»: три таблицы, 4 000 заказов с января по июнь 2024 в Москве, Казани и Екатеринбурге. С магазином она не связана. Задача урока — не выучить её, а научиться за несколько запросов понимать любую незнакомую схему.</p>
+
+<h3>Первые десять минут с чужой базой</h3>
+<p>До первого «настоящего» запроса — пять коротких проверок. Каждая отвечает на вопрос, без которого решение будет считать не то.</p>
+<ol>
+  <li><strong>Сколько строк.</strong> <code>SELECT COUNT(*) FROM trips</code> — 4 000. Порядок величины подсказывает, где искать ошибку потом: доля от 4 000 и доля от 3 372 — разные числа.</li>
+  <li><strong>Что значит одна строка — зерно таблицы.</strong> Зерно (по-английски grain) — то, что описывает одна строка; слово часто звучит на собеседованиях и не связано с зерном генератора <code>random.Random(1)</code> из модуля 3. В <code>trips</code> строка — заказ, а не поездка: 4 000 заказов, из них поездкой закончились 3 372. Зерно проверяют двумя запросами. Ключ уникален (<code>COUNT(DISTINCT trip_id) = COUNT(*)</code>) — значит, строки не дублируются. У одного пассажира строк много — значит, строка не пассажир.</li>
+  <li><strong>Какие значения у категорий.</strong> <code>SELECT status, COUNT(*) FROM trips GROUP BY status</code> — четыре статуса: <code>completed</code> 3 372, <code>cancelled_rider</code> 253, <code>no_driver</code> 284, <code>cancelled_driver</code> 91. Без этого шага легко посчитать «поездки» по всем строкам.</li>
+  <li><strong>Где пусто и почему.</strong> <code>COUNT(столбец)</code> считает непустые: у <code>no_driver</code> пуст <code>driver_id</code>, у всех незавершённых — <code>pickup_at</code>, <code>price</code> и <code>ride_min</code>, а оценку <code>rider_rating</code> оставили в 2 040 поездках из 3 372. Пустота здесь — не ошибка выгрузки, а смысл.</li>
+  <li><strong>Формат и диапазон времени.</strong> <code>MIN(requested_at)</code> и <code>MAX(requested_at)</code> — с 2024-01-01 03:40 по 2024-06-30 22:46. Время — текст «ГГГГ-ММ-ДД ЧЧ:ММ», без часового пояса.</li>
+</ol>
+<figure class="example"><div class="example-h">Пять проверок одним заходом</div><div class="example-b">
+<pre><code>SELECT status,
+       COUNT(*)            AS orders,
+       COUNT(driver_id)    AS with_driver,
+       COUNT(pickup_at)    AS with_pickup,
+       COUNT(rider_rating) AS rated
+FROM trips
+GROUP BY status;</code></pre>
+<p>Одна таблица сразу показывает и статусы, и где какие столбцы пусты: у <code>no_driver</code> 284 заказа и 0 водителей, у <code>completed</code> подача есть во всех 3 372 строках, оценка — в 2 040.</p>
+</div></figure>
+
+<h3>Вопросы интервьюеру до первого запроса</h3>
+<table class="tbl">
+  <tr><th>Вопрос</th><th>Зачем</th></tr>
+  <tr><td>Что считаем заказом, а что поездкой?</td><td>От этого зависит знаменатель любой доли</td></tr>
+  <tr><td>Входят ли отмены и «нет машины» в метрику?</td><td><code>SUM(price) / COUNT(*)</code> по всем заказам даст 278,12 ₽ вместо 329,92; «доля отмен» от поездок — не от заказов</td></tr>
+  <tr><td>В каком часовом поясе время?</td><td>Час пик в Екатеринбурге и в Москве по московскому времени — разные часы. Если время московское, местное время Екатеринбурга получают в запросе — <code>datetime(requested_at, '+2 hours')</code>, данные не правят</td></tr>
+  <tr><td>Какой период и есть ли неполные месяцы?</td><td>Данные кончаются 30 июня: сравнение с июлем бессмысленно</td></tr>
+</table>
+<p>Задать два-три таких вопроса вслух — часть ответа, а не потеря времени: интервьюер видит, что вы не будете считать вслепую.</p>
+
+<h3>Метрики такси</h3>
+<ul>
+  <li><strong>Доля заказов, закончившихся поездкой</strong> — <code>completed</code> от всех заказов: 3 372 из 4 000, 84,3%. Это главная метрика спроса и предложения сразу.</li>
+  <li><strong>Доля отмен по сторонам</strong> — отдельно пассажир (6,3%), водитель (2,3%) и «нет машины» (7,1%): у них разные причины и разные лекарства.</li>
+  <li><strong>Время подачи</strong> — от заказа до посадки, только у поездок: в среднем 8,2 минуты в econom.</li>
+  <li><strong>Доля заказов с наценкой</strong> — <code>surge &gt; 1</code>: в 18, 19 и 20 часов — 63,1% заказов, с 12 до 15 часов включительно — 3,7%.</li>
+  <li><strong>Средний чек поездки</strong> — <code>AVG(price)</code> по <code>completed</code>: 329,92 ₽.</li>
+</ul>
+
+<h3>Время с часами в SQLite</h3>
+<pre><code>strftime('%H', requested_at)                        -- час как текст '18'
+CAST(strftime('%H', requested_at) AS INTEGER)       -- час как число 18
+date(requested_at)                                  -- только дата
+(julianday(pickup_at) - julianday(requested_at)) * 24 * 60   -- минуты</code></pre>
+<p><code>julianday</code> переводит время в дни с дробью, поэтому разницу умножают на 24 часа и 60 минут; 24 × 60 = 1 440, поэтому часто пишут сразу <code>* 1440</code>. У поездки 2 заказ в 13:01, посадка в 13:10 — 9 минут.</p>
+<p>Время-текст можно сравнивать и с датой без часов: <code>requested_at &lt; '2024-04-01'</code> верно для всех заказов до 1 апреля, потому что строки сравниваются слева направо.</p>
+
+<div class="callout trap">
+  <span class="ct">Доля от чего</span>
+  <p>«Доля отмен» от поездок и от заказов — разные числа: 253 отмены пассажиром — это 6,3% от 4 000 заказов и 7,5% от 3 372 поездок, хотя отменённые заказы в поездки по определению не попали. Знаменатель называют вслух.</p>
+  <p style="margin-bottom:0">Там же: <code>AVG(rider_rating)</code> пропускает NULL и даёт 4,51 по 2 040 оценкам. Если «исправить» пропуски через <code>COALESCE(rider_rating, 0)</code>, выйдет 2,73 — среднее по 3 372 поездкам, где 1 332 нуля выдуманы. А <code>JOIN drivers</code> без <code>LEFT</code> молча выбросит 284 заказа без машины.</p>
+</div>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Новая задача на работе почти всегда начинается с незнакомой таблицы: витрину сделала другая команда, документации нет. Пять проверок из этого урока — тот же порядок, что у опытного аналитика в первый час с новыми данными.</p>
+</div>
+
+<div class="callout jobs">
+  <span class="ct">Что закрывает урок в вакансиях</span>
+  <ul>
+    <li>Задача с интервью: «вот схема сервиса, посчитайте долю отмен по часам»</li>
+    <li>Вопрос на интервью: «что вы сделаете первым, получив незнакомую таблицу»</li>
+    <li>«Самостоятельная работа с данными без документации» — формулировка из вакансий</li>
+  </ul>
+</div>
+`,
+
+  ticket: {
+    from: "Олег, продакт «Дельта Такси»",
+    subj: "Где и когда теряем заказы",
+    body: `
+<p>Привет. Есть ощущение, что часть заказов уходит в никуда, но непонятно где. Посчитай, пожалуйста, по каждому городу и времени суток, какая доля заказов закончилась поездкой.</p>
+<p><strong>Задание.</strong> Выведите <code>city</code>, часть суток <code>part</code>, число заказов <code>orders</code> и долю завершённых <code>done_pct</code> в процентах с одним знаком. Части суток по часу заказа: <code>'1 ночь'</code> — час 0–5, <code>'2 утро'</code> — 6–11, <code>'3 день'</code> — 12–17, <code>'4 вечер'</code> — 18–23 (цифра впереди — чтобы части сортировались по порядку). Сортировка — по доле по возрастанию, при равенстве — по городу и части суток.</p>
+`
+  },
+
+  schema: `
+<p>База <strong>«Дельта Такси»</strong>: заказы с 1 января по 30 июня 2024 в трёх городах. С магазином и приложением не связана.</p>
+<pre><code>trips                        -- 4000 строк, одна на заказ
+  trip_id       INTEGER      -- ключ заказа
+  rider_id      INTEGER      -- кто заказал
+  driver_id     INTEGER      -- водитель; NULL, если машина не нашлась
+  city          TEXT         -- Москва / Казань / Екатеринбург
+  tariff        TEXT         -- econom / comfort / business
+  requested_at  TEXT         -- время заказа, 'ГГГГ-ММ-ДД ЧЧ:ММ'
+  pickup_at     TEXT         -- время посадки; NULL без поездки
+  ride_min      INTEGER      -- длительность поездки, мин; NULL без поездки
+  status        TEXT         -- completed / cancelled_rider /
+                             -- cancelled_driver / no_driver
+  distance_km   REAL         -- NULL без поездки
+  price         REAL         -- руб.; NULL без поездки
+  surge         REAL         -- наценка: 1.0 — без неё
+  rider_rating  INTEGER      -- оценка 1–5; NULL, если не оценил
+
+riders                       -- 1200 строк, одна на пассажира
+  rider_id      INTEGER      -- ключ пассажира
+  signup_date   TEXT         -- дата регистрации, 'ГГГГ-ММ-ДД'
+  city          TEXT         -- город пассажира
+  platform      TEXT         -- android / ios
+
+drivers                      -- 300 строк, одна на водителя
+  driver_id     INTEGER      -- ключ водителя
+  city          TEXT         -- город водителя
+  joined        TEXT         -- дата подключения, 'ГГГГ-ММ-ДД'
+  car_class     TEXT         -- econom / comfort / business</code></pre>
+<p>Город есть во всех трёх таблицах и везде совпадает: пассажир и водитель ездят только в своём городе. В задачах город берут из <code>trips.city</code>.</p>
+<p><strong>Подсказки по синтаксису.</strong> Час — <code>CAST(strftime('%H', requested_at) AS INTEGER)</code>. Условная разметка — <code>CASE WHEN … THEN … ELSE … END</code>. Доля строк с условием — <code>100.0 * SUM(status = 'completed') / COUNT(*)</code>: в SQLite сравнение даёт 1 или 0.</p>
+`,
+
+  practicum: {
+    "intro": "Семь коротких шагов перед основной задачей — пять проверок чужой базы на заказах Казани: размеры таблиц, статусы, пустые столбцы, время и минуты подачи, затем часы и доля поездок по тарифам. Другие города и части суток — это основная задача.",
+    "done": "Все семь шагов решены. Основная задача собирает их на всех трёх городах: доля поездок — как в последнем шаге, час — как в шестом. Остальное знакомо: час размечают на части суток лесенкой <code>CASE</code>, как в уроке 1.1, только по часу, и сортируют в три ключа.",
+    "steps": [
+      {
+        "title": "Сколько строк в каждой таблице",
+        "body": "<p>Первая проверка чужой базы — размеры таблиц. Три отдельных запроса можно склеить в одну таблицу через <code>UNION ALL</code>, как в уроке 1.3: у каждой части те же столбцы, строки ставятся друг под другом.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "tbl",
+              "n"
+            ],
+            "rows": [
+              [
+                "trips",
+                4000
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "tbl",
+              "n"
+            ],
+            "rows": [
+              [
+                "trips",
+                4000
+              ],
+              [
+                "riders",
+                1200
+              ],
+              [
+                "drivers",
+                300
+              ]
+            ]
+          },
+          "note": "«Было» — одна таблица, «стало» — все три. Пассажиров 1 200, а заказов 4 000: у пассажира бывает много заказов, значит строка <code>trips</code> — не пассажир.",
+          "hl": [
+            "tbl"
+          ]
+        },
+        "task": "<p><strong>Задание.</strong> Заготовка считает строки только в <code>trips</code>. Допишите ещё две части — для <code>riders</code> и <code>drivers</code>, — чтобы вышло три строки: имя таблицы и число строк.</p>",
+        "starter": "SELECT 'trips' AS tbl, COUNT(*) AS n FROM trips;",
+        "expected": {
+          "ordered": false,
+          "columns": [
+            "tbl",
+            "n"
+          ],
+          "rows": [
+            [
+              "trips",
+              4000
+            ],
+            [
+              "riders",
+              1200
+            ],
+            [
+              "drivers",
+              300
+            ]
+          ]
+        },
+        "hint": "Каждая часть — свой <code>SELECT 'имя', COUNT(*) FROM таблица</code>, между частями <code>UNION ALL</code>. Имена столбцов берутся из первой части.",
+        "solution": "SELECT 'trips' AS tbl, COUNT(*) AS n FROM trips\nUNION ALL\nSELECT 'riders', COUNT(*) FROM riders\nUNION ALL\nSELECT 'drivers', COUNT(*) FROM drivers;"
+      },
+      {
+        "title": "Статусы Казани",
+        "body": "<p>Вторая проверка — какие значения у категорий. В <code>trips</code> это <code>status</code>: без перечня статусов легко посчитать «поездки» по всем строкам. Здесь — только Казань.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "status",
+              "orders"
+            ],
+            "rows": [
+              [
+                "cancelled_driver",
+                91
+              ],
+              [
+                "cancelled_rider",
+                253
+              ],
+              [
+                "completed",
+                3372
+              ],
+              [
+                "no_driver",
+                284
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "status",
+              "orders"
+            ],
+            "rows": [
+              [
+                "cancelled_driver",
+                21
+              ],
+              [
+                "cancelled_rider",
+                66
+              ],
+              [
+                "completed",
+                872
+              ],
+              [
+                "no_driver",
+                54
+              ]
+            ]
+          },
+          "note": "«Было» — все города, «стало» — Казань: те же четыре статуса, у каждого свой смысл и своя причина."
+        },
+        "task": "<p><strong>Задание.</strong> Заготовка считает статусы по всем городам. Оставьте только заказы Казани.</p>",
+        "starter": "SELECT status, COUNT(*) AS orders\nFROM trips\nGROUP BY status;",
+        "expected": {
+          "ordered": false,
+          "columns": [
+            "status",
+            "orders"
+          ],
+          "rows": [
+            [
+              "cancelled_driver",
+              21
+            ],
+            [
+              "cancelled_rider",
+              66
+            ],
+            [
+              "completed",
+              872
+            ],
+            [
+              "no_driver",
+              54
+            ]
+          ]
+        },
+        "hint": "Фильтр по городу — <code>WHERE city = 'Казань'</code> перед <code>GROUP BY</code>.",
+        "solution": "SELECT status, COUNT(*) AS orders\nFROM trips\nWHERE city = 'Казань'\nGROUP BY status;"
+      },
+      {
+        "title": "Где пусто и почему",
+        "body": "<p><code>COUNT(*)</code> считает строки, <code>COUNT(столбец)</code> — только непустые значения. Поставив их рядом по статусам, сразу видно, при каком статусе столбец пуст.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "status",
+              "orders"
+            ],
+            "rows": [
+              [
+                "cancelled_driver",
+                21
+              ],
+              [
+                "cancelled_rider",
+                66
+              ],
+              [
+                "completed",
+                872
+              ],
+              [
+                "no_driver",
+                54
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "status",
+              "orders",
+              "with_driver"
+            ],
+            "rows": [
+              [
+                "cancelled_driver",
+                21,
+                21
+              ],
+              [
+                "cancelled_rider",
+                66,
+                66
+              ],
+              [
+                "completed",
+                872,
+                872
+              ],
+              [
+                "no_driver",
+                54,
+                0
+              ]
+            ]
+          },
+          "note": "У <code>no_driver</code> водителя нет ни в одной строке — это смысл статуса, а не дыра в выгрузке. У остальных водитель назначен, даже если заказ отменили.",
+          "hl": [
+            "with_driver"
+          ]
+        },
+        "task": "<p><strong>Задание.</strong> Добавьте к статусам Казани столбец <code>with_driver</code> — сколько заказов с заполненным <code>driver_id</code>.</p>",
+        "starter": "SELECT status, COUNT(*) AS orders\nFROM trips\nWHERE city = 'Казань'\nGROUP BY status;",
+        "expected": {
+          "ordered": false,
+          "columns": [
+            "status",
+            "orders",
+            "with_driver"
+          ],
+          "rows": [
+            [
+              "cancelled_driver",
+              21,
+              21
+            ],
+            [
+              "cancelled_rider",
+              66,
+              66
+            ],
+            [
+              "completed",
+              872,
+              872
+            ],
+            [
+              "no_driver",
+              54,
+              0
+            ]
+          ]
+        },
+        "hint": "<code>COUNT(driver_id) AS with_driver</code> третьим столбцом.",
+        "solution": "SELECT status, COUNT(*) AS orders, COUNT(driver_id) AS with_driver\nFROM trips\nWHERE city = 'Казань'\nGROUP BY status;"
+      },
+      {
+        "title": "Диапазон и формат времени",
+        "body": "<p>Время в базе — текст «ГГГГ-ММ-ДД ЧЧ:ММ». Такой текст сортируется как время, поэтому <code>MIN</code> и <code>MAX</code> дают первый и последний заказ. <code>date(…)</code> отрезает часы и оставляет дату.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "requested_at",
+              "day"
+            ],
+            "rows": [
+              [
+                "2024-01-15 11:39",
+                "2024-01-15"
+              ],
+              [
+                "2024-05-22 20:41",
+                "2024-05-22"
+              ],
+              [
+                "2024-04-13 08:45",
+                "2024-04-13"
+              ],
+              [
+                "2024-06-29 19:27",
+                "2024-06-29"
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "first_order",
+              "last_order",
+              "days"
+            ],
+            "rows": [
+              [
+                "2024-01-01 03:40",
+                "2024-06-30 20:02",
+                180
+              ]
+            ]
+          },
+          "note": "«Было» — как <code>date</code> отрезает часы у первых по <code>trip_id</code> заказов Казани. «Стало» — диапазон и число дней: в полугодии 182 дня, и пропуски дней тоже информация.",
+          "hl": [
+            "days"
+          ]
+        },
+        "task": "<p><strong>Задание.</strong> Для Казани выведите первый и последний заказ и число разных дней с заказами — столбец <code>days</code>.</p>",
+        "starter": "SELECT MIN(requested_at) AS first_order, MAX(requested_at) AS last_order\nFROM trips\nWHERE city = 'Казань';",
+        "expected": {
+          "ordered": false,
+          "columns": [
+            "first_order",
+            "last_order",
+            "days"
+          ],
+          "rows": [
+            [
+              "2024-01-01 03:40",
+              "2024-06-30 20:02",
+              180
+            ]
+          ]
+        },
+        "hint": "<code>COUNT(DISTINCT date(requested_at)) AS days</code>: без <code>date</code> разными окажутся почти все строки — минуты у заказов разные.",
+        "solution": "SELECT MIN(requested_at) AS first_order, MAX(requested_at) AS last_order,\n       COUNT(DISTINCT date(requested_at)) AS days\nFROM trips\nWHERE city = 'Казань';"
+      },
+      {
+        "title": "Минуты подачи",
+        "body": "<p>Разницу двух моментов в SQLite считают через <code>julianday</code>: он переводит время в дни с дробью. Разница в днях, умноженная на 24 и на 60, — минуты.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "trip_id",
+              "requested_at",
+              "pickup_at"
+            ],
+            "rows": [
+              [
+                10,
+                "2024-05-22 20:41",
+                "2024-05-22 20:50"
+              ],
+              [
+                22,
+                "2024-01-09 19:57",
+                "2024-01-09 20:05"
+              ],
+              [
+                51,
+                "2024-05-15 09:18",
+                "2024-05-15 09:26"
+              ],
+              [
+                55,
+                "2024-03-01 11:18",
+                "2024-03-01 11:23"
+              ],
+              [
+                70,
+                "2024-03-29 07:27",
+                "2024-03-29 07:33"
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "trip_id",
+              "requested_at",
+              "pickup_at",
+              "wait_min"
+            ],
+            "rows": [
+              [
+                10,
+                "2024-05-22 20:41",
+                "2024-05-22 20:50",
+                9.0
+              ],
+              [
+                22,
+                "2024-01-09 19:57",
+                "2024-01-09 20:05",
+                8.0
+              ],
+              [
+                51,
+                "2024-05-15 09:18",
+                "2024-05-15 09:26",
+                8.0
+              ],
+              [
+                55,
+                "2024-03-01 11:18",
+                "2024-03-01 11:23",
+                5.0
+              ],
+              [
+                70,
+                "2024-03-29 07:27",
+                "2024-03-29 07:33",
+                6.0
+              ]
+            ]
+          },
+          "note": "Минуты видны и глазами — по разнице времени в строке, — но в запросе их считает <code>julianday</code>. Вычесть строки напрямую нельзя: это текст.",
+          "hl": [
+            "wait_min"
+          ]
+        },
+        "task": "<p><strong>Задание.</strong> Для первых пяти завершённых поездок Казани в тарифе comfort (по <code>trip_id</code>) добавьте столбец <code>wait_min</code> — минуты от заказа до посадки, округлённые до целого.</p>",
+        "starter": "SELECT trip_id, requested_at, pickup_at\nFROM trips\nWHERE city = 'Казань' AND tariff = 'comfort' AND status = 'completed'\nORDER BY trip_id\nLIMIT 5;",
+        "expected": {
+          "ordered": true,
+          "columns": [
+            "trip_id",
+            "requested_at",
+            "pickup_at",
+            "wait_min"
+          ],
+          "rows": [
+            [
+              10,
+              "2024-05-22 20:41",
+              "2024-05-22 20:50",
+              9.0
+            ],
+            [
+              22,
+              "2024-01-09 19:57",
+              "2024-01-09 20:05",
+              8.0
+            ],
+            [
+              51,
+              "2024-05-15 09:18",
+              "2024-05-15 09:26",
+              8.0
+            ],
+            [
+              55,
+              "2024-03-01 11:18",
+              "2024-03-01 11:23",
+              5.0
+            ],
+            [
+              70,
+              "2024-03-29 07:27",
+              "2024-03-29 07:33",
+              6.0
+            ]
+          ]
+        },
+        "hint": "<code>ROUND((julianday(pickup_at) - julianday(requested_at)) * 24 * 60) AS wait_min</code>.",
+        "solution": "SELECT trip_id, requested_at, pickup_at,\n       ROUND((julianday(pickup_at) - julianday(requested_at)) * 24 * 60) AS wait_min\nFROM trips\nWHERE city = 'Казань' AND tariff = 'comfort' AND status = 'completed'\nORDER BY trip_id\nLIMIT 5;"
+      },
+      {
+        "title": "Заказы по часам",
+        "body": "<p>Час заказа — <code>strftime('%H', requested_at)</code>, текст вроде <code>'18'</code>. <code>CAST(… AS INTEGER)</code> делает из него число, чтобы сравнивать часы.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "hour",
+              "orders"
+            ],
+            "rows": [
+              [
+                0,
+                12
+              ],
+              [
+                1,
+                5
+              ],
+              [
+                2,
+                3
+              ],
+              [
+                3,
+                12
+              ],
+              [
+                4,
+                5
+              ],
+              [
+                5,
+                19
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "hour",
+              "orders"
+            ],
+            "rows": [
+              [
+                17,
+                61
+              ],
+              [
+                18,
+                97
+              ],
+              [
+                19,
+                82
+              ],
+              [
+                20,
+                72
+              ],
+              [
+                21,
+                60
+              ]
+            ]
+          },
+          "note": "«Было» — первые часы суток из 24, «стало» — вечер: заказов в разы больше. Отсюда в задаче урока вечер — отдельная часть суток."
+        },
+        "task": "<p><strong>Задание.</strong> Посчитайте заказы Казани по часам, но только с 17 до 21 часа включительно, по порядку часов.</p>",
+        "starter": "SELECT CAST(strftime('%H', requested_at) AS INTEGER) AS hour, COUNT(*) AS orders\nFROM trips\nWHERE city = 'Казань'\nGROUP BY hour\nORDER BY hour;",
+        "expected": {
+          "ordered": true,
+          "columns": [
+            "hour",
+            "orders"
+          ],
+          "rows": [
+            [
+              17,
+              61
+            ],
+            [
+              18,
+              97
+            ],
+            [
+              19,
+              82
+            ],
+            [
+              20,
+              72
+            ],
+            [
+              21,
+              60
+            ]
+          ]
+        },
+        "hint": "Добавьте в <code>WHERE</code> условие на час и повторите в нём само выражение — на псевдоним <code>hour</code> в <code>WHERE</code> лучше не опираться: <code>AND CAST(strftime('%H', requested_at) AS INTEGER) BETWEEN 17 AND 21</code>. В PostgreSQL псевдоним там вообще не виден.",
+        "solution": "SELECT CAST(strftime('%H', requested_at) AS INTEGER) AS hour, COUNT(*) AS orders\nFROM trips\nWHERE city = 'Казань'\n  AND CAST(strftime('%H', requested_at) AS INTEGER) BETWEEN 17 AND 21\nGROUP BY hour\nORDER BY hour;"
+      },
+      {
+        "title": "Доля поездок по тарифу",
+        "body": "<p>Доля строк с условием считается одной формулой: <code>SUM(status = 'completed')</code> — в SQLite сравнение даёт 1 или 0, сумма — число поездок. Делить — на <code>COUNT(*)</code>, все заказы, а умножать — на <code>100.0</code>, а не на 100: иначе деление целое.</p>",
+        "ba": {
+          "before": {
+            "columns": [
+              "tariff",
+              "orders",
+              "done"
+            ],
+            "rows": [
+              [
+                "business",
+                67,
+                48
+              ],
+              [
+                "comfort",
+                289,
+                259
+              ],
+              [
+                "econom",
+                657,
+                565
+              ]
+            ]
+          },
+          "after": {
+            "columns": [
+              "tariff",
+              "orders",
+              "done_pct"
+            ],
+            "rows": [
+              [
+                "business",
+                67,
+                71.6
+              ],
+              [
+                "comfort",
+                289,
+                89.6
+              ],
+              [
+                "econom",
+                657,
+                86.0
+              ]
+            ]
+          },
+          "note": "«Было» — поездки штуками, «стало» — доля от заказов. У business доля ниже: машин этого класса меньше, и «нет машины» случается чаще.",
+          "hl": [
+            "done_pct"
+          ]
+        },
+        "task": "<p><strong>Задание.</strong> Для Казани по тарифам выведите <code>orders</code> и долю завершённых <code>done_pct</code> в процентах с одним знаком, по алфавиту тарифов.</p>",
+        "starter": "SELECT tariff, COUNT(*) AS orders, SUM(status = 'completed') AS done\nFROM trips\nWHERE city = 'Казань'\nGROUP BY tariff\nORDER BY tariff;",
+        "expected": {
+          "ordered": true,
+          "columns": [
+            "tariff",
+            "orders",
+            "done_pct"
+          ],
+          "rows": [
+            [
+              "business",
+              67,
+              71.6
+            ],
+            [
+              "comfort",
+              289,
+              89.6
+            ],
+            [
+              "econom",
+              657,
+              86.0
+            ]
+          ]
+        },
+        "hint": "<code>ROUND(100.0 * SUM(status = 'completed') / COUNT(*), 1) AS done_pct</code> вместо столбца <code>done</code>.",
+        "solution": "SELECT tariff, COUNT(*) AS orders,\n       ROUND(100.0 * SUM(status = 'completed') / COUNT(*), 1) AS done_pct\nFROM trips\nWHERE city = 'Казань'\nGROUP BY tariff\nORDER BY tariff;"
+      }
+    ]
+  },
+
+  starter: `-- Где и когда теряем заказы
+-- Шаг 1: посмотреть, как выглядят строки
+-- Шаг 2: разметить час заказа на части суток через CASE
+-- Шаг 3: сгруппировать по городу и части суток, посчитать долю completed
+
+SELECT city, requested_at, status
+FROM trips
+LIMIT 5;
+`,
+
+  expected: {"ordered": true, "columns": ["city", "part", "orders", "done_pct"], "rows": [["Екатеринбург", "4 вечер", 380, 75.5], ["Екатеринбург", "2 утро", 282, 79.1], ["Москва", "4 вечер", 747, 82.7], ["Казань", "4 вечер", 367, 83.9], ["Екатеринбург", "1 ночь", 52, 84.6], ["Екатеринбург", "3 день", 260, 84.6], ["Москва", "1 ночь", 95, 85.3], ["Казань", "3 день", 283, 86.6], ["Москва", "2 утро", 646, 87.3], ["Казань", "1 ночь", 56, 87.5], ["Казань", "2 утро", 307, 87.9], ["Москва", "3 день", 525, 88.2]]},
+
+  hints: [
+    "Сначала добейтесь, чтобы каждая строка получила часть суток: <code>CASE WHEN CAST(strftime('%H', requested_at) AS INTEGER) &lt; 6 THEN '1 ночь' WHEN … END AS part</code>. WHEN проверяются сверху вниз, поэтому хватает границ <code>&lt; 6</code>, <code>&lt; 12</code>, <code>&lt; 18</code>, остальное — <code>ELSE</code>, как лесенка CASE из урока 1.1. Удобно сделать это в CTE.",
+    "Во внешнем запросе — <code>GROUP BY city, part</code>, <code>COUNT(*)</code> заказов и доля <code>ROUND(100.0 * SUM(status = 'completed') / COUNT(*), 1)</code>. Знаменатель — все заказы части суток, а не только поездки.",
+    "Сортировка в три ключа: <code>ORDER BY done_pct, city, part</code>. Без второго и третьего ключа две строки с долей 84,6% могут встать в любом порядке, и проверка не совпадёт."
+  ],
+
+  solution: "WITH t AS (\n  SELECT city, status,\n         CASE\n           WHEN CAST(strftime('%H', requested_at) AS INTEGER) < 6  THEN '1 ночь'\n           WHEN CAST(strftime('%H', requested_at) AS INTEGER) < 12 THEN '2 утро'\n           WHEN CAST(strftime('%H', requested_at) AS INTEGER) < 18 THEN '3 день'\n           ELSE '4 вечер'\n         END AS part\n  FROM trips\n)\nSELECT city, part,\n       COUNT(*) AS orders,\n       ROUND(100.0 * SUM(status = 'completed') / COUNT(*), 1) AS done_pct\nFROM t\nGROUP BY city, part\nORDER BY done_pct, city, part;\n",
+
+  solutionNote: `
+<p>Хуже всего — Екатеринбург вечером: из 380 заказов поездкой закончились 75,5%. Вторая строка — тоже Екатеринбург, утром, 79,1%. Лучшая клетка — Москва днём, 88,2%.</p>
+<p><strong>Что здесь было главным.</strong> Знаменатель: доля считается от всех заказов части суток, иначе отказы «нет машины» пропадут из расчёта, а именно они и есть потеря. И честная сортировка: при равных долях нужен второй ключ.</p>
+<p><strong>Что сказать продакту.</strong> Потери сосредоточены в Екатеринбурге и в вечерние часы во всех городах. Следующий шаг — разложить потерю по статусам: если растёт <code>no_driver</code>, не хватает машин; если <code>cancelled_rider</code> — пассажиры не дожидаются подачи. Это задачи тренажёра.</p>
+`,
+
+  drills: [
+    {
+      "title": "Топ-3 водителя в каждом городе",
+      "level": "mid",
+      "body": "<p>Для каждого города — три водителя с наибольшей выручкой по завершённым поездкам: <code>city</code>, <code>driver_id</code>, <code>revenue</code>. Сортировка — по городу и месту в городе. Выручку не округлять.</p>",
+      "solution": "WITH rev AS (\n  SELECT city, driver_id, SUM(price) AS revenue\n  FROM trips\n  WHERE status = 'completed'\n  GROUP BY city, driver_id\n), ranked AS (\n  SELECT city, driver_id, revenue,\n         ROW_NUMBER() OVER (PARTITION BY city ORDER BY revenue DESC, driver_id) AS rn\n  FROM rev\n)\nSELECT city, driver_id, revenue\nFROM ranked\nWHERE rn <= 3\nORDER BY city, rn;\n\nРезультат:\n  city          driver_id  revenue\n  ------------  ---------  -------\n  Екатеринбург  279        17249.0\n  Екатеринбург  256        10819.0\n  Екатеринбург  292        10422.0\n  Казань        181        9862.0\n  Казань        191        9480.0\n  Казань        187        8083.0\n  Москва        55         13154.0\n  Москва        113        12468.0\n  Москва        83         12366.0",
+      "note": "Окно с PARTITION BY city нумерует водителей внутри города, фильтр rn <= 3 — снаружи, в CTE: в WHERE того же запроса окно недоступно."
+    },
+    {
+      "title": "Первая поездка пассажира",
+      "level": "mid",
+      "body": "<p>Возьмите у каждого пассажира первую завершённую поездку и посчитайте, каким тарифом сделаны первые поездки. Столбцы: <code>tariff</code>, <code>riders</code>, <code>avg_price</code> — средняя цена первой поездки с двумя знаками. Сортировка — по <code>riders</code> по убыванию.</p>",
+      "solution": "WITH ranked AS (\n  SELECT rider_id, trip_id, requested_at, tariff, price,\n         ROW_NUMBER() OVER (PARTITION BY rider_id ORDER BY requested_at, trip_id) AS rn\n  FROM trips\n  WHERE status = 'completed'\n)\nSELECT tariff, COUNT(*) AS riders, ROUND(AVG(price), 2) AS avg_price\nFROM ranked\nWHERE rn = 1\nGROUP BY tariff\nORDER BY riders DESC;\n\nРезультат:\n  tariff    riders  avg_price\n  --------  ------  ---------\n  econom    543     269.82\n  comfort   240     384.8\n  business  59      647.66",
+      "note": "ROW_NUMBER по пассажиру в порядке requested_at, второй ключ trip_id — на случай двух заказов в одну минуту. MIN(requested_at) дал бы дату, но не тариф той же строки."
+    },
+    {
+      "title": "Пассажиры без единой поездки",
+      "level": "easy",
+      "body": "<p>Сколько зарегистрированных пассажиров ни разу не доехали — нет ни одной завершённой поездки? Столбцы: <code>city</code>, <code>riders_without_trip</code>; сортировка — по числу по убыванию.</p>",
+      "solution": "SELECT r.city, COUNT(*) AS riders_without_trip\nFROM riders r\nLEFT JOIN trips t\n  ON t.rider_id = r.rider_id AND t.status = 'completed'\nWHERE t.trip_id IS NULL\nGROUP BY r.city\nORDER BY riders_without_trip DESC;\n\nРезультат:\n  city          riders_without_trip\n  ------------  -------------------\n  Москва        179\n  Казань        91\n  Екатеринбург  88",
+      "note": "LEFT JOIN с условием на статус в ON, а не в WHERE: иначе пассажиры только с отменами выпали бы из подсчёта. Всего таких 358 из 1 200: у 333 нет ни одного заказа, у остальных — только отмены и «нет машины»."
+    },
+    {
+      "title": "Подача до и после апреля",
+      "level": "mid",
+      "body": "<p>Средняя подача в минутах по городам — отдельно за январь–март и апрель–июнь. Столбцы: <code>city</code>, <code>wait_q1</code>, <code>wait_q2</code> — минуты с одним знаком; сортировка — по городу. Где что-то изменилось?</p><p><strong>Пригодится.</strong> Время-текст сравнивается с датой как строка: <code>requested_at &lt; '2024-04-01'</code> верно для всех моментов до 1 апреля. Минуты — через <code>julianday</code>, как в теории.</p>",
+      "solution": "SELECT city,\n       ROUND(AVG(CASE WHEN requested_at < '2024-04-01' THEN (julianday(pickup_at) - julianday(requested_at)) * 1440 END), 1) AS wait_q1,\n       ROUND(AVG(CASE WHEN requested_at >= '2024-04-01' THEN (julianday(pickup_at) - julianday(requested_at)) * 1440 END), 1) AS wait_q2\nFROM trips\nWHERE status = 'completed'\nGROUP BY city\nORDER BY city;\n\nРезультат:\n  city          wait_q1  wait_q2\n  ------------  -------  -------\n  Екатеринбург  7.6      11.5\n  Казань        7.0      7.8\n  Москва        7.7      7.4",
+      "note": "Условная агрегация: CASE внутри AVG оставляет только строки своего периода, остальные дают NULL и в среднее не попадают. В Екатеринбурге подача выросла с 7,6 до 11,5 минуты, а доля «нет машины» по месяцам — с 1,9–7,7% до 13,0–18,9%: машин не хватает."
+    },
+    {
+      "title": "Часы с наценкой",
+      "level": "easy",
+      "body": "<p>Пять часов суток с наибольшей долей заказов с наценкой (<code>surge &gt; 1</code>). Столбцы: <code>hour</code> — час числом, <code>orders</code>, <code>surge_pct</code> — доля в процентах с одним знаком; пять строк по убыванию доли.</p>",
+      "solution": "SELECT CAST(strftime('%H', requested_at) AS INTEGER) AS hour,\n       COUNT(*) AS orders,\n       ROUND(100.0 * SUM(surge > 1) / COUNT(*), 1) AS surge_pct\nFROM trips\nGROUP BY hour\nORDER BY surge_pct DESC\nLIMIT 5;\n\nРезультат:\n  hour  orders  surge_pct\n  ----  ------  ---------\n  18    353     65.4\n  20    305     64.3\n  19    352     59.7\n  8     305     36.1\n  9     250     32.8",
+      "note": "Вечерние 18–20 часов — около двух третей заказов с наценкой, утренний пик 8–9 — около трети."
+    },
+    {
+      "title": "Перерыв водителя больше месяца",
+      "level": "hard",
+      "body": "<p>У скольких водителей в каждом городе был перерыв между рабочими днями больше 30 дней? Рабочий день — день хотя бы с одной завершённой поездкой. Столбцы: <code>city</code>, <code>drivers_with_30d_break</code>; сортировка — по числу по убыванию.</p>",
+      "solution": "WITH d AS (\n  SELECT DISTINCT driver_id, city, date(requested_at) AS day\n  FROM trips\n  WHERE status = 'completed'\n), gaps AS (\n  SELECT driver_id, city, day,\n         julianday(day) - julianday(LAG(day) OVER (PARTITION BY driver_id ORDER BY day)) AS gap\n  FROM d\n)\nSELECT city, COUNT(DISTINCT driver_id) AS drivers_with_30d_break\nFROM gaps\nWHERE gap > 30\nGROUP BY city\nORDER BY drivers_with_30d_break DESC;\n\nРезультат:\n  city          drivers_with_30d_break\n  ------------  ----------------------\n  Москва        117\n  Казань        53\n  Екатеринбург  41",
+      "note": "Сначала дни без повторов (DISTINCT), потом LAG по водителю — предыдущий рабочий день, разница через julianday. DISTINCT делает строку рабочим днём: без него ответ тот же, но окно перебирает все поездки, а не дни."
+    },
+    {
+      "title": "Возврат пассажиров января",
+      "level": "hard",
+      "body": "<p>Когорта — пассажиры, чья первая завершённая поездка была в январе. Какая доля из них снова проехала через 1–30 дней после даты первой поездки (поездка в тот же день не считается)? Столбцы: <code>cohort</code> — размер когорты, <code>back_30d</code> — вернувшихся, <code>retention_pct</code> — доля с одним знаком.</p><p><strong>Пригодится.</strong> Сначала в CTE найдите дату первой поездки каждого пассажира, потом присоедините к ней его поездки. Людей после <code>JOIN</code> считают через <code>COUNT(DISTINCT …)</code>.</p>",
+      "solution": "WITH first AS (\n  SELECT rider_id, MIN(date(requested_at)) AS d0\n  FROM trips\n  WHERE status = 'completed'\n  GROUP BY rider_id\n  HAVING d0 BETWEEN '2024-01-01' AND '2024-01-31'\n)\nSELECT COUNT(DISTINCT f.rider_id) AS cohort,\n       COUNT(DISTINCT CASE WHEN julianday(date(t.requested_at)) - julianday(f.d0) BETWEEN 1 AND 30\n                           THEN f.rider_id END) AS back_30d,\n       ROUND(100.0 * COUNT(DISTINCT CASE WHEN julianday(date(t.requested_at)) - julianday(f.d0) BETWEEN 1 AND 30\n                                         THEN f.rider_id END) / COUNT(DISTINCT f.rider_id), 1) AS retention_pct\nFROM first f\nLEFT JOIN trips t ON t.rider_id = f.rider_id AND t.status = 'completed';\n\nРезультат:\n  cohort  back_30d  retention_pct\n  ------  --------  -------------\n  244     121       49.6",
+      "note": "Размер когорты — COUNT(DISTINCT f.rider_id): после LEFT JOIN у пассажира много строк, и COUNT(*) посчитал бы поездки, а не людей."
+    },
+    {
+      "title": "Водители всех трёх месяцев",
+      "level": "mid",
+      "body": "<p>Сколько водителей сделали завершённые поездки в каждом из трёх месяцев второго квартала — апреле, мае и июне? Один столбец <code>drivers_all_three_months</code>.</p><p><strong>Пригодится.</strong> В <code>HAVING</code> можно поставить условие на число разных месяцев в группе водителя — <code>COUNT(DISTINCT …)</code> от месяца.</p>",
+      "solution": "SELECT COUNT(*) AS drivers_all_three_months\nFROM (\n  SELECT driver_id\n  FROM trips\n  WHERE status = 'completed' AND requested_at >= '2024-04-01'\n  GROUP BY driver_id\n  HAVING COUNT(DISTINCT strftime('%Y-%m', requested_at)) = 3\n);\n\nРезультат:\n  drivers_all_three_months\n  ------------------------\n  184",
+      "note": "HAVING COUNT(DISTINCT месяц) = 3 — условие на число разных значений в группе: месяцев с поездками у водителя ровно три."
+    },
+    {
+      "title": "Средняя оценка и пропуски",
+      "level": "easy",
+      "body": "<p>По завершённым поездкам: <code>trips</code> — сколько их, <code>rated</code> — сколько оценено, <code>rated_pct</code> — доля оценённых с одним знаком, <code>avg_rating</code> — средняя оценка и <code>wrong_avg</code> — среднее, если пропуски заменить нулями, обе с двумя знаками.</p>",
+      "solution": "SELECT COUNT(*) AS trips,\n       COUNT(rider_rating) AS rated,\n       ROUND(100.0 * COUNT(rider_rating) / COUNT(*), 1) AS rated_pct,\n       ROUND(AVG(rider_rating), 2) AS avg_rating,\n       ROUND(AVG(COALESCE(rider_rating, 0)), 2) AS wrong_avg\nFROM trips\nWHERE status = 'completed';\n\nРезультат:\n  trips  rated  rated_pct  avg_rating  wrong_avg\n  -----  -----  ---------  ----------  ---------\n  3372   2040   60.5       4.51        2.73",
+      "note": "AVG пропускает NULL и делит на 2 040 оценок. COALESCE(rider_rating, 0) превращает «не оценил» в «поставил ноль» — среднее падает до 2,73, хотя ни одного нуля никто не ставил."
+    },
+    {
+      "title": "Доля Екатеринбурга в выручке",
+      "level": "mid",
+      "body": "<p>Выручка Екатеринбурга по месяцам и его доля в выручке всех трёх городов за тот же месяц. Столбцы: <code>month</code> ('2024-01'), <code>revenue</code> — округлённая до рубля, <code>share_pct</code> — доля с одним знаком; по порядку месяцев.</p>",
+      "solution": "WITH m AS (\n  SELECT strftime('%Y-%m', requested_at) AS month, city, SUM(price) AS revenue\n  FROM trips\n  WHERE status = 'completed'\n  GROUP BY month, city\n), s AS (\n  SELECT month, city, revenue,\n         100.0 * revenue / SUM(revenue) OVER (PARTITION BY month) AS share\n  FROM m\n)\nSELECT month, ROUND(revenue) AS revenue, ROUND(share, 1) AS share_pct\nFROM s\nWHERE city = 'Екатеринбург'\nORDER BY month;\n\nРезультат:\n  month    revenue  share_pct\n  -------  -------  ---------\n  2024-01  26862.0  22.7\n  2024-02  33941.0  27.3\n  2024-03  38105.0  25.3\n  2024-04  37573.0  20.8\n  2024-05  61250.0  24.3\n  2024-06  65113.0  22.7",
+      "note": "Доля считается окном SUM() OVER (PARTITION BY month) по всем городам, а фильтр по городу — снаружи. Если поставить WHERE city рядом с окном, в окне останется один город и доля станет 100%. В апреле доля падает до 20,8% — в тот же месяц доля «нет машины» в Екатеринбурге выросла с 7,7% до 18,9%."
+    },
+    {
+      "title": "Подача и оценка",
+      "level": "mid",
+      "body": "<p>Сравните оценённые поездки с подачей до 12 минут и дольше. Столбцы: <code>wait_group</code> — 'до 12 мин' или 'дольше 12 мин', <code>rated_trips</code>, <code>avg_rating</code> с двумя знаками и <code>low_pct</code> — доля оценок 3 и ниже с одним знаком; сортировка — по <code>wait_group</code>.</p>",
+      "solution": "SELECT CASE WHEN (julianday(pickup_at) - julianday(requested_at)) * 1440 > 12\n            THEN 'дольше 12 мин' ELSE 'до 12 мин' END AS wait_group,\n       COUNT(*) AS rated_trips,\n       ROUND(AVG(rider_rating), 2) AS avg_rating,\n       ROUND(100.0 * SUM(rider_rating <= 3) / COUNT(*), 1) AS low_pct\nFROM trips\nWHERE status = 'completed' AND rider_rating IS NOT NULL\nGROUP BY wait_group\nORDER BY wait_group;\n\nРезультат:\n  wait_group     rated_trips  avg_rating  low_pct\n  -------------  -----------  ----------  -------\n  до 12 мин      1737         4.62        7.6\n  дольше 12 мин  303          3.89        27.7",
+      "note": "При подаче дольше 12 минут средняя оценка 3,89 против 4,62, а плохих оценок почти вчетверо больше. Это связь, а не доказанная причина: долгая подача бывает в часы пик, когда и всё остальное хуже."
+    }
+  ],
+
+  quiz: [
+    {
+      q: "Что значит «зерно таблицы» <code>trips</code>?",
+      opts: [
+        "Сколько в ней строк",
+        "Какие столбцы в ней пустые",
+        "Что значит одна строка: заказ",
+        "По какому столбцу она отсортирована"
+      ],
+      right: 2,
+      why: "Зерно — что описывает одна строка. В trips это заказ, а не поездка: 4 000 заказов, поездок из них 3 372. От зерна зависит, что считает COUNT(*)."
+    },
+    {
+      q: "В таблице 4 000 заказов и 253 отмены пассажиром. Какую долю отмен назвать продакту?",
+      opts: [
+        "7,5% — от 3 372 поездок",
+        "6,3% — от 4 000 заказов",
+        "Любую, они почти равны",
+        "Долю не называть, только число 253"
+      ],
+      right: 1,
+      why: "Отменённый заказ поездкой не стал, поэтому делить на поездки нельзя: знаменатель — заказы. Разница 6,3% и 7,5% — 1,2 процентного пункта, на дашборде её заметят."
+    },
+    {
+      q: "Оценку оставили в 2 040 поездках из 3 372. Что вернёт <code>AVG(rider_rating)</code>?",
+      opts: [
+        "Среднее только по 2 040 оценкам",
+        "Ошибку из-за NULL",
+        "Среднее по 3 372 строкам с нулями",
+        "NULL, раз в столбце есть пропуски"
+      ],
+      right: 0,
+      why: "Агрегаты пропускают NULL: AVG делит сумму оценок на 2 040, получается 4,51. Если подставить нули через COALESCE, выйдет 2,73 — среднее по оценкам, которых никто не ставил."
+    },
+    {
+      q: "Нужно посчитать заказы по классу машины водителя. Что случится с <code>FROM trips t JOIN drivers d ON d.driver_id = t.driver_id</code>?",
+      opts: [
+        "Запрос упадёт с ошибкой",
+        "Заказы без машины получат класс NULL",
+        "Все заказы сохранятся",
+        "Выпадут 284 заказа «нет машины»"
+      ],
+      right: 3,
+      why: "У no_driver пуст driver_id, пары в drivers нет, и INNER JOIN молча выбрасывает эти строки. Вариант «получат класс NULL» верен только для LEFT JOIN, а при обычном JOIN эти строки пропадают."
+    },
+    {
+      q: "Как в SQLite получить минуты между <code>requested_at</code> и <code>pickup_at</code>?",
+      opts: [
+        "<code>pickup_at - requested_at</code>",
+        "<code>(julianday(pickup_at) - julianday(requested_at)) * 1440</code>",
+        "<code>strftime('%M', pickup_at) - strftime('%M', requested_at)</code>",
+        "<code>DATEDIFF('minute', requested_at, pickup_at)</code>"
+      ],
+      right: 1,
+      why: "Время в базе — текст, и вычитание текста даёт мусор. julianday переводит время в дни с дробью; разница в днях, умноженная на 1 440, — минуты. Разность минут из strftime ломается на смене часа, а DATEDIFF в SQLite нет."
+    },
+    {
+      q: "Вам дали незнакомую таблицу и задачу. Что сделать первым?",
+      opts: [
+        "Сразу написать запрос под задачу",
+        "Попросить у интервьюера готовый запрос",
+        "Проверить строки, зерно, статусы, пропуски и даты",
+        "Посчитать среднее и максимум по каждому столбцу таблицы"
+      ],
+      right: 2,
+      why: "Пять коротких проверок отвечают на вопросы, без которых решение посчитает не то: от чего доля, что значит строка, где пусто. Это несколько запросов и пара минут."
+    }
+  ],
+
+  cards: [
+    { q: "Какие пять проверок сделать с незнакомой таблицей до первого запроса?",
+      a: "Сколько строк; что значит одна строка (зерно); какие значения у статусов и категорий; где NULL и почему; формат и диапазон времени." },
+    { q: "Как проверить зерно таблицы?",
+      a: "Ключ уникален: COUNT(DISTINCT trip_id) = COUNT(*). А у пассажира и водителя строк много — значит, строка не пассажир и не водитель, а заказ." },
+    { q: "Почему долю отмен считают от заказов, а не от поездок?",
+      a: "Отменённый заказ поездкой не стал. 253 отмены — 6,3% от 4 000 заказов; от 3 372 поездок вышло бы 7,5%." },
+    { q: "Как получить минуты между двумя моментами в SQLite?",
+      a: "(julianday(b) - julianday(a)) * 24 * 60. julianday переводит время в дни с дробью." },
+    { q: "Чем опасен INNER JOIN водителей к заказам такси?",
+      a: "Заказы «нет машины» с пустым driver_id выпадут молча — 284 из 4 000. Нужен LEFT JOIN." },
+    { q: "Какие вопросы задать интервьюеру по чужой схеме?",
+      a: "Что считаем заказом и поездкой; входят ли отмены в метрику; в каком часовом поясе время; какой период и есть ли неполные месяцы." }
+  ],
+
+  links: [
+    { t: "SQL Data Types", url: "https://mode.com/sql-tutorial/sql-data-types", src: "Mode", lang: "EN",
+      d: "Раздел учебника Mode о типах данных: почему число или дата текстом ломают сравнения и как это заметить запросом." },
+    { t: "Метрики маркетплейсов и двусторонних рынков", url: "https://a16z.com/13-metrics-for-marketplace-companies/", src: "a16z", lang: "EN",
+      d: "Тринадцать метрик двусторонних рынков — от доли выполненных заказов до удержания обеих сторон. Такси — классический пример." }
+  ]
+};
+
+window.CONTENT.m6l8.practicum.schema = window.CONTENT.m6l8.schema;
+
 window.CONTENT.m6l4 = {
   intro: "Python на интервью аналитика — это не алгоритмы с литкода. Это pandas, здравый смысл и три места, где ошибаются все.",
 
@@ -1001,7 +1964,7 @@ social           648     11.4%     2490        5.0    27.1%
     "Каркас: <code>merge(..., how=\"left\", validate=\"many_to_one\")</code> и печать числа строк до и после. Затем <code>size = app_users.groupby(\"channel\")[\"user_id\"].size()</code>. Для интервалов: отсортировать, <code>groupby(\"user_id\")[\"order_date\"].diff().dt.days</code>, положить обратно через <code>assign</code>. Дальше цикл по <code>orders.groupby(\"channel\")</code>, внутри <code>per_user = g.groupby(\"user_id\")[\"revenue\"].sum()</code> — из него и доля платящих, и верхние 10%."
   ],
 
-  solution: `# ---- решение урока 6.4 ----
+  solution: `# ---- решение урока 6.5 ----
 # Шаг 1. Соединяем заказы с пользователями. Проверяем, что merge
 # не размножил строки: в app_users одна строка на пользователя,
 # значит, число заказов до и после должно совпасть.
