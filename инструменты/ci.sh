@@ -27,7 +27,7 @@ step() {
 
 syntax() {
   local ok=0
-  for f in app.js sw.js data.js data-taxi.js glossary.js lessons.js tinker.js cheats.js content-*.js; do
+  for f in app.js sw.js data.js data-taxi.js interview.js glossary.js lessons.js tinker.js cheats.js content-*.js; do
     node --check "$f" || ok=1
   done
   return $ok
@@ -94,7 +94,7 @@ regenerated() {
 version_bumped() {
   git rev-parse --verify -q "origin/$BASE_REF" >/dev/null || git fetch -q origin "$BASE_REF" || return 1
   local changed old new
-  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js tinker.js cheats.js data-taxi.js \
+  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js tinker.js cheats.js data-taxi.js interview.js \
             manifest.webmanifest 'content-*.js' fonts)
   if [ -z "$changed" ]; then echo "файлы сайта не менялись"; return 0; fi
   old=$(git show "origin/$BASE_REF:sw.js" | grep -o 'const VERSION = "[^"]*"')
@@ -113,6 +113,7 @@ step "Шпаргалки" "пример кода в шпаргалке не вы
 step "Файл xlsx" "delta-market.xlsx не совпадает с data.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файл" python3 инструменты/mkxlsx.py --check
 step "База такси" "data-taxi.js не совпадает с генератором — python3 инструменты/gen_taxi.py" python3 инструменты/gen_taxi.py --check
 step "Такси в движке" "data-taxi.js не совпадает с shop.db или Taxi.wants сломан (node инструменты/checktaxi.js)" node инструменты/checktaxi.js
+step "Пробное собеседование" "решение задачи interview.js не сходится с expected или пул неполный (node инструменты/checkinterview.js)" node инструменты/checkinterview.js
 step "Числовые ответы" "разбор ввода в полях для чисел сломан или эталон поля разошёлся с базой (node инструменты/checknums.js)" node инструменты/checknums.js
 step "Карта навыков" "ошибка в COURSE.skills (lessons.js) или в расчёте ступеней Skills (node инструменты/checkskills.js)" node инструменты/checkskills.js
 step "Шаги уроков" "решение шага урока 0.1, 0.2 или практикума не даёт ожидаемый ответ (node инструменты/checksteps.js <урок>)" steps_all
