@@ -271,6 +271,9 @@ const Lazy = {
   },
   data: function () {
     return window.DATA ? Promise.resolve() : loadScript("data.js");
+  },
+  cheats: function () {
+    return window.CHEATS ? Promise.resolve() : loadScript("cheats.js");
   }
 };
 
@@ -511,7 +514,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -590,7 +593,8 @@ function mountHeader(crumbHtml) {
     /* на узком экране ссылки шапки и тема уходят сюда */
     '<nav class="hdr-menu" id="hdrMenu" aria-label="Меню разделов" hidden>' +
       navLink("", "Курс") + navLink("interview", "К собеседованию") +
-      navLink("my-notes", "Конспект") + navLink("mistakes", "Мои ошибки") + navLink("skills", "Карта навыков") + navLink("glossary", "Словарь") +
+      navLink("my-notes", "Конспект") + navLink("cheats", "Шпаргалки") + navLink("mistakes", "Мои ошибки") +
+      navLink("skills", "Карта навыков") + navLink("glossary", "Словарь") +
       navLink("sandbox", "Песочница") +
       '<button class="hm-theme" id="menuTheme" type="button"></button>' +
     "</nav>" +
@@ -1611,6 +1615,7 @@ const Pages = {
   find: function (id) {
     if (id === "interview") return renderInterview;
     if (id === "my-notes") return renderMyNotes;
+    if (id === "cheats" || /^cheat-[a-z]+$/.test(id)) return renderCheats;
     if (id === "mistakes") return renderMistakes;
     if (id === "skills") return renderSkills;
     if (id === "sandbox") return renderSandbox;
@@ -1749,6 +1754,53 @@ function renderMyNotes(app) {
   app.appendChild(main);
   const pb = $("#printBtn");
   if (pb) pb.addEventListener("click", function () { window.print(); });
+}
+
+/* ---------- шпаргалки ----------
+   #cheats — список, #cheat-<id> — одна шпаргалка из cheats.js. На
+   бумаге шпаргалка — один лист A4 в две колонки (стили .cheat в
+   @media print); на экране — обычная колонка текста урока. */
+function renderCheats(app, id) {
+  const key = id === "cheats" ? null : id.replace(/^cheat-/, "");
+  document.title = "Шпаргалки — Тетрадь аналитика";
+  mountHeader(key ? '<a href="#cheats">Шпаргалки</a>' : "<b>Шпаргалки</b>");
+  const main = el("main", { class: "wrap lesson-wrap page" });
+  main.innerHTML = '<p class="page-wait">Достаю шпаргалки…</p>';
+  app.appendChild(main);
+
+  Lazy.cheats().then(function () {
+    if (location.hash !== "#" + id) return;
+    const list = window.CHEATS;
+    const c = key ? list.filter(function (x) { return x.id === key; })[0] : null;
+    if (!c) {
+      main.innerHTML = pageHead("Шпаргалки",
+        (key ? "Такой шпаргалки нет. " : "") +
+        "Главное из уроков на " + list.length + " " + plural(list.length, "листе", "листах", "листах") +
+        " A4: синтаксис, формулы и типовые ловушки. Распечатайте или сохраните в PDF и держите под рукой перед собеседованием.",
+        "шпаргалка напоминает, а не объясняет — объяснения в уроках") +
+        '<section class="block"><ul class="sum-list">' + list.map(function (x) {
+          return '<li><a class="sum-l" href="#cheat-' + x.id + '">' +
+            '<span class="sum-t">' + esc(x.title) + "</span>" +
+            '<span class="sum-d">' + esc(x.sub) + "</span></a></li>";
+        }).join("") + "</ul></section>";
+      return;
+    }
+    document.title = "Шпаргалка «" + c.title + "» — Тетрадь аналитика";
+    main.classList.add("cheat-page");
+    const others = list.filter(function (x) { return x !== c; });
+    main.innerHTML = pageHead("Шпаргалка: " + esc(c.title), esc(c.sub), null,
+        '<div class="page-actions"><button class="btn" id="printBtn" type="button">Распечатать или сохранить в PDF</button></div>') +
+      '<div class="theory cheat">' + c.sections.map(function (s) {
+        return '<section class="ch-s"><h2>' + esc(s.h) + "</h2>" + s.html + "</section>";
+      }).join("") + "</div>" +
+      '<p class="ch-more">Другие шпаргалки: ' + others.map(function (x) {
+        return '<a href="#cheat-' + x.id + '">' + esc(x.title) + "</a>";
+      }).join(" · ") + "</p>";
+    $("#printBtn").addEventListener("click", function () { window.print(); });
+  }, function () {
+    main.innerHTML = pageHead("Шпаргалки",
+      "Шпаргалки не загрузились — похоже, пропал интернет. Обновите страницу, когда связь вернётся.");
+  });
 }
 
 /* ---------- мои ошибки ----------
@@ -2038,9 +2090,19 @@ function renderSummary(app, id) {
     '<section class="block" id="mtest"><div class="block-h"><h2>Итоговый тест</h2></div>' +
       '<div id="mtBody"><p class="page-wait">Собираю вопросы…</p></div></section>' +
     '<section class="block"><div class="block-h"><h2>Вопросы собеседования из модуля</h2></div>' +
-      '<div id="sumJobs"><p class="page-wait">Собираю вопросы…</p></div></section>' +
+      '<div id="sumJobs"><p class="page-wait">Собираю вопросы…</p></div><div id="sumCheat"></div></section>' +
     '<section class="block">' + nextHtml + "</section>";
   app.appendChild(main);
+
+  /* своя шпаргалка у модулей 1–4; не загрузилась — просто нет строки */
+  Lazy.cheats().then(function () {
+    const c = window.CHEATS.filter(function (x) { return x.module === m.id; })[0];
+    const box = $("#sumCheat");
+    if (c && box && location.hash === "#" + id) {
+      box.innerHTML = '<p class="prep-more">Главное из модуля на одном листе — ' +
+        '<a href="#cheat-' + c.id + '">шпаргалка «' + esc(c.title) + "»</a>.</p>";
+    }
+  }, function () {});
 
   Lazy.content(m.id).then(function () {
     const box = $("#sumJobs");
@@ -2283,6 +2345,7 @@ function renderHome(app) {
   main.insertAdjacentHTML("beforeend",
     '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
+    'Главное из SQL, pandas, статистики и метрик — в <a href="#cheats">шпаргалках</a> на лист A4. ' +
     "Как далеко вы от собеседования — " + skillsSay + " " +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
 
@@ -5653,6 +5716,9 @@ const Find = {
     out.push({ href: "#my-notes", title: "Мой конспект", where: "Раздел",
                note: "ваши заметки из всех уроков",
                hay: "заметки конспект записи" });
+    out.push({ href: "#cheats", title: "Шпаргалки", where: "Раздел",
+               note: "SQL, pandas, статистика и метрики — по листу A4 для печати",
+               hay: "шпаргалка шпаргалки памятка печать распечатать pdf sql pandas статистика метрики формулы" });
     out.push({ href: "#mistakes", title: "Мои ошибки", where: "Раздел",
                note: "вопросы и карточки, где вы ошибались",
                hay: "ошибки промахи трудные слабые места повторить" });

@@ -27,7 +27,7 @@ step() {
 
 syntax() {
   local ok=0
-  for f in app.js sw.js data.js glossary.js lessons.js tinker.js content-*.js; do
+  for f in app.js sw.js data.js glossary.js lessons.js tinker.js cheats.js content-*.js; do
     node --check "$f" || ok=1
   done
   return $ok
@@ -94,7 +94,7 @@ regenerated() {
 version_bumped() {
   git rev-parse --verify -q "origin/$BASE_REF" >/dev/null || git fetch -q origin "$BASE_REF" || return 1
   local changed old new
-  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js tinker.js \
+  changed=$(git diff --name-only "origin/$BASE_REF" -- app.js styles.css index.html data.js glossary.js lessons.js tinker.js cheats.js \
             manifest.webmanifest 'content-*.js' fonts)
   if [ -z "$changed" ]; then echo "файлы сайта не менялись"; return 0; fi
   old=$(git show "origin/$BASE_REF:sw.js" | grep -o 'const VERSION = "[^"]*"')
@@ -109,6 +109,7 @@ step "Служебные скрипты" "синтаксическая ошиб�
 step "Тренажёр" "эталон задачи тренажёра не выполняется (node инструменты/checkdrills.js)" node инструменты/checkdrills.js
 step "Карточки" "ошибка в карточках повторения (node инструменты/checkcards.js)" node инструменты/checkcards.js
 step "Словарь" "ошибка в словаре терминов (node инструменты/checkterms.js)" node инструменты/checkterms.js
+step "Шпаргалки" "пример кода в шпаргалке не выполняется или ошибка в разметке cheats.js (node инструменты/checkcheats.js)" node инструменты/checkcheats.js
 step "Карта навыков" "ошибка в COURSE.skills (lessons.js) или в расчёте ступеней Skills (node инструменты/checkskills.js)" node инструменты/checkskills.js
 step "Шаги уроков" "решение шага урока 0.1, 0.2 или практикума не даёт ожидаемый ответ (node инструменты/checksteps.js <урок>)" steps_all
 step "Порядок шагов" "урок пропал, или шаг, карточка, вопрос либо задача тренажёра вставлены или удалены в середине — у учеников сдвинется прогресс (node инструменты/checkorder.js)" node инструменты/checkorder.js
