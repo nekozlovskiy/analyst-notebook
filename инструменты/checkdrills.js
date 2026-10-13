@@ -19,11 +19,12 @@ for (const f of ["data.js", "content-core.js"].concat(
   vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), ctx);
 }
 const db = path.join(__dirname, "shop.db");
-let sql = 0, py = 0, plot = 0, text = 0;
+let sql = 0, py = 0, plot = 0, text = 0, nums = 0;
 const bad = [];
 for (const m of ctx.window.COURSE.modules) for (const L of m.lessons) {
   const C = ctx.window.CONTENT[L.id];
   (C && C.drills || []).forEach(function (d, i) {
+    if (d.answer === "nums") { nums++; return; }   /* эталоны — в checknums.js */
     const kind = d.answer === "text" || L.kind === "text" ? "text"
       : L.kind === "sql" ? "sql" : null;
     const code = d.check || d.solution.split(/\n\s*(?:Результат|Что получается)/)[0];
@@ -46,6 +47,6 @@ for (const m of ctx.window.COURSE.modules) for (const L of m.lessons) {
     }
   });
 }
-console.log("SQL: " + sql + ", Python: " + py + ", графики: " + plot + ", ответ словами: " + text);
+console.log("SQL: " + sql + ", Python: " + py + ", графики: " + plot + ", ответ словами: " + text + ", числами: " + nums);
 if (bad.length) { console.log("\nОшибки:\n" + bad.join("\n")); process.exit(1); }
 console.log("Ошибок нет.");

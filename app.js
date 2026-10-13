@@ -277,6 +277,12 @@ const Lazy = {
   }
 };
 
+/* Файлы для скачивания (xlsx урока 6.5). В собранном офлайн-файле
+   рядом ничего нет — build.py кладёт их в window.FILES data:-ссылками. */
+const Files = {
+  url: function (name) { return (window.FILES && window.FILES[name]) || name; }
+};
+
 function loadCSS(href) {
   if (document.querySelector('link[href="' + href + '"]')) return;
   const l = document.createElement("link");
@@ -514,7 +520,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -2374,7 +2380,7 @@ function renderHome(app) {
         '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
       const isDone = Course.isDone(l.id);
-      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sheet" ? "таблицы" : l.kind === "sql" ? "SQL" : "Python";
       const row =
         '<span class="toc-line">' +
           '<span class="toc-n">' + l.num + "</span>" +
@@ -3320,6 +3326,7 @@ const ICON = {
   bad:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+  down:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
   menu:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="15" height="15" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   find:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>'
 };
@@ -3835,7 +3842,7 @@ const CodeKit = {
 
   /* новый урок: своя схема и свой язык; всё прошлое убираем */
   lesson: function (L, C) {
-    CodeKit.setup(L.kind === "sql" ? "sql" : "python", L.kind === "text" ? [] : CodeKit.parse(C.schema), false);
+    CodeKit.setup(L.kind === "sql" ? "sql" : "python", L.kind === "text" || L.kind === "sheet" ? [] : CodeKit.parse(C.schema), false);
   },
   /* sandbox — сама песочница: ссылки «в песочницу» у её редактора нет */
   setup: function (kind, tables, sandbox) {
@@ -4774,8 +4781,116 @@ const Run = {
   }
 };
 
+/* ============================================================
+   Поля для чисел: урок kind: "sheet" и задача тренажёра answer: "nums"
+
+   Ученик считает в Excel или Google Таблицах и приносит числа. Поле —
+   { label, unit, answer, tol, hint, check }: tol — допуск по модулю
+   (по умолчанию 0,5), check — SQL-эталон для инструменты/checknums.js.
+   Ввод понимается так, как его копируют из таблицы: пробелы тысяч
+   (и неразрывные), ₽ и %, запятая вместо точки.
+   ============================================================ */
+
+const Nums = {
+  parse: function (s) {
+    const t = String(s == null ? "" : s).replace(/[\s\u00a0\u202f]/g, "")
+      .replace(/(р|руб)\.?$/i, "").replace(/[₽%]/g, "").replace(/^[−–]/, "-").replace(",", ".");
+    return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+  },
+  /* "frac" — у поля в процентах ввели долю (0,4727 вместо 47,27):
+     частая ошибка, когда в ячейке нет процентного формата */
+  judge: function (f, s) {
+    if (!String(s == null ? "" : s).trim()) return "empty";
+    const v = Nums.parse(s);
+    if (v === null) return "nan";
+    const tol = f.tol === undefined ? 0.5 : f.tol;
+    if (Math.abs(v - f.answer) <= tol) return "ok";
+    return f.unit === "%" && Math.abs(v * 100 - f.answer) <= tol ? "frac" : "bad";
+  },
+  /* сохранённое — строка JSON с массивом; всё остальное (старый текст,
+     обрезанная запись) — пустые поля, а не сломанный урок */
+  load: function (raw, n) {
+    let a = [];
+    try { a = JSON.parse(raw); } catch (e) { a = []; }
+    if (!Array.isArray(a)) a = [];
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(typeof a[i] === "string" ? a[i] : "");
+    return out;
+  },
+  /* все поля пустые — пустая строка: иначе перенос прогресса из файла
+     счёл бы "[\"\",…]" ответом и не взял бы числа из файла */
+  pack: function (values) {
+    return values.some(function (v) { return String(v).trim(); }) ? JSON.stringify(values) : "";
+  },
+  html: function (fields, prefix) {
+    return '<ol class="nums">' + fields.map(function (f, i) {
+      const id = prefix + "-" + i;
+      return '<li class="nm" data-i="' + i + '">' +
+        '<label class="nm-l" for="' + id + '">' + f.label +
+          (f.unit ? ', <span class="nm-u">' + esc(f.unit) + "</span>" : "") + "</label>" +
+        '<span class="nm-row"><input class="nm-in" id="' + id + '" type="text" inputmode="decimal" ' +
+          'autocomplete="off" spellcheck="false" aria-describedby="' + id + '-h">' +
+        '<span class="nm-mark"></span></span>' +
+        '<p class="nm-h" id="' + id + '-h" hidden></p></li>';
+    }).join("") + "</ol>";
+  },
+  /* onEnter — Enter в поле запускает проверку */
+  mount: function (root, fields, values, save, onEnter) {
+    const ins = Array.prototype.slice.call(root.querySelectorAll(".nm-in"));
+    function clear(li) {
+      li.classList.remove("ok", "bad");
+      const h = $(".nm-h", li);
+      h.hidden = true; h.textContent = "";
+      $(".nm-mark", li).innerHTML = "";
+      $(".nm-in", li).removeAttribute("aria-invalid");
+    }
+    ins.forEach(function (inp, i) {
+      inp.value = values[i] || "";
+      inp.addEventListener("input", function () {
+        clear(inp.closest(".nm"));
+        save(Nums.pack(ins.map(function (x) { return x.value; })));
+      });
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && onEnter) { e.preventDefault(); onEnter(); }
+      });
+    });
+    return {
+      values: function () { return ins.map(function (x) { return x.value; }); },
+      /* Пустое поле — вердикта нет ни по одному полю: иначе можно было бы
+         подбирать числа, не тратя попыток. При неудаче фокус уходит на
+         первое неверное поле — скринридер прочтёт подпись и подсказку. */
+      check: function () {
+        const v = ins.map(function (inp, i) { return Nums.judge(fields[i], inp.value); });
+        const r = { ok: v.every(function (x) { return x === "ok"; }), empty: 0, bad: 0, nan: 0 };
+        v.forEach(function (x) { if (x === "empty") r.empty++; else if (x === "nan") r.nan++; else if (x !== "ok") r.bad++; });
+        if (r.empty) { ins.forEach(function (inp) { clear(inp.closest(".nm")); }); return r; }
+        let first = null;
+        ins.forEach(function (inp, i) {
+          const x = v[i], li = inp.closest(".nm"), h = $(".nm-h", li);
+          clear(li);
+          if (x === "ok") {
+            li.classList.add("ok");
+            $(".nm-mark", li).innerHTML = ICON.ok + '<span class="sr">верно</span>';
+            return;
+          }
+          li.classList.add("bad");
+          inp.setAttribute("aria-invalid", "true");
+          h.hidden = false;
+          h.textContent = x === "nan" ? "Введите число: цифры, запятая или точка."
+            : x === "frac" ? "Похоже на долю, а не на проценты: умножьте на 100 или включите процентный формат ячейки."
+            : fields[i].hint;
+          if (!first) first = inp;
+        });
+        if (first) first.focus();
+        return r;
+      }
+    };
+  }
+};
+
 const Drills = {
   kind: function (L, d) {
+    if (d.answer === "nums") return "nums";
     if (d.answer === "text" || L.kind === "text") return "text";
     if (L.kind === "sql") return "sql";
     if (/\bplt\.|\bax\.(plot|bar|barh|hist)\(/.test(Drills.code(d))) return "plot";
@@ -4827,6 +4942,11 @@ const Drills = {
 
   itemHtml: function (L, d, i) {
     const k = Drills.kind(L, d);
+    if (k === "nums") {
+      return '<div class="dr-work">' + Nums.html(d.fields, "nm-" + L.id + "-d" + i) +
+        '<div class="st-actions"><button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button></div>" +
+        '<div class="status dr-status"></div></div>';
+    }
     if (k === "text") {
       return '<div class="dr-work">' +
         '<textarea class="answer dr-ans" aria-label="Ваш ответ на задачу ' + (i + 1) + '" ' +
@@ -4894,6 +5014,20 @@ const Drills = {
     function tried() {
       Store.set("attempts", triesKey, Store.get("attempts", triesKey, 0) + 1);
       if (reveal) reveal.hidden = false;
+    }
+
+    if (k === "nums") {
+      const nm = Nums.mount(q(".dr-work"), d.fields, Nums.load(Store.get("code", codeKey, null), d.fields.length),
+        function (v) { Store.set("code", codeKey, v); }, function () { q(".dr-check").click(); });
+      q(".dr-check").addEventListener("click", function () {
+        const r = nm.check();
+        if (r.ok) { solve(); status("ok", "Сошлось", "Разбор ниже — сверьте, той ли формулой шли."); return; }
+        if (r.empty) { status("warn", "Заполните все поля", "Попытка не засчитана."); return; }
+        if (r.nan && !r.bad) { status("warn", "Не похоже на число", "Под полем написано, что поправить. Попытка не засчитана."); return; }
+        tried();
+        status("bad", "Не сошлось", "Под полем — что проверить. Разбор открыт ниже.");
+      });
+      return;
     }
 
     if (k === "text") {
@@ -5053,7 +5187,7 @@ function renderLesson(app, id) {
   /* Пока человек читает теорию, в фоне подтягиваем учебную базу —
      первый запуск кода не будет её ждать. И модуль следующего урока,
      если он в другом модуле, — переход дальше откроется сразу.     */
-  if (L.kind !== "text") idle(function () { Lazy.data().catch(function () {}); });
+  if (L.kind !== "text" && L.kind !== "sheet") idle(function () { Lazy.data().catch(function () {}); });
   const after = Plan.after(id);
   if (after && after.module !== L.module) {
     idle(function () { Lazy.content(after.module.id).catch(function () {}); });
@@ -5086,7 +5220,9 @@ function renderLesson(app, id) {
   }
 
   const isText = L.kind === "text";
-  const kindLabel = isText ? "разбор кейса" : (L.kind === "sql" ? "SQL" : "Python");
+  const isSheet = L.kind === "sheet";     /* числа из Excel в поля, без редактора */
+  const noCode = isText || isSheet;
+  const kindLabel = isText ? "разбор кейса" : isSheet ? "Excel и таблицы" : (L.kind === "sql" ? "SQL" : "Python");
   const hasDrills = !!(C.drills && C.drills.length);
   const hasQuiz = !!(C.quiz && C.quiz.length);
   const hasCards = !!(C.cards && C.cards.length);
@@ -5111,7 +5247,7 @@ function renderLesson(app, id) {
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
       "Ещё " + C.drills.length + " " + plural(C.drills.length, "задача", "задачи", "задач") +
-      " на ту же базу. У каждой свой редактор и проверка, разбор открывается после первой попытки: " +
+      " на ту же базу. У каждой " + (L.kind === "sheet" ? "свои поля и проверка" : "свой редактор и проверка") + ", разбор открывается после первой попытки: " +
       'готовый ответ, который вы не пробовали написать сами, не запоминается. <span id="drCount"></span></p>' +
       '<div class="drills">';
     C.drills.forEach(function (d, i) {
@@ -5197,7 +5333,10 @@ function renderLesson(app, id) {
 
       '<div class="loader" id="loader"><span class="spin"></span><span id="loaderTxt"></span></div>' +
 
-      (isText
+      (isSheet
+        ? '<p class="nm-file"><a class="btn" id="fileBtn" href="' + Files.url(C.file) + '" download="' + C.file + '">' +
+            ICON.down + "Скачать данные · " + esc(C.file) + "</a></p>" + Nums.html(C.fields, "nm-" + id)
+        : isText
         ? '<textarea class="answer" id="answer" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
         : '<div class="editor-shell">' +
             '<div class="editor-h"><span>' + (L.kind === "sql" ? "запрос.sql" : "решение.py") + "</span>" +
@@ -5207,7 +5346,7 @@ function renderLesson(app, id) {
           "</div>") +
 
       '<div class="actions">' +
-        (isText ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
+        (noCode ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
           "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
         '<button class="btn check" id="checkBtn" type="button">' + ICON.check + "Проверить</button>" +
         '<button class="btn" id="hintBtn" type="button" aria-label="Подсказка">' + ICON.bulb +
@@ -5220,14 +5359,14 @@ function renderLesson(app, id) {
 
       '<div class="io">' +
         '<div class="io-box"><div class="io-h"><span>' +
-          (isText ? "разбор вашего ответа" : "ваш вывод") + "</span></div>" +
+          (noCode ? "разбор вашего ответа" : "ваш вывод") + "</span></div>" +
           '<div class="io-body" id="outBox"><div class="empty">' +
-          (isText ? "Напишите ответ и нажмите «Проверить»." : "Пока пусто — нажмите «Запустить код».") +
+          (isSheet ? "Введите числа и нажмите «Проверить»." : isText ? "Напишите ответ и нажмите «Проверить»." : "Пока пусто — нажмите «Запустить код».") +
           "</div></div></div>" +
         '<div class="io-box"><div class="io-h"><span>' +
-          (isText ? "эталонный разбор" : "ожидаемый результат") + "</span>" +
+          (noCode ? "эталонный разбор" : "ожидаемый результат") + "</span>" +
           '<span class="spacer"></span><button class="linkbtn" id="refBtn" type="button">' +
-            (isText ? "показать" : "показать числа") + "</button>" +
+            (noCode ? "показать" : "показать числа") + "</button>" +
           "</div>" +
           '<div class="io-body" id="refBox"></div></div>' +
       "</div>" +
@@ -5308,7 +5447,7 @@ function renderLesson(app, id) {
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");
   let showRef = function () {};
-  if (isText) {
+  if (noCode) {
     refBox.innerHTML = '<div class="empty">Скрыт, чтобы не подсматривать. Сначала напишите свой ответ.</div>';
     $("#refBtn").addEventListener("click", function () {
       refBox.innerHTML = '<div class="theory" style="font-size:15px">' + C.reference + "</div>";
@@ -5368,10 +5507,13 @@ function renderLesson(app, id) {
   }
 
   /* ---------- редактор ---------- */
-  let editor = null, answerEl = null;
+  let editor = null, answerEl = null, nums = null;
   const savedCode = Store.get("code", id, null);
 
-  if (isText) {
+  if (isSheet) {
+    nums = Nums.mount($("#s-task"), C.fields, Nums.load(savedCode, C.fields.length),
+      function (v) { Store.set("code", id, v); }, function () { check(); });
+  } else if (isText) {
     answerEl = $("#answer");
     answerEl.value = savedCode || "";
     answerEl.addEventListener("input", function () { Store.set("code", id, answerEl.value); });
@@ -5392,6 +5534,7 @@ function renderLesson(app, id) {
   }
 
   function getCode() {
+    if (isSheet) return Nums.pack(nums.values());
     if (isText) return answerEl.value;
     return editor ? editor.get() : $("#editor").value;
   }
@@ -5590,8 +5733,20 @@ function renderLesson(app, id) {
     }
   }
 
+  function checkNums() {
+    const r = nums.check();
+    const n = C.fields.length, good = n - r.empty - r.bad - r.nan;
+    $("#outBox").innerHTML = '<div class="nm-sum">Верно ' + good + " из " + n + "</div>";
+    if (r.ok) return pass("Все " + n + " " + plural(n, "число", "числа", "чисел") + " сошлись с расчётом на той же базе. " +
+                          "Откройте эталонный разбор справа: там формулы, которыми их удобнее всего получить.");
+    if (r.empty) { setStatus("warn", "Заполните все поля", "Пустых полей: " + r.empty + " из " + n + ". Попытка не засчитана."); return; }
+    if (r.nan && !r.bad) { setStatus("warn", "Не похоже на число", "Под полем написано, что поправить. Попытка не засчитана."); return; }
+    fail("не сошлось " + (r.bad + r.nan) + " из " + n + ". Под каждым таким полем — что проверить.");
+  }
+
   function check() {
     clearStatus();
+    if (isSheet) return checkNums();
     if (isText) return checkText();
     if (L.kind === "sql") return checkSQL();
     if (C.expected.plot) return checkPlot();
@@ -5643,7 +5798,7 @@ function renderLesson(app, id) {
   });
 
   $("#solBtn").addEventListener("click", function () {
-    const body = (isText ? "" :
+    const body = (noCode ? "" :
       "<p>Эталонный код с комментариями. Сравнивайте не синтаксис, а подход: где вы пошли другим путём и почему.</p>" +
       "<pre>" + esc(C.solution) + "</pre>") + (C.solutionNote || C.reference || "");
     modal("Решение", '<div class="theory" style="font-size:16px">' + body + "</div>");
@@ -5651,12 +5806,12 @@ function renderLesson(app, id) {
   });
 
   $("#checkBtn").addEventListener("click", check);
-  if (!isText) $("#runBtn").addEventListener("click", run);
+  if (!noCode) $("#runBtn").addEventListener("click", run);
 
   function onKey(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      if (isText) check(); else run();
+      if (noCode) check(); else run();
     }
   }
   document.addEventListener("keydown", onKey);
@@ -5666,7 +5821,7 @@ function renderLesson(app, id) {
   const updateNav = mountLessonNav(id, null);
   if (Course.isDone(id)) {
     setStatus("ok", "Урок уже пройден",
-      "Можно перерешать: код сохранён, кнопка «Показать решение» открыта.");
+      "Можно перерешать: " + (isSheet ? "числа сохранены" : "код сохранён") + ", кнопка «Показать решение» открыта.");
   }
 
   /* ---------- таймер ---------- */
@@ -5703,7 +5858,7 @@ const Find = {
      слов, тем чаще человек попадает с первого раза.            */
   places: function () {
     const out = Course.flat.map(function (l) {
-      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sheet" ? "таблицы" : l.kind === "sql" ? "SQL" : "Python";
       return { href: "#" + l.id, key: l.id, num: l.num, title: l.title,
                note: l.desc, where: l.module.num + ". " + l.module.title,
                hay: [l.desc, l.module.title, kind, l.say, l.sayTask, l.sayDrills]
