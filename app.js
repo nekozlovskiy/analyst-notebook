@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {}, mock: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -126,7 +126,7 @@ const Store = (function () {
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review", "prep", "plan", "entry"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep", "plan", "entry", "mock"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
           const cur = state[b][id], val = src[id];
@@ -277,6 +277,9 @@ const Lazy = {
   },
   taxi: function () {
     return window.TAXI ? Promise.resolve() : loadScript("data-taxi.js");
+  },
+  mock: function () {
+    return window.MOCK ? Promise.resolve() : loadScript("interview.js");
   }
 };
 
@@ -523,7 +526,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "data-taxi.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "data-taxi.js", "interview.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -1305,6 +1308,37 @@ function testQuestion(box, meta, q, nextLabel, dunno, onAnswer, onNext) {
   });
 }
 
+/* Пробное собеседование (#mock): выбор заданий и время — без DOM,
+   чтобы инструменты/checkinterview.js проверял их отдельно.
+   last — id задач и кейса прошлой попытки: их не берём, пока есть другие. */
+const MockCore = {
+  MIN: 45,
+  pick: function (pool, cases, refs, last, rnd) {
+    const r = rnd || Math.random;
+    const one = function (list) {
+      const fresh = list.filter(function (x) { return last.indexOf(x.id) < 0; });
+      const from = fresh.length ? fresh : list;
+      return from[Math.floor(r() * from.length)].id;
+    };
+    const sql = ["easy", "mid", "hard"].map(function (lv) {
+      return one(pool.filter(function (t) { return t.level === lv; }));
+    });
+    const left = refs.slice(), quiz = [];
+    while (quiz.length < 5 && left.length) quiz.push(left.splice(Math.floor(r() * left.length), 1)[0]);
+    return { sql: sql, cas: one(cases), quiz: quiz };
+  },
+  left: function (t0, now) { return Math.max(0, MockCore.MIN * 60000 - (now - t0)); },
+  clock: function (ms) {
+    const s = Math.ceil(ms / 1000);
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  },
+  mins: function (t0, now) { return Math.min(MockCore.MIN, Math.max(0, Math.round((now - t0) / 60000))); },
+  lastIds: function (bucket) {
+    const keys = Object.keys(bucket || {}).sort(function (a, b) { return +b - +a; });
+    return keys.length && bucket[keys[0]] && bucket[keys[0]].ids ? bucket[keys[0]].ids : [];
+  }
+};
+
 const ModuleTest = {
   N: 15,
   PASS: 80,
@@ -1623,6 +1657,7 @@ function renderEntryTest(app) {
 const Pages = {
   find: function (id) {
     if (id === "interview") return renderInterview;
+    if (id === "mock") return renderMock;
     if (id === "my-notes") return renderMyNotes;
     if (id === "cheats" || /^cheat-[a-z]+$/.test(id)) return renderCheats;
     if (id === "mistakes") return renderMistakes;
@@ -1684,7 +1719,8 @@ function renderInterview(app) {
   main.innerHTML = pageHead("К собеседованию",
     "Всё, что в уроках помечено как вопросы и задачи с интервью, — на одной странице. " +
     "Ответьте вслух, сверьтесь с уроком и отметьте то, в чём уверены.",
-    "вслух и своими словами — иначе на интервью слова не найдутся") +
+    "вслух и своими словами — иначе на интервью слова не найдутся",
+    '<div class="page-actions"><a class="btn primary" href="#mock">Пройти пробное собеседование</a></div>') +
     '<div id="prepBody"><p class="page-wait">Собираю вопросы из уроков…</p></div>';
   app.appendChild(main);
 
@@ -1727,6 +1763,353 @@ function renderInterview(app) {
     box.innerHTML = '<p class="page-wait">Вопросы не загрузились — похоже, пропал интернет. ' +
       '<button class="linkbtn" id="prepRetry" type="button">Попробовать ещё раз</button></p>';
     $("#prepRetry").addEventListener("click", function () { Router.render(true); });
+  });
+}
+
+/* ---------- пробное собеседование ----------
+   Черновик попытки — в sessionStorage: перезагрузка вкладки её не
+   теряет, а закрытая вкладка — уже новая попытка. Без хранилища
+   попытка живёт в памяти до перезагрузки. Выбор заданий и время —
+   в MockCore, проверка ответов — после завершения, в отчёте. */
+const Mock = {
+  KEY: "da.mock",
+  mem: null,
+  MODS: ["m1", "m2", "m3", "m4", "m6"],      /* вопросы — без машинного обучения */
+  /* Из модуля 6 — только SQL на собеседовании и такси: остальные уроки
+     идут после 6.4 или про резюме и Excel. ClickHouse (1.9) в задачах на
+     SQLite не нужен. SKIP — вопросы, которые без своего урока не понять:
+     опираются на его данные, график или текст. */
+  ONLY6: ["m6l3", "m6l8"],
+  NOLESSON: ["m1l7"],
+  SKIP: ["m1l4:1", "m1l8:3", "m2l5:2", "m2l6:4", "m2l7:1", "m2l7:2", "m3l8:0", "m3l8:1",
+         "m4l2:0", "m4l5:5", "m4l7:5", "m4l7:6"],
+  draft: function () {
+    try { const s = sessionStorage.getItem(Mock.KEY); if (s) return JSON.parse(s); } catch (e) {}
+    return Mock.mem;
+  },
+  save: function (d) {
+    Mock.mem = d;
+    try { sessionStorage.setItem(Mock.KEY, JSON.stringify(d)); } catch (e) {}
+  },
+  drop: function () {
+    Mock.mem = null;
+    try { sessionStorage.removeItem(Mock.KEY); } catch (e) {}
+  },
+  here: function () { return location.hash.replace(/^#\/?/, "") === "mock"; },
+  /* черновик из прошлой версии пула или испорченный — начинаем заново */
+  valid: function (d) {
+    return !!d && typeof d.t0 === "number" && Array.isArray(d.sql) && d.sql.length === 3 &&
+      d.sql.every(function (id) { return !!Mock.task(id); }) && !!Mock.kase(d.cas) &&
+      Array.isArray(d.quiz) && d.quiz.every(function (r) {
+        const C = window.CONTENT[r.id]; return !!(C && C.quiz && C.quiz[r.n]);
+      }) && !!d.code && !!d.ran && !!d.ans && typeof d.text === "string";
+  },
+  /* база общая для всего курса: запрос, который меняет данные, испортил
+     бы и остальные задачи, и уроки — такой не выполняем */
+  writes: function (code) {
+    return /\b(insert|update|delete|drop|alter|create|attach|detach|vacuum|pragma)\b/i
+      .test(String(code).replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/'[^']*'/g, "''"));
+  },
+  WRITES: "Запрос меняет данные — на собеседовании нужны только запросы на чтение (SELECT, WITH). Он не выполнялся.",
+  task: function (id) { return window.MOCK.sql.filter(function (t) { return t.id === id; })[0]; },
+  kase: function (id) { return window.MOCK.cases.filter(function (c) { return c.id === id; })[0]; },
+  refs: function () {
+    const out = [];
+    Course.data.modules.forEach(function (m) {
+      if (Mock.MODS.indexOf(m.id) < 0) return;
+      m.lessons.forEach(function (l) {
+        if (Mock.NOLESSON.indexOf(l.id) >= 0 || (m.id === "m6" && Mock.ONLY6.indexOf(l.id) < 0)) return;
+        const C = window.CONTENT[l.id];
+        (C && C.quiz ? C.quiz : []).forEach(function (q, n) {
+          if (Mock.SKIP.indexOf(l.id + ":" + n) < 0) out.push({ id: l.id, n: n });
+        });
+      });
+    });
+    return out;
+  },
+  start: function () {
+    const p = MockCore.pick(window.MOCK.sql, window.MOCK.cases, Mock.refs(), MockCore.lastIds(Store.all().mock));
+    const d = { t0: Date.now(), sql: p.sql, cas: p.cas, quiz: p.quiz, code: {}, ran: {}, ans: {}, text: "", tab: "s0" };
+    Mock.save(d);
+    return d;
+  },
+  lessonLink: function (id) {
+    const L = Course.byId(id);
+    return L ? '<a href="#' + id + '">урок ' + L.num + " «" + esc(L.title) + "»</a>" : "";
+  },
+
+  /* прошлые попытки, новые сверху */
+  hist: function () {
+    const all = Store.all().mock || {};
+    const keys = Object.keys(all).sort(function (a, b) { return +b - +a; }).slice(0, 10);
+    if (!keys.length) return "";
+    return '<h2 class="mk-h">Прошлые попытки</h2><div class="mk-scroll"><table class="res mk-hist"><thead><tr>' +
+      "<th>Дата</th><th>SQL</th><th>Вопросы</th><th>Кейс</th><th>Минут</th></tr></thead><tbody>" +
+      keys.map(function (k) {
+        const r = all[k] || {}, x = new Date(+k);
+        return "<tr><td>" + x.getDate() + " " + MONTHS_GEN[x.getMonth()] + "</td><td>" + (r.sql || 0) + " из 3</td><td>" +
+          (r.quiz || 0) + " из 5</td><td>" + (r.cas || 0) + " из " + (r.casOf || 0) + '</td><td class="num">' + (r.mins || 0) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  },
+
+  intro: function (box) {
+    box.innerHTML =
+      '<p class="review-intro">Три SQL-задачи на базе «Дельта Такси» — лёгкая, средняя и трудная, пять вопросов из уроков ' +
+        "и один продуктовый кейс со свободным ответом. Между частями можно переходить в любом порядке. " +
+        "Задачу засчитывает последний запуск запроса, но совпал ли он с эталоном, видно только в отчёте. " +
+        "Запросы — только на чтение: SELECT и WITH; имена и порядок столбцов — как в условии. " +
+        "Не успеть всё за 45 минут — нормально: трудную задачу на собеседовании тоже часто сдают частично.</p>" +
+      (Course.isDone("m6l8") ? "" : '<p class="review-intro">Лучше после ' + Mock.lessonLink("m6l8") +
+        ": в нём схема такси и типовые задачи на ней.</p>") +
+      '<button class="btn primary" id="mkStart" type="button">Начать — время пойдёт сразу</button>' + Mock.hist();
+    $("#mkStart", box).addEventListener("click", function () { Mock.run(box, Mock.start()); });
+  },
+
+  run: function (box, d) {
+    const tabs = [["s0", "SQL 1"], ["s1", "SQL 2"], ["s2", "SQL 3"], ["q", "Вопросы"], ["c", "Кейс"]];
+    box.innerHTML =
+      '<div class="mk-bar"><span class="mk-clock" id="mkClock" role="timer" aria-label="Осталось времени" tabindex="-1"></span>' +
+      '<div class="sb-tabs mk-tabs" role="tablist" aria-label="Части собеседования">' +
+      tabs.map(function (t) { return '<button type="button" role="tab" data-t="' + t[0] + '">' + t[1] + "</button>"; }).join("") +
+      '</div></div><div id="mkPane"></div>' +
+      '<div class="actions mk-end"><button class="btn" id="mkFinish" type="button">Завершить</button></div>';
+    let editor = null, over = false, seq = 0;
+    const tick = setInterval(clock, 1000);
+    Router.cleanup.push(function () { clearInterval(tick); });
+    function done() {
+      if (over) return;
+      over = true;
+      clearInterval(tick);
+      Mock.finish(box, d);
+    }
+    function clock() {
+      const ms = MockCore.left(d.t0, Date.now()), c = $("#mkClock");
+      if (!c) { clearInterval(tick); return; }
+      c.textContent = MockCore.clock(ms);
+      c.classList.toggle("low", ms <= 5 * 60000);
+      if (ms <= 0) done();
+    }
+    function marks() {
+      Array.prototype.forEach.call(box.querySelectorAll(".mk-tabs button"), function (b) {
+        const t = b.dataset.t;
+        const has = t === "q" ? Object.keys(d.ans).length === d.quiz.length
+          : t === "c" ? !!d.text.trim() : !!d.ran[d.sql[+t.slice(1)]];
+        b.classList.toggle("has", has);
+        b.setAttribute("aria-label", b.textContent + (has ? ", есть ответ" : ""));
+        b.setAttribute("aria-selected", t === d.tab ? "true" : "false");
+      });
+    }
+    function show(t) {
+      d.tab = t; Mock.save(d); marks(); editor = null;
+      const my = ++seq, pane = $("#mkPane");
+      /* схема базы у редактора висит на body — вне SQL-вкладок убираем */
+      CodeKit.reset();
+      if (t.charAt(0) === "s") {
+        const x = Mock.task(d.sql[+t.slice(1)]), schema = window.CONTENT.m6l8.schema;
+        CodeKit.setup("sql", CodeKit.parse(schema), false);
+        pane.innerHTML = '<h2 class="mk-h">' + esc(x.title) + "</h2>" + x.body +
+          '<div class="editor-shell"><div class="editor-h"><span>задача.sql</span></div><textarea id="mkEditor"></textarea></div>' +
+          '<div class="actions"><button class="btn primary" id="mkRun" type="button">' + ICON.play +
+            'Запустить<span class="k">Cmd+Enter</span></button></div>' +
+          '<div class="io-box"><div class="io-h"><span>результат</span></div><div class="io-body" id="mkOut">' +
+            '<div class="empty">Запустите запрос — проверка будет в отчёте, по последнему запуску.</div></div></div>';
+        const run = async function () {
+          const code = editor ? editor.get() : "", out = $("#mkOut");
+          if (!out) return;
+          if (!code.trim()) { out.innerHTML = '<div class="empty">Редактор пуст — напишите запрос.</div>'; return; }
+          if (Mock.writes(code)) { out.innerHTML = '<div class="empty">' + Mock.WRITES + "</div>"; return; }
+          d.ran[x.id] = code; Mock.save(d); marks();
+          out.innerHTML = '<div class="empty">' + (Engine.db ? "Выполняю…" : "Поднимаю базу в браузере…") + "</div>";
+          let html;
+          try {
+            const r = await Run.sql(code);
+            html = r.err ? '<pre><span class="err">' + esc(r.err) + "</span></pre>"
+              : r.res ? renderTable(r.res.columns, r.res.values, -1)
+              : '<div class="empty">Запрос выполнен, но таблицы в ответе нет.</div>';
+          } catch (e) { html = '<pre><span class="err">' + esc(e.message) + "</span></pre>"; }
+          if ($("#mkOut") === out) out.innerHTML = html;
+        };
+        mountEditor($("#mkEditor"), "sql", d.code[x.id] || "",
+          function (v) { d.code[x.id] = v; Mock.save(d); }, run, function () {}).then(function (ed) {
+          if (my === seq) editor = ed;
+        });
+        $("#mkRun").addEventListener("click", run);
+      } else if (t === "q") {
+        /* варианты — в порядке урока: перемешивание без записи в черновик
+           сбило бы ответы после перезагрузки */
+        pane.innerHTML = '<p class="review-intro">Ответ можно поменять до конца собеседования. Пояснения — в отчёте.</p>' +
+          d.quiz.map(function (r, i) {
+            const q = window.CONTENT[r.id].quiz[r.n];
+            const L = Course.byId(r.id);
+            return '<div class="q mk-q"><div class="mk-from">' + (i + 1) + " — тема урока " + L.num + " «" + esc(L.title) + "»</div>" +
+              '<div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">' +
+              q.opts.map(function (o, k) {
+                return '<button class="q-opt" type="button" data-q="' + i + '" data-i="' + k + '" aria-pressed="' +
+                  (d.ans[i] === k) + '"><span class="mk">' + "АБВГД".charAt(k) + "</span><span>" + o + "</span></button>";
+              }).join("") + "</div></div>";
+          }).join("");
+        Array.prototype.forEach.call(pane.querySelectorAll(".q-opt"), function (b) {
+          b.addEventListener("click", function () {
+            const i = +b.dataset.q;
+            d.ans[i] = +b.dataset.i; Mock.save(d); marks();
+            Array.prototype.forEach.call(pane.querySelectorAll('.q-opt[data-q="' + i + '"]'), function (o) {
+              o.setAttribute("aria-pressed", String(o === b));
+            });
+          });
+        });
+      } else {
+        const c = Mock.kase(d.cas);
+        pane.innerHTML = '<h2 class="mk-h">' + esc(c.title) + "</h2>" + c.body +
+          '<label class="mk-lbl" for="mkText">Ваш ответ — как сказали бы вслух, по пунктам</label>' +
+          '<textarea class="mk-text" id="mkText" rows="12"></textarea>';
+        const ta = $("#mkText");
+        ta.value = d.text;
+        ta.addEventListener("input", function () { d.text = ta.value; Mock.save(d); marks(); });
+      }
+    }
+    box.querySelector(".mk-tabs").addEventListener("click", function (e) {
+      const b = e.target.closest("button[data-t]");
+      if (b) show(b.dataset.t);
+    });
+    $("#mkFinish").addEventListener("click", function () {
+      if (confirm("Завершить собеседование? Ответы уже не поменять.")) done();
+    });
+    clock();
+    if (over) return;
+    show(d.tab || "s0");
+    $("#mkClock").focus({ preventScroll: true });
+  },
+
+  /* Черновик стираем только после записи в историю: если движок SQL
+     не загрузился (пропала сеть), попытка остаётся и проверку можно
+     повторить — ни ответы, ни время не теряются. */
+  finish: async function (box, d) {
+    CodeKit.reset();
+    const now = Math.min(Date.now(), d.t0 + MockCore.MIN * 60000);
+    box.innerHTML = '<p class="page-wait">Проверяю ответы…</p>';
+    const sql = [];
+    for (let i = 0; i < d.sql.length; i++) {
+      const x = Mock.task(d.sql[i]), code = d.ran[x.id];
+      let v = { ok: false, why: "нет ответа — запрос не запускался" };
+      if (code && Mock.writes(code)) v = { ok: false, why: Mock.WRITES };
+      else if (code) {
+        let r;
+        try { r = await Run.sql(code); }
+        catch (e) {
+          if (!box.isConnected) return;
+          box.innerHTML = '<p class="page-wait">Не получилось проверить запросы — похоже, пропал интернет. ' +
+            "Ответы сохранены. " + '<button class="linkbtn" id="mkRecheck" type="button">Проверить ещё раз</button></p>';
+          $("#mkRecheck").addEventListener("click", function () { Mock.finish(box, d); });
+          return;
+        }
+        v = r.err ? { ok: false, why: r.err } : Check.sql(r.res, x.expected, { code: code });
+      }
+      sql.push({ x: x, code: code, v: v });
+    }
+    const quiz = d.quiz.map(function (r, i) {
+      const q = window.CONTENT[r.id].quiz[r.n], ok = d.ans[i] === q.right;
+      if (!ok) Review.record(r.id, r.n, false, false);
+      return { r: r, q: q, ok: ok, a: d.ans[i] };
+    });
+    const c = Mock.kase(d.cas), key = String(d.t0);
+    const rec = { sql: sql.filter(function (s) { return s.v.ok; }).length,
+                  quiz: quiz.filter(function (q) { return q.ok; }).length,
+                  cas: 0, casOf: c.check.length, mins: MockCore.mins(d.t0, now),
+                  ids: d.sql.concat([d.cas]) };
+    Store.set("mock", key, rec);
+    Mock.drop();
+    if (!Mock.here() || !box.isConnected) return;
+    Mock.report(box, d, sql, quiz, c, rec, key);
+  },
+
+  report: function (box, d, sql, quiz, c, rec, key) {
+    const back = [];
+    const add = function (id) { if (back.indexOf(id) < 0) back.push(id); };
+    let h = '<div id="mkReport"><p class="prep-sum" tabindex="-1">SQL ' + rec.sql + " из 3 · вопросы " + rec.quiz +
+      ' из 5 · кейс <span id="mkCas">0</span> из ' + rec.casOf + " · " + rec.mins + " " +
+      plural(rec.mins, "минута", "минуты", "минут") + "</p>";
+
+    h += '<h2 class="mk-h">SQL</h2>' + sql.map(function (s, i) {
+      if (!s.v.ok) add(s.x.lesson);
+      return '<section class="mk-r"><h3>' + (i + 1) + ". " + esc(s.x.title) + "</h3>" +
+        (s.v.ok ? '<p class="ok">Совпало с эталоном.</p>'
+          : '<p class="no">Не совпало: ' + esc(s.v.why) + (s.v.hint ? ". " + esc(s.v.hint) : "") + "</p>") +
+        (s.code ? '<details><summary>Ваш запрос</summary><pre><code class="sql">' + esc(s.code) + "</code></pre></details>" : "") +
+        '<details><summary>Эталонное решение</summary><pre><code class="sql">' + esc(s.x.solution) + "</code></pre></details>" +
+        (s.v.ok ? "" : "<p>Повторить: " + Mock.lessonLink(s.x.lesson) + "</p>") + "</section>";
+    }).join("");
+
+    h += '<h2 class="mk-h">Вопросы</h2>' + quiz.map(function (x, i) {
+      if (!x.ok) add(x.r.id);
+      const mine = x.a === undefined ? "нет ответа" : "ваш ответ — «" + x.q.opts[x.a] + "»";
+      return '<section class="mk-r"><h3>' + (i + 1) + ". " + x.q.q + "</h3>" +
+        (x.ok ? '<p class="ok">Верно.</p>' : '<p class="no">Неверно: ' + mine + ", верный — «" + x.q.opts[x.q.right] + "».</p>") +
+        "<p>" + x.q.why + "</p><p>Из урока: " + Mock.lessonLink(x.r.id) + "</p></section>";
+    }).join("");
+
+    h += '<h2 class="mk-h">Кейс: ' + esc(c.title) + "</h2>" + c.body +
+      '<section class="mk-r"><h3>Ваш ответ</h3>' +
+        (d.text.trim() ? '<p class="mk-mine">' + esc(d.text.trim()) + "</p>" : "<p>Ответа нет.</p>") + "</section>" +
+      '<section class="mk-r"><h3>Как отвечают</h3>' + c.ref + "</section>" +
+      '<p class="review-intro">Отметьте, что было в вашем ответе, — это балл кейса.</p><ol class="prep-list mk-check">' +
+      c.check.map(function (t, i) {
+        return '<li class="prep-item"><button class="prep-mark" type="button" data-i="' + i + '" aria-pressed="false" ' +
+          'aria-label="Было в ответе"></button><div class="prep-t">' + esc(t) + "</div></li>";
+      }).join("") + "</ol>";
+
+    if (back.length) {
+      h += '<h2 class="mk-h">К каким урокам вернуться</h2><ul class="mt-back">' +
+        back.map(function (id) { return "<li>" + Mock.lessonLink(id) + "</li>"; }).join("") + "</ul>" +
+        '<p class="review-intro">Вопросы с ошибками ушли в повторение и на страницу <a href="#mistakes">«Мои ошибки»</a>.</p>';
+    }
+    h += '<div class="page-actions"><button class="btn primary" id="mkAgain" type="button">Пройти ещё раз — задания будут другие</button></div>' +
+      '<div id="mkHist">' + Mock.hist() + "</div></div>";
+    box.innerHTML = h;
+
+    Array.prototype.forEach.call(box.querySelectorAll(".mk-check .prep-mark"), function (b) {
+      b.addEventListener("click", function () {
+        const on = b.getAttribute("aria-pressed") !== "true";
+        b.setAttribute("aria-pressed", String(on));
+        b.innerHTML = on ? penTick(key + ":" + b.dataset.i, "draw") : "";
+        b.closest(".prep-item").classList.toggle("on", on);
+        const n = box.querySelectorAll('.mk-check .prep-mark[aria-pressed="true"]').length;
+        Store.set("mock", key, Object.assign({}, rec, { cas: n }));
+        $("#mkCas").textContent = n;
+        $("#mkHist").innerHTML = Mock.hist();
+      });
+    });
+    $("#mkAgain").addEventListener("click", function () { window.scrollTo(0, 0); Mock.run(box, Mock.start()); });
+    $(".prep-sum", box).focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
+};
+
+function renderMock(app) {
+  document.title = "Пробное собеседование — Тетрадь аналитика";
+  mountHeader("<b>Пробное собеседование</b>");
+  const main = el("main", { class: "wrap lesson-wrap page mock" });
+  main.innerHTML = pageHead("Пробное собеседование",
+    "45 минут, три SQL-задачи на базе «Дельта Такси», пять вопросов из уроков и один продуктовый кейс. " +
+    "Подсказок и разборов нет до конца — как на настоящем интервью.",
+    "результат — для вас, не для оценки") +
+    '<div id="mkBody"><p class="page-wait">Собираю задания…</p></div>';
+  app.appendChild(main);
+  /* такси прогреваем сразу: первый запуск запроса не будет её ждать */
+  idle(function () { Engine.sql("trips").catch(function () {}); });
+  Promise.all([Lazy.mock()].concat(Mock.MODS.map(function (m) { return Lazy.content(m); }))).then(function () {
+    const box = $("#mkBody");
+    if (!Mock.here() || !box) return;
+    let d = Mock.draft();
+    if (d && !Mock.valid(d)) { Mock.drop(); d = null; }
+    if (d && MockCore.left(d.t0, Date.now()) > 0) Mock.run(box, d);
+    else if (d) Mock.finish(box, d);
+    else Mock.intro(box);
+  }, function () {
+    const box = $("#mkBody");
+    if (!box) return;
+    box.innerHTML = '<p class="page-wait">Задания не загрузились — похоже, пропал интернет. ' +
+      '<button class="linkbtn" id="mkRetry" type="button">Попробовать ещё раз</button></p>';
+    $("#mkRetry").addEventListener("click", function () { Router.render(true); });
   });
 }
 
@@ -2354,6 +2737,7 @@ function renderHome(app) {
   main.insertAdjacentHTML("beforeend",
     '<p class="prep-line">Готовитесь к собеседованию? Все вопросы и задачи с интервью собраны ' +
     '<a href="#interview">на одной странице</a>, а ваши заметки — <a href="#my-notes">в конспекте</a>. ' +
+    'Проверить себя под таймером — <a href="#mock">пробное собеседование</a>. ' +
     'Главное из SQL, pandas, статистики и метрик — в <a href="#cheats">шпаргалках</a> на лист A4. ' +
     "Как далеко вы от собеседования — " + skillsSay + " " +
     'Непонятное слово объяснит <a href="#glossary">словарь</a>.</p>');
@@ -5929,6 +6313,9 @@ const Find = {
     out.push({ href: "#interview", title: "К собеседованию", where: "Раздел",
                note: "вопросы и задачи с интервью на одной странице",
                hay: "интервью собеседование вопросы задачи подготовка" });
+    out.push({ href: "#mock", title: "Пробное собеседование", where: "Раздел",
+               note: "45 минут: три SQL-задачи на такси, пять вопросов и кейс",
+               hay: "собеседование интервью пробное тренировка экзамен таймер mock" });
     out.push({ href: "#my-notes", title: "Мой конспект", where: "Раздел",
                note: "ваши заметки из всех уроков",
                hay: "заметки конспект записи" });
