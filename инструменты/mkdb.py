@@ -39,4 +39,28 @@ for key, table, cast in (("ridersCSV", "riders", (int, str, str, str)),
     print(table, len(rows))
 con.commit()
 con.close()
-print("база собрана:", p)
+# база «Вилки» (модуль 7): отдельный файл — имена таблиц совпадают с «Дельта Маркетом»;
+# без первичных ключей, как после to_sql в Colab: дубли выгрузки остаются
+v = (BASE / "data-vilka.js").read_text(encoding="utf-8")
+pv = W / "vilka.db"
+if pv.exists():
+    pv.unlink()
+cv = sqlite3.connect(pv)
+cv.executescript("""
+CREATE TABLE customers (customer_id INTEGER, signup_date TEXT, city TEXT, platform TEXT, channel TEXT);
+CREATE TABLE restaurants (restaurant_id INTEGER, city TEXT, cuisine TEXT);
+CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, restaurant_id INTEGER, created_at TEXT,
+                     items_sum INTEGER, delivery_fee INTEGER, status TEXT);
+CREATE TABLE experiment (customer_id INTEGER, "group" TEXT, assigned_at TEXT);
+""")
+for key, table, cast in (("customersCSV", "customers", (int, str, str, str, str)),
+                         ("restaurantsCSV", "restaurants", (int, str, str)),
+                         ("ordersCSV", "orders", (int, int, int, lambda s: s + ":00", int, int, str)),
+                         ("experimentCSV", "experiment", (int, str, str))):
+    body = re.search(r"\b%s: `(.*?)`" % key, v, re.S).group(1)
+    rows = [tuple(f(x) for f, x in zip(cast, r)) for r in list(csv.reader(io.StringIO(body)))[1:] if r]
+    cv.executemany("INSERT INTO %s VALUES (%s)" % (table, ",".join("?" * len(cast))), rows)
+    print("vilka", table, len(rows))
+cv.commit()
+cv.close()
+print("база собрана:", p, "и", pv)

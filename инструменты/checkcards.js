@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Проверка карточек «вопрос → ответ» в content-m0.js … content-m6.js.
+/* Проверка карточек «вопрос → ответ» в content-m0.js … content-m7.js.
 
      node инструменты/checkcards.js                  — формат всех карточек, какие есть
      node инструменты/checkcards.js --require m1     — и у каждого урока модуля 1 есть 6–12 карточек
@@ -14,7 +14,7 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 global.window = { CONTENT: {}, SH: new Proxy({}, { get: function () { return ""; } }) };
 require(path.join(ROOT, "lessons.js"));
-for (let n = 0; n <= 6; n++) require(path.join(ROOT, "content-m" + n + ".js"));
+for (let n = 0; n <= 7; n++) require(path.join(ROOT, "content-m" + n + ".js"));
 
 /* Числа сравниваются целиком: «17» не должно найтись внутри «17.09».
    Запятая и точка в дробях считаются одним и тем же. */

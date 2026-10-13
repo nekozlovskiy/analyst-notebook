@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Собирает delta-market.xlsx (урок 6.6) и app-journal.xlsx (урок 4.7) из data.js.
+"""Собирает delta-market.xlsx (урок 6.6), app-journal.xlsx (урок 4.7) и vilka.xlsx
+(модуль 7) из data.js и data-vilka.js.
 
     python3 инструменты/mkxlsx.py           # записать файлы в корень сайта
     python3 инструменты/mkxlsx.py --check   # сверить с файлами в ветке
@@ -18,15 +19,20 @@ from openpyxl.styles import Font
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 STAMP = datetime.datetime(2024, 9, 30)
 SRC = (ROOT / "data.js").read_text(encoding="utf-8")
+VILKA = (ROOT / "data-vilka.js").read_text(encoding="utf-8")
 
 
-def rows(key):
-    body = re.search(r"\n  %s: `(.*?)`" % key, SRC, re.S).group(1)
+def rows(key, src):
+    body = re.search(r"\n  %s: `(.*?)`" % key, src, re.S).group(1)
     return [r for r in csv.reader(io.StringIO(body)) if r]
 
 
 def day(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d")
+
+
+def stamp(s):
+    return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M")
 
 
 BOOKS = {
@@ -40,16 +46,22 @@ BOOKS = {
         ("app_activity", "appActivityCSV", (int, day), ((2, "yyyy-mm-dd"),)),
         ("app_orders", "appOrdersCSV", (int, day, float), ((2, "yyyy-mm-dd"), (3, "0.00"))),
     ),
+    "vilka.xlsx": (
+        ("customers", "customersCSV", (int, day, str, str, str), ((2, "yyyy-mm-dd"),)),
+        ("restaurants", "restaurantsCSV", (int, str, str), ()),
+        ("orders", "ordersCSV", (int, int, int, stamp, int, int, str), ((4, "yyyy-mm-dd hh:mm"),)),
+        ("experiment", "experimentCSV", (int, str, day), ((3, "yyyy-mm-dd"),)),
+    ),
 }
 
 
-def build(sheets):
+def build(sheets, src):
     wb = Workbook()
     wb.properties.creator = "Тетрадь аналитика"
     wb.properties.created = wb.properties.modified = STAMP
     wb.remove(wb.active)
     for name, key, cast, fmts in sheets:
-        data = rows(key)
+        data = rows(key, src)
         ws = wb.create_sheet(name)
         ws.append(data[0])
         for c in ws[1]:
@@ -85,12 +97,13 @@ def parts(blob):
 if __name__ == "__main__":
     stale = []
     for name, sheets in BOOKS.items():
-        out, blob = ROOT / name, build(sheets)
+        # у «Вилки» свои orders и customers — ключи совпадают с data.js, источник задаёт книга
+        out, blob = ROOT / name, build(sheets, VILKA if name == "vilka.xlsx" else SRC)
         if "--check" in sys.argv:
             if not out.exists() or parts(out.read_bytes()) != parts(blob):
                 stale.append(name)
             else:
-                print("%s совпадает с data.js" % name)
+                print("%s совпадает с данными" % name)
         else:
             out.write_bytes(blob)
             print("Готово: %s — %.0f КБ" % (name, out.stat().st_size / 1024))

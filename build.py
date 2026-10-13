@@ -63,7 +63,7 @@ html = drop(html, '<link rel="manifest" href="manifest.webmanifest">\n')
 EAGER = ("lessons.js", "content-core.js", "glossary.js", "tinker.js", "app.js")
 # на сайте грузятся по требованию — в файл кладём заранее, перед app.js
 LAZY = ("content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-        "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "data-taxi.js", "interview.js")
+        "content-m4.js", "content-m5.js", "content-m6.js", "content-m7.js", "data.js", "cheats.js", "data-taxi.js", "interview.js")
 
 # закрывающий тег внутри скрипта разорвал бы страницу — проверяем заранее
 for name in ("styles.css",) + EAGER + LAZY:
@@ -89,7 +89,7 @@ lazy = "".join("<script>\n" + read(n) + "\n</script>\n" for n in LAZY)
 # файлы для скачивания из уроков — data:-ссылками, app.js берёт их из window.FILES
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 files = "<script>\nwindow.FILES = %s;\n</script>\n" % json.dumps(
-    {n: data_uri(n, XLSX) for n in ("delta-market.xlsx", "app-journal.xlsx")})
+    {n: data_uri(n, XLSX) for n in ("delta-market.xlsx", "app-journal.xlsx", "vilka.xlsx")})
 html = swap(html, '<script src="app.js"></script>',
             files + lazy + "<script>\n" + read("app.js") + "\n</script>")
 
