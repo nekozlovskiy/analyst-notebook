@@ -1865,6 +1865,28 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .sum-d { display: block; margin-top: 2px; font-size: 14px; color: var(--ink-3); }
 .toc-mw a { color: var(--pen); }
 
+/* поля для чисел (урок «Excel и таблицы», задачи тренажёра nums) */
+.nm-file { margin: 0 0 18px; }
+.nm-file .btn { text-decoration: none; }
+.nums { list-style: none; margin: 0 0 18px; padding: 0; }
+.nm { padding: 12px 0; border-top: 1px solid var(--rule-soft); }
+.nm:first-child { border-top: 0; }
+.nm-l { display: block; font-size: 15px; line-height: 1.45; color: var(--ink); margin-bottom: 6px; }
+.nm-u { color: var(--ink-3); }
+.nm-row { display: flex; align-items: center; gap: 10px; }
+.nm-in {
+  /* 16px: при меньшем шрифте Safari на iPhone приближает страницу на фокусе */
+  width: 100%; max-width: 220px; font: 16px var(--mono); color: var(--ink);
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r);
+  padding: 8px 10px; font-variant-numeric: tabular-nums;
+}
+.nm-in:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.nm.ok .nm-in { border-color: var(--green); }
+.nm.bad .nm-in { border-color: var(--red); }
+.nm-mark { display: inline-flex; color: var(--green); width: 18px; height: 18px; }
+.nm-h { margin: 6px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.nm-sum { font: 13px var(--mono); color: var(--ink-3); }
+
 /* шпаргалки (#cheat-<id>): на экране — текст урока, плотнее;
    на бумаге — один лист A4 в две колонки, см. @media print */
 .cheat .ch-s { margin: 0 0 34px; }
@@ -2440,7 +2462,7 @@ window.COURSE = {
      Уроки — в порядке курса: первый непройденный станет ссылкой
      «что дальше». В прогрессе навыки не хранятся — переставлять,
      переименовывать и менять состав можно. Модуль 0, проекты 1.8 и 2.7
-     и карьерные 6.1, 6.2, 6.6 в карту не входят. */
+     и карьерные 6.1, 6.2, 6.7 в карту не входят. */
   skills: [
     { id: "sql-agg",    group: "SQL",        title: "Агрегации и GROUP BY",        lessons: ["m1l3", "m6l3"] },
     { id: "sql-join",   group: "SQL",        title: "JOIN",                        lessons: ["m1l1"] },
@@ -2456,7 +2478,8 @@ window.COURSE = {
     { id: "ab",         group: "Статистика", title: "Дизайн и разбор A/B",         lessons: ["m3l4", "m3l5", "m3l6", "m3l8", "m3l7"] },
     { id: "regression", group: "Статистика", title: "Регрессия и причинность",     lessons: ["m5l1", "m5l2", "m5l3", "m5l4", "m5l5"] },
     { id: "metrics",    group: "Продукт",    title: "Воронки и метрики",           lessons: ["m4l2", "m4l4", "m4l5"] },
-    { id: "case",       group: "Продукт",    title: "Продуктовый кейс и дашборд",  lessons: ["m4l1", "m4l6", "m4l7", "m6l5"] }
+    { id: "case",       group: "Продукт",    title: "Продуктовый кейс и дашборд",  lessons: ["m4l1", "m4l6", "m4l7", "m6l5"] },
+    { id: "sheets",     group: "Продукт",    title: "Excel и Google Таблицы",      lessons: ["m6l7"] }
   ],
 
   modules: [
@@ -2760,6 +2783,11 @@ window.COURSE = {
           say: "думать вслух важнее, чем сразу написать верно",
           sayTask: "скажите, что собираетесь делать, до того как писать",
           sayDrills: "«Копия или вид» — здесь спотыкаются почти все" },
+        { id: "m6l7", title: "Excel и Google Таблицы на тестовом", kind: "sheet", ready: true,
+          desc: "сводная, ВПР и СУММЕСЛИМН на тех же данных",
+          say: "тестовое в xlsx — та же аналитика, другим инструментом",
+          sayTask: "сначала ВПР, потом сводная — не наоборот",
+          sayDrills: "«Закрытые лиды» — восемь написаний четырёх статусов" },
         { id: "m6l5", title: "Продуктовые кейсы на интервью", kind: "text", ready: true,
           desc: "структура ответа на открытый вопрос",
           say: "структура ответа важнее самого ответа",
@@ -3792,6 +3820,9 @@ window.Tinker = (function () {
   return { draw: draw, label: label, mount: mount };
 })();
 
+</script>
+<script>
+window.FILES = {"delta-market.xlsx": "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,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"};
 </script>
 <script>
 /* ============================================================
@@ -31463,6 +31494,368 @@ jupyter lab</code></pre>
       d: "Инструмент, превращающий ноутбук в аккуратный HTML-отчёт или сайт. Хороший способ показать проект человеку, который не хочет открывать Jupyter." },
     { t: "Kaggle", url: "https://www.kaggle.com/", src: "Kaggle", lang: "EN",
       d: "Источник данных для проектов и площадка чужих ноутбуков. Смотреть чужие разборы полезно, а вот делать портфолио из типовых учебных наборов вроде «Титаника» не стоит." }
+  ]
+};
+
+
+window.CONTENT.m6l7 = {
+  intro: "Тестовое задание может прийти файлом xlsx с припиской «можно в Excel». Здесь — те же GROUP BY и JOIN, что вы уже умеете, только сводной таблицей и ВПР, и ловушки, на которых в таблицах теряют числа.",
+
+  duration: "≈ 2 часа",
+  plan: [
+    { m: "30 мин", w: "Теория и карточки: перевод с SQL на язык таблиц и пять ловушек" },
+    { m: "40 мин", w: "Задача: пять чисел по каналам и городам" },
+    { m: "35 мин", w: "Тренажёр: пять задач, ответ числом" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "5 мин",  w: "Заметки" }
+  ],
+
+  file: "delta-market.xlsx",
+
+  theory: `
+<p class="lead">В файле урока — та же база «Дельта Маркета», что в SQL-уроках: лист <code>orders</code> (215 заказов), лист <code>users</code> (220 пользователей) и лист <code>leads</code> (63 строки из CRM). Всё, что здесь посчитаете, можно сверить запросом — и задача урока сверяет каждое число с запросом к базе. Кнопка «Скачать данные» — в разделе «Основная задача»: откройте файл сразу и повторяйте примеры по ходу чтения.</p>
+
+<h3>Зачем Excel, если есть SQL</h3>
+<p>Три ситуации, в которых без таблиц не обойтись. Тестовое задание: компания присылает выгрузку файлом и ждёт ответ файлом. Заказчик: маркетинг и финансы читают xlsx, а не SQL, и правят цифры прямо в ячейках. Быстрая проверка: двести строк из выгрузки глазами и фильтром смотреть быстрее, чем писать запрос.</p>
+
+<h3>Перевод с SQL на язык таблиц</h3>
+<table class="tbl">
+  <tr><th>Что делаем</th><th>SQL</th><th>Excel с русским интерфейсом</th><th>Google Таблицы</th></tr>
+  <tr><td>отобрать строки</td><td><code>WHERE</code></td><td>Данные → Фильтр</td><td>Данные → Создать фильтр</td></tr>
+  <tr><td>агрегат с условием</td><td><code>SUM … WHERE</code></td><td><code>СУММЕСЛИМН</code>, <code>СЧЁТЕСЛИМН</code>, <code>СРЗНАЧЕСЛИМН</code></td><td><code>SUMIFS</code>, <code>COUNTIFS</code>, <code>AVERAGEIFS</code></td></tr>
+  <tr><td>подтянуть столбец по ключу</td><td><code>LEFT JOIN</code></td><td><code>ВПР(…; …; …; ЛОЖЬ)</code>, <code>ПРОСМОТРX</code></td><td><code>VLOOKUP(…, …, …, FALSE)</code>, <code>XLOOKUP</code></td></tr>
+  <tr><td>группировка</td><td><code>GROUP BY</code></td><td>Вставка → Сводная таблица</td><td>Вставка → Сводная таблица</td></tr>
+  <tr><td>убрать пробелы и регистр</td><td><code>TRIM</code>, <code>LOWER</code></td><td><code>СЖПРОБЕЛЫ</code>, <code>СТРОЧН</code></td><td><code>TRIM</code>, <code>LOWER</code></td></tr>
+</table>
+<p>Английские имена Google Таблицы понимают при любом языке интерфейса. Excel с русским интерфейсом понимает только русские: <code>VLOOKUP</code> там — ошибка <code>#ИМЯ?</code>.</p>
+<p>Разделитель аргументов зависит от региональных настроек файла, а не от программы: при настройках «Россия» и в Excel, и в Google Таблицах — точка с запятой, при «США» — запятая. В Google регион меняется в Файл → Настройки. Формулы для Google в этом уроке записаны для региона «США», через запятую; при регионе «Россия» замените запятые на <code>;</code>.</p>
+
+<h3>ВПР — это LEFT JOIN по одному столбцу</h3>
+<p>Канал привлечения лежит в <code>users</code>, а выручка — в <code>orders</code>. В SQL их соединяет <code>JOIN … USING(user_id)</code>. В таблице к листу <code>orders</code> добавляют столбец: в <code>F1</code> — заголовок <code>channel</code> (без заголовка сводная таблица не примет столбец), в <code>F2</code> — формулу:</p>
+<pre><code>=ВПР(B2; users!A:E; 3; ЛОЖЬ)          Excel
+=VLOOKUP(B2, users!A:E, 3, FALSE)     Google Таблицы</code></pre>
+<p>Читается так: возьми <code>user_id</code> из <code>B2</code>, найди его в первом столбце диапазона <code>users!A:E</code> и верни третий столбец этого диапазона — <code>channel</code>. У заказа 1 пользователь 1, его канал — <code>organic</code>.</p>
+<ul>
+  <li><code>users!A:E</code> — столбцы с A по E целиком на листе <code>users</code>. Адрес можно набрать руками или, начав формулу, перейти на лист <code>users</code> и выделить столбцы мышью.</li>
+  <li>Формулу копируют на все 215 строк: выделить <code>F2</code> и дважды щёлкнуть по квадратику в правом нижнем углу ячейки — она протянется до конца данных. При этом <code>B2</code> сам превращается в <code>B3</code>, <code>B4</code>…, а целые столбцы <code>users!A:E</code> не сдвигаются.</li>
+  <li>Если выделить диапазон с номерами строк, <code>users!A2:E221</code>, при протягивании он уедет вниз, и в нижних строках появится <code>#Н/Д</code>. Номера закрепляют знаком доллара: <code>users!$A$2:$E$221</code>.</li>
+</ul>
+<div class="callout trap">
+  <span class="ct">ВПР без ЛОЖЬ ищет приблизительно</span>
+  <p>Последний аргумент по умолчанию — <code>ИСТИНА</code>: ВПР считает первый столбец отсортированным и при отсутствии ключа молча берёт ближайший меньший. Ошибки не будет, будет чужой канал у заказа. Поэтому в последнем аргументе всегда <code>ЛОЖЬ</code> или <code>0</code>; тогда отсутствующий ключ даёт <code>#Н/Д</code> — так же, как <code>LEFT JOIN</code> даёт <code>NULL</code>.</p>
+  <p style="margin-bottom:0">Второе ограничение: ВПР ищет только в первом столбце диапазона и возвращает столбцы правее. <code>ПРОСМОТРX</code> (<code>XLOOKUP</code>) этих ограничений не имеет: <code>=ПРОСМОТРX(B2; users!A:A; users!C:C)</code>. Его нет в Excel 2019 и раньше — на тестовом пишите ВПР, если не знаете версию у проверяющего. В старых файлах вместо ПРОСМОТРX встречается пара <code>ИНДЕКС(диапазон ответа; ПОИСКПОЗ(ключ; диапазон поиска; 0))</code>: ПОИСКПОЗ находит номер строки, ИНДЕКС берёт из неё значение.</p>
+</div>
+
+<h3>Сводная таблица — это GROUP BY</h3>
+<p>Когда канал подтянут, выручку по каналам считает сводная: выделить таблицу, Вставка → Сводная таблица, в строки — <code>channel</code>, в значения — сумма <code>revenue</code>, в фильтр — <code>status</code>. Затем выбрать в фильтре значение <code>paid</code>: в Excel — в выпадающем списке над сводной, в Google — Фильтры → Фильтровать по значениям. Из 215 заказов оплачены 189, ещё 13 — возвраты и 13 ждут оплаты: без фильтра в выручку попадут все три статуса.</p>
+<ul>
+  <li>Сводная в Excel не пересчитывается сама: после правки данных — Данные → Обновить все. Google Таблицы обновляют сводную сразу.</li>
+  <li>Сводная считает по диапазону, который был выделен при создании. Строки, дописанные ниже, в неё не попадут — поэтому выделяют целые столбцы. В Excel тогда в сводной появится строка «(пустые)» от пустых ячеек под данными: её можно снять в фильтре строк. Другой путь в Excel — сделать из данных «умную таблицу» (Вставка → Таблица), она растёт сама; в Google это не нужно.</li>
+</ul>
+
+<h3>СУММЕСЛИМН — агрегат с WHERE в одной ячейке</h3>
+<p>Когда нужно одно число, а не таблица, хватает функции с условиями. Пары «диапазон условия; условие» можно повторять:</p>
+<pre><code>=СУММЕСЛИМН(orders!D:D; orders!E:E; "paid"; orders!F:F; "organic")
+=SUMIFS(orders!D:D, orders!E:E, "paid", orders!F:F, "organic")</code></pre>
+<p>Здесь <code>F</code> — столбец с каналом, который добавили через ВПР. Это тот же запрос <code>SUM(revenue) … WHERE status = 'paid' AND channel = 'organic'</code>. У родственных функций порядок тот же — сначала что считать, потом пары условий:</p>
+<pre><code>=СРЗНАЧЕСЛИМН(D:D; E:E; "paid")            среднее revenue по paid
+=СЧЁТЕСЛИМН(E:E; "paid"; G:G; "Москва")     сколько строк: без диапазона
+                                           суммирования, сразу пары</code></pre>
+<p>Осторожно со старыми функциями с одним условием: у <code>СУММЕСЛИ</code> и <code>СРЗНАЧЕСЛИ</code> порядок обратный — <code>СУММЕСЛИ(E:E; "paid"; D:D)</code>, диапазон суммирования в конце. Проще всегда писать вариант с <code>…МН</code>, он работает и с одним условием.</p>
+<p>Условие со сравнением — текст в кавычках: <code>"&gt;0"</code>, <code>"&lt;&gt;paid"</code>. Для даты к тексту приклеивают саму дату: <code>"&gt;=" &amp; ДАТА(2024;6;1)</code>. Здесь <code>ДАТА(год; месяц; день)</code> собирает дату из чисел, а <code>&amp;</code> склеивает знак сравнения с ней в одно условие.</p>
+<p>Условием может быть и ссылка на ячейку без кавычек: <code>СЧЁТЕСЛИМН(orders!B:B; A2)</code> считает заказы пользователя из ячейки <code>A2</code>.</p>
+
+<h3>COUNT(DISTINCT) — через вспомогательный столбец</h3>
+<p>Готового «посчитать разных» в СЧЁТЕСЛИМН нет. Например, сколько пользователей сделали хотя бы один возврат: на листе <code>users</code> в <code>F1</code> заголовок <code>refunds</code>, в <code>F2</code> — <code>=СЧЁТЕСЛИМН(orders!B:B; A2; orders!E:E; "refunded")</code>, протянуть на 220 строк. Получится число возвратов каждого. Затем в свободной ячейке вне столбца F — <code>=СЧЁТЕСЛИ(F:F; "&gt;0")</code>: 12 пользователей при 13 возвратах. Формулу итога нельзя ставить в сам столбец F — она сослалась бы на себя.</p>
+<p>Делить на число строк удобно через <code>СЧЁТ(A:A)</code>: он считает только числа, поэтому заголовок не попадает. <code>СЧЁТЗ</code> считает непустые ячейки и посчитал бы заголовок. Результат деления — доля, 0,0545; процентный формат ячейки (кнопка % на панели) покажет 5,45%.</p>
+
+<h3>Ещё три ловушки</h3>
+<ul>
+  <li><strong>Разделитель аргументов.</strong> Формулу из англоязычной статьи с запятыми при региональных настройках «Россия» приходится переписывать через <code>;</code> — и в Excel, и в Google.</li>
+  <li><strong>Число или дата текстом.</strong> Признак — значение прижато к левому краю ячейки, а сумма по столбцу равна нулю. В листе <code>leads</code> так записаны суммы сделок: <code>"22 250,28"</code> — это строка.</li>
+  <li><strong>Разные написания одного значения.</strong> В <code>leads</code> статус «закрыт» записан двумя способами, «новый» — тремя. <code>СЧЁТЕСЛИ</code> регистр не различает, а пробелы по краям — различает. Внутрь условия <code>СЖПРОБЕЛЫ</code> не вставить, поэтому делают вспомогательный столбец <code>=СТРОЧН(СЖПРОБЕЛЫ(F2))</code> и считают уже по нему.</li>
+</ul>
+
+<h3>Как сдавать тестовое в xlsx</h3>
+<ol>
+  <li>Исходные данные — на отдельном листе и без правок руками.</li>
+  <li>Расчёты — формулами, а не вставленными числами: проверяющий щёлкнет по ячейке и увидит, как получено число.</li>
+  <li>Первый лист — ответ: три-пять чисел с подписями и вывод в две строки.</li>
+</ol>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Результат для маркетинга и финансов обычно уходит файлом: выгрузка, сверка с бухгалтерией, таблица для презентации. Запрос пишется в SQL, а последняя миля — сводная и пара ВПР, которые заказчик сможет обновить без вас.</p>
+</div>
+
+<div class="callout jobs">
+  <span class="ct">Что закрывает урок в вакансиях</span>
+  <ul>
+    <li>«Уверенный Excel: сводные таблицы, ВПР» — формулировка из вакансий джунов</li>
+    <li>Тестовое задание: «во вложении выгрузка, посчитайте метрики по каналам»</li>
+    <li>Вопрос на интервью: «чем ВПР отличается от ПРОСМОТРX и что будет без последнего аргумента»</li>
+  </ul>
+</div>
+`,
+
+  ticket: {
+    from: "Ира, маркетинг",
+    subj: "Цифры по каналам к вечеру",
+    body: `
+<p>Привет. Во вложении выгрузка заказов и пользователей за январь–сентябрь 2024 года. До вечера нужны пять чисел для слайда, считать можно в Excel или Google Таблицах.</p>
+<ul>
+  <li>выручка оплаченных заказов пользователей из канала organic и отдельно из paid_search;</li>
+  <li>средний чек оплаченного заказа;</li>
+  <li>сколько оплаченных заказов сделали пользователи из Москвы;</li>
+  <li>какая доля пользователей сделала хотя бы один оплаченный заказ.</li>
+</ul>
+<p><strong>Задание.</strong> Скачайте файл, посчитайте и введите числа в поля ниже. Суммы — с копейками, можно с пробелами и запятой. Долю — в процентах, например 12,34, а не 0,1234.</p>
+`
+  },
+
+  schema: `
+<p>Файл <code>delta-market.xlsx</code>, кнопка «Скачать данные» над полями. Листы:</p>
+<pre><code>orders  215 строк   order_id, user_id, order_date, revenue, status
+users   220 строк   user_id, signup_date, channel, city, platform
+leads    63 строки  lead_id, created, source, city, deal_sum, status, manager</code></pre>
+<p>Статусы заказов: <code>paid</code> — оплачен, <code>refunded</code> — возврат, <code>pending</code> — ждёт оплаты. Ключ между листами — <code>user_id</code>.</p>
+<p><strong>Google Таблицы:</strong> Файл → Импорт → Загрузка, выбрать скачанный файл, «Создать таблицу». <strong>Без Excel</strong> файл откроет и LibreOffice Calc — функции этого урока там называются так же, как в русском Excel.</p>
+<p><strong>Как проверяется задание.</strong> Каждое число сверяется с расчётом на той же базе. Допуск — копейка в суммах и сотая доля процента; под неверным полем появится, что проверить.</p>
+`,
+
+  fields: [
+    { label: "Выручка оплаченных заказов пользователей из канала organic", unit: "₽",
+      answer: 271926.54, tol: 1,
+      hint: "В сумму попали и возвраты? Нужны только строки со status = paid; канал подтягивается ВПР из листа users по user_id.",
+      check: "SELECT ROUND(SUM(o.revenue), 2) FROM orders o JOIN users u USING(user_id) WHERE o.status = 'paid' AND u.channel = 'organic';" },
+    { label: "То же для канала paid_search", unit: "₽",
+      answer: 141330.95, tol: 1,
+      hint: "Проверьте фильтр по статусу и написание канала в условии: paid_search — с подчёркиванием, без пробелов.",
+      check: "SELECT ROUND(SUM(o.revenue), 2) FROM orders o JOIN users u USING(user_id) WHERE o.status = 'paid' AND u.channel = 'paid_search';" },
+    { label: "Средний чек оплаченного заказа", unit: "₽",
+      answer: 3457.3, tol: 0.5,
+      hint: "Среднее по всем 215 заказам и по 189 оплаченным — разные числа: СРЗНАЧЕСЛИМН с условием на status.",
+      check: "SELECT ROUND(AVG(revenue), 2) FROM orders WHERE status = 'paid';" },
+    { label: "Оплаченных заказов от пользователей из Москвы",
+      answer: 53, tol: 0,
+      hint: "Город лежит в users — сначала ВПР города к заказам, потом СЧЁТЕСЛИМН по двум условиям: город и status = paid.",
+      check: "SELECT COUNT(*) FROM orders o JOIN users u USING(user_id) WHERE o.status = 'paid' AND u.city = 'Москва';" },
+    { label: "Доля пользователей с хотя бы одним оплаченным заказом", unit: "%",
+      answer: 47.27, tol: 0.06,
+      hint: "Знаменатель — все 220 пользователей листа users, а не покупатели. Числитель — через вспомогательный столбец на листе users, как в разделе «COUNT(DISTINCT)» теории, только со status = paid.",
+      check: "SELECT ROUND(100.0 * COUNT(DISTINCT user_id) / (SELECT COUNT(*) FROM users), 2) FROM orders WHERE status = 'paid';" }
+  ],
+
+  hints: [
+    "Начните с одного столбца: на листе <code>orders</code> добавьте <code>channel</code> через <code>ВПР(B2; users!A:E; 3; ЛОЖЬ)</code> и рядом <code>city</code> — тот же ВПР с номером столбца 4. После этого все пять чисел считаются по одному листу.",
+    "Выручку по каналам удобно взять из сводной: строки — <code>channel</code>, значения — сумма <code>revenue</code>, фильтр — <code>status = paid</code>. Средний чек — <code>СРЗНАЧЕСЛИМН(D:D; E:E; \"paid\")</code>, заказы из Москвы — <code>СЧЁТЕСЛИМН(E:E; \"paid\"; G:G; \"Москва\")</code>.",
+    "Доля купивших: на листе <code>users</code> добавьте столбец <code>=СЧЁТЕСЛИМН(orders!B:B; A2; orders!E:E; \"paid\")</code> — число оплаченных заказов пользователя. Купивших — <code>СЧЁТЕСЛИ</code> по этому столбцу с условием <code>\"&gt;0\"</code> в ячейке вне столбца; делить на <code>СЧЁТ(A:A)</code> и перевести в проценты."
+  ],
+
+  reference: `
+<p><strong>Эталонный разбор.</strong> Сначала два служебных столбца на листе <code>orders</code>: <code>F</code> — канал, <code>G</code> — город.</p>
+<pre><code>F2: =ВПР(B2; users!A:E; 3; ЛОЖЬ)       =VLOOKUP(B2, users!A:E, 3, FALSE)
+G2: =ВПР(B2; users!A:E; 4; ЛОЖЬ)       =VLOOKUP(B2, users!A:E, 4, FALSE)</code></pre>
+<p>Дальше каждое число — одной формулой (в Google Таблицах те же функции; по-английски — SUMIFS, AVERAGEIFS, COUNTIFS):</p>
+<pre><code>organic       =СУММЕСЛИМН(D:D; E:E; "paid"; F:F; "organic")      271 926,54
+paid_search   =СУММЕСЛИМН(D:D; E:E; "paid"; F:F; "paid_search")  141 330,95
+средний чек   =СРЗНАЧЕСЛИМН(D:D; E:E; "paid")                     3 457,30
+Москва        =СЧЁТЕСЛИМН(E:E; "paid"; G:G; "Москва")                   53
+доля купивших 104 из 220                                            47,27%</code></pre>
+<p>Для доли на листе <code>users</code> столбец <code>F2: =СЧЁТЕСЛИМН(orders!B:B; A2; orders!E:E; "paid")</code>, затем в свободной ячейке вне столбца F — <code>=СЧЁТЕСЛИ(F:F; "&gt;0") / СЧЁТ(A:A)</code> в процентном формате. Это тот же запрос <code>COUNT(DISTINCT user_id)</code> по оплаченным заказам, делённый на всех пользователей.</p>
+<p>Выручку по всем каналам сразу даёт сводная: строки — <code>channel</code>, значения — сумма <code>revenue</code>, фильтр — <code>paid</code>. Строк пять: у шестого канала, partner, оплаченных заказов нет. В сумме они дают 653 428,78 ₽, столько же даёт <code>СУММЕСЛИ(E:E; "paid"; D:D)</code>, и строки <code>#Н/Д</code> в сводной нет — значит, ВПР нашёл канал каждому заказу.</p>
+<p><strong>Где теряют числа.</strong> Без фильтра по статусу organic даёт сумму всех трёх статусов. ВПР без <code>ЛОЖЬ</code> на отсортированном справочнике случайно работает, но сломается, как только в <code>orders</code> попадёт <code>user_id</code>, которого нет в <code>users</code>. Доля, посчитанная от покупателей, а не от всех пользователей, всегда равна 100%.</p>
+`,
+
+  drills: [
+    {
+      title: "СЧЁТЕСЛИМН: iOS из Казани",
+      level: "easy",
+      answer: "nums",
+      body: `<p>Сколько пользователей на листе <code>users</code> пользуются iOS и живут в Казани?</p>`,
+      fields: [
+        { label: "Пользователей iOS из Казани", answer: 20, tol: 0,
+          hint: "Два условия по двум столбцам: platform = ios и city = Казань. СЧЁТЕСЛИМН с двумя парами «диапазон; условие».",
+          check: "SELECT COUNT(*) FROM users WHERE platform = 'ios' AND city = 'Казань';" }
+      ],
+      solution: `=СЧЁТЕСЛИМН(users!E:E; "ios"; users!D:D; "Казань")
+=COUNTIFS(users!E:E, "ios", users!D:D, "Казань")
+
+Результат: 20.`,
+      note: "То же самое, что <code>SELECT COUNT(*) FROM users WHERE platform = 'ios' AND city = 'Казань'</code>. Каждая пара аргументов — одно условие из <code>WHERE</code>, соединённое через AND."
+    },
+    {
+      title: "Средний чек за июнь",
+      level: "mid",
+      answer: "nums",
+      body: `<p>Средний чек оплаченных заказов, сделанных с 1 по 30 июня 2024 года включительно.</p>`,
+      fields: [
+        { label: "Средний чек оплаченных заказов за июнь 2024", unit: "₽", answer: 3233.19, tol: 0.5,
+          hint: "Три условия: status = paid, дата не раньше 1 июня и не позже 30 июня. Условие на дату — строкой со сравнением и датой: \">=\" & ДАТА(2024;6;1).",
+          check: "SELECT ROUND(AVG(revenue), 2) FROM orders WHERE status = 'paid' AND order_date BETWEEN '2024-06-01' AND '2024-06-30';" }
+      ],
+      solution: `=СРЗНАЧЕСЛИМН(orders!D:D; orders!E:E; "paid";
+              orders!C:C; ">=" & ДАТА(2024;6;1);
+              orders!C:C; "<=" & ДАТА(2024;6;30))
+=AVERAGEIFS(orders!D:D, orders!E:E, "paid",
+            orders!C:C, ">=" & DATE(2024,6,1),
+            orders!C:C, "<=" & DATE(2024,6,30))
+
+Результат: 3 233,19 ₽ по 32 заказам.`,
+      note: "Даты в файле — настоящие даты, поэтому сравнение работает. Если бы дата лежала текстом, как в листе <code>leads</code>, условие молча не нашло бы ни одной строки и функция вернула бы <code>#ДЕЛ/0!</code>."
+    },
+    {
+      title: "Сводная в два измерения",
+      level: "mid",
+      answer: "nums",
+      body: `<p>Постройте сводную по оплаченным заказам: в строках — канал, в столбцах — платформа, в значениях — сумма выручки. Какая выручка в клетке referral × android?</p>`,
+      fields: [
+        { label: "Оплаченная выручка android-пользователей из канала referral", unit: "₽", answer: 6037.09, tol: 1,
+          hint: "Платформа, как и канал, лежит в users: к orders нужен ещё один ВПР — пятый столбец диапазона users!A:E.",
+          check: "SELECT ROUND(SUM(o.revenue), 2) FROM orders o JOIN users u USING(user_id) WHERE o.status = 'paid' AND u.channel = 'referral' AND u.platform = 'android';" }
+      ],
+      solution: `На листе orders:
+  F2: =ВПР(B2; users!A:E; 3; ЛОЖЬ)   канал
+  H2: =ВПР(B2; users!A:E; 5; ЛОЖЬ)   платформа
+Сводная: строки — канал, столбцы — платформа,
+значения — сумма revenue, фильтр — status = paid.
+
+Без сводной: =СУММЕСЛИМН(D:D; E:E; "paid"; F:F; "referral"; H:H; "android")
+
+Результат: 6 037,09 ₽.`,
+      note: "Сводная в два измерения — это <code>GROUP BY channel, platform</code>, развёрнутый в таблицу, как <code>pivot_table</code> в pandas."
+    },
+    {
+      title: "Доля возвратов",
+      level: "easy",
+      answer: "nums",
+      body: `<p>Какая доля всех заказов на листе <code>orders</code> закончилась возвратом (<code>status = refunded</code>)? Ответ в процентах.</p>`,
+      fields: [
+        { label: "Доля заказов со статусом refunded", unit: "%", answer: 6.05, tol: 0.06,
+          hint: "Знаменатель — все 215 заказов, а не оплаченные: СЧЁТ по столбцу order_id, не СЧЁТЗ — тот посчитает и заголовок.",
+          check: "SELECT ROUND(100.0 * SUM(status = 'refunded') / COUNT(*), 2) FROM orders;" }
+      ],
+      solution: `=СЧЁТЕСЛИ(orders!E:E; "refunded") / СЧЁТ(orders!A:A)
+=COUNTIF(orders!E:E, "refunded") / COUNT(orders!A:A)
+
+13 / 215 = 6,05%. Формат ячейки — процентный,
+иначе увидите 0,0605.`,
+      note: "<code>СЧЁТ</code> считает только числа, поэтому заголовок столбца в знаменатель не попадает, а <code>СЧЁТЗ</code> посчитал бы и его."
+    },
+    {
+      title: "Закрытые лиды",
+      level: "hard",
+      answer: "nums",
+      body: `<p>Лист <code>leads</code> — ручная выгрузка из CRM: статус записан как попало. Сколько лидов в статусе «закрыт» в любом написании?</p>`,
+      fields: [
+        { label: "Лидов в статусе «закрыт»", answer: 19, tol: 0,
+          hint: "Посмотрите все варианты через фильтр по столбцу status: «Закрыт» и «закрыт» — один статус. СЧЁТЕСЛИ регистр не различает.",
+          check: "SELECT COUNT(*) FROM leads WHERE TRIM(status) IN ('Закрыт', 'закрыт');" }
+      ],
+      solution: `Фильтр по столбцу status показывает 8 написаний четырёх статусов:
+  Закрыт 10, закрыт 9, Новый 10, НОВЫЙ 9, новый 7,
+  в работе 10, В работе 3, отказ 5.
+
+=СЧЁТЕСЛИ(leads!F:F; "закрыт")   регистр не важен → 19
+=COUNTIF(leads!F:F, "закрыт")
+
+Если бы где-то стоял пробел по краям, СЧЁТЕСЛИ его бы не простил:
+сначала столбец =СТРОЧН(СЖПРОБЕЛЫ(F2)), потом счёт по нему.`,
+      note: "В уроке 1.3 написания статуса перечисляли списком в <code>IN</code>, потому что <code>LOWER</code> в SQLite не трогает кириллицу. Табличные функции регистр кириллицы понимают."
+    }
+  ],
+
+  quiz: [
+    {
+      q: "Что вернёт ВПР без последнего аргумента, если искомого user_id нет в справочнике?",
+      opts: [
+        "Ошибку #Н/Д, как NULL в LEFT JOIN",
+        "Пустую ячейку вместо найденного значения",
+        "Значение строки с ближайшим меньшим ключом",
+        "Ноль, как СУММ по пустому диапазону ячеек"
+      ],
+      right: 2,
+      why: "По умолчанию последний аргумент — ИСТИНА, приблизительный поиск: ВПР считает первый столбец отсортированным и берёт ближайший меньший ключ, без ошибки. С ЛОЖЬ отсутствующий ключ даёт #Н/Д, как NULL в LEFT JOIN."
+    },
+    {
+      q: "Формула из англоязычной статьи <code>=SUMIFS(D:D, E:E, \"paid\")</code> в Excel с русским интерфейсом даёт ошибку. Что поправить?",
+      opts: [
+        "Только запятые заменить на точку с запятой",
+        "Взять кавычки-ёлочки вместо прямых кавычек",
+        "Убрать кавычки вокруг слова paid",
+        "Имя на СУММЕСЛИМН и запятые на «;»"
+      ],
+      right: 3,
+      why: "Excel с русским интерфейсом понимает только русские имена функций, а при региональных настройках «Россия» разделитель аргументов — точка с запятой. Нужны обе правки."
+    },
+    {
+      q: "Данные в листе исправили, а сводная в Excel показывает прежние суммы. Почему?",
+      opts: [
+        "Сводная Excel обновляется по команде",
+        "В сводной сломалась формула суммы",
+        "Сводная считает только первые 100 строк листа",
+        "Исправленные ячейки превратились в текст"
+      ],
+      right: 0,
+      why: "Сводная Excel хранит свой снимок данных и обновляется командой Данные → Обновить все. Google Таблицы обновляют сводную сразу."
+    },
+    {
+      q: "Сумма по столбцу с суммами сделок равна нулю, а числа в ячейках видны. Что вероятнее всего?",
+      opts: [
+        "В столбце есть пустые ячейки между числами",
+        "Числа записаны текстом",
+        "Сумма слишком большая для формата ячейки",
+        "В файле выключен автоматический пересчёт"
+      ],
+      right: 1,
+      why: "Текст СУММ пропускает. Признаки — значения прижаты к левому краю, в них пробелы-разделители или запятая, как «22 250,28» в листе leads."
+    },
+    {
+      q: "Нужно подтянуть к заказу канал, а ключ user_id в справочнике стоит правее канала. Что сработает?",
+      opts: [
+        "ВПР с отрицательным номером столбца ответа",
+        "ВПР с ИСТИНА в последнем аргументе",
+        "ПРОСМОТРX: поиск и ответ — любые столбцы",
+        "Сводная таблица по листу справочника users"
+      ],
+      right: 2,
+      why: "ВПР ищет только в первом столбце диапазона и возвращает столбцы правее. ПРОСМОТРX принимает отдельно диапазон поиска и диапазон ответа. В старых версиях Excel его заменяет пара ИНДЕКС и ПОИСКПОЗ."
+    },
+    {
+      q: "Сколько строк насчитает <code>СЧЁТЕСЛИ(F:F; \"закрыт\")</code> в столбце, где 10 раз стоит «Закрыт» и 9 раз «закрыт»?",
+      opts: [
+        "9: совпадение должно быть точным",
+        "10: учитывается первое написание",
+        "0: в условии нужна звёздочка",
+        "19: регистр не различается"
+      ],
+      right: 3,
+      why: "Условия СЧЁТЕСЛИ и СУММЕСЛИМН регистр не различают — и в Excel, и в Google Таблицах. А пробелы по краям различают, поэтому грязный столбец сначала проходит через СЖПРОБЕЛЫ во вспомогательном столбце."
+    }
+  ],
+
+  cards: [
+    { q: "Каким SQL-конструкциям соответствуют ВПР, СУММЕСЛИМН и сводная таблица?",
+      a: "ВПР — LEFT JOIN по одному столбцу. СУММЕСЛИМН и СЧЁТЕСЛИМН — агрегат с WHERE в одной ячейке. Сводная — GROUP BY, в два измерения — как pivot_table." },
+    { q: "Зачем в ВПР последний аргумент ЛОЖЬ?",
+      a: "Без него поиск приблизительный: при отсутствии ключа ВПР молча возьмёт строку с ближайшим меньшим. С ЛОЖЬ отсутствующий ключ даёт #Н/Д." },
+    { q: "Чем ПРОСМОТРX лучше ВПР?",
+      a: "Ищет в любом столбце, а не только в первом, возвращает столбцы и левее, точный поиск — по умолчанию. Минус: его нет в Excel 2019 и раньше." },
+    { q: "Почему формула из англоязычной статьи не работает в русском Excel?",
+      a: "Русский Excel понимает только русские имена функций (СУММЕСЛИМН вместо SUMIFS), а при десятичной запятой аргументы разделяются точкой с запятой." },
+    { q: "Как узнать, что число в ячейке записано текстом?",
+      a: "Значение прижато к левому краю, сумма по столбцу не меняется или равна нулю, в числе пробелы или запятая из выгрузки." },
+    { q: "Как оформить тестовое задание в xlsx?",
+      a: "Исходные данные — отдельным листом без правок. Расчёты — формулами, чтобы было видно, откуда число. Первый лист — ответ: три-пять чисел с подписями и вывод." }
+  ],
+
+  links: [
+    { t: "Функция ВПР", url: "https://support.microsoft.com/ru-ru/office/0bbc8083-26fe-4963-8ab8-93a18ad188a1", src: "Microsoft", lang: "RU",
+      d: "Справка Microsoft с примерами и разбором ошибок #Н/Д. Раздел про четвёртый аргумент стоит прочитать целиком." },
+    { t: "Функция ПРОСМОТРX", url: "https://support.microsoft.com/ru-ru/office/b7fd680e-6d10-43e6-84f9-88eae8bf5929", src: "Microsoft", lang: "RU",
+      d: "Замена ВПР в Excel 2021 и Microsoft 365: поиск в любом столбце, значение по умолчанию, поиск с конца." },
+    { t: "Сводные таблицы в Google Таблицах", url: "https://support.google.com/docs/answer/1272900?hl=ru", src: "Google", lang: "RU",
+      d: "Как создать сводную, добавить фильтр и вычисляемое поле. В Google Таблицах сводная обновляется сама." }
   ]
 };
 
@@ -71896,6 +72289,12 @@ const Lazy = {
   }
 };
 
+/* Файлы для скачивания (xlsx урока 6.5). В собранном офлайн-файле
+   рядом ничего нет — build.py кладёт их в window.FILES data:-ссылками. */
+const Files = {
+  url: function (name) { return (window.FILES && window.FILES[name]) || name; }
+};
+
 function loadCSS(href) {
   if (document.querySelector('link[href="' + href + '"]')) return;
   const l = document.createElement("link");
@@ -72133,7 +72532,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -73993,7 +74392,7 @@ function renderHome(app) {
         '<ol class="toc-list">';
     m.lessons.forEach(function (l) {
       const isDone = Course.isDone(l.id);
-      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sheet" ? "таблицы" : l.kind === "sql" ? "SQL" : "Python";
       const row =
         '<span class="toc-line">' +
           '<span class="toc-n">' + l.num + "</span>" +
@@ -74939,6 +75338,7 @@ const ICON = {
   bad:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+  down:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
   menu:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="15" height="15" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   find:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>'
 };
@@ -75454,7 +75854,7 @@ const CodeKit = {
 
   /* новый урок: своя схема и свой язык; всё прошлое убираем */
   lesson: function (L, C) {
-    CodeKit.setup(L.kind === "sql" ? "sql" : "python", L.kind === "text" ? [] : CodeKit.parse(C.schema), false);
+    CodeKit.setup(L.kind === "sql" ? "sql" : "python", L.kind === "text" || L.kind === "sheet" ? [] : CodeKit.parse(C.schema), false);
   },
   /* sandbox — сама песочница: ссылки «в песочницу» у её редактора нет */
   setup: function (kind, tables, sandbox) {
@@ -76393,8 +76793,116 @@ const Run = {
   }
 };
 
+/* ============================================================
+   Поля для чисел: урок kind: "sheet" и задача тренажёра answer: "nums"
+
+   Ученик считает в Excel или Google Таблицах и приносит числа. Поле —
+   { label, unit, answer, tol, hint, check }: tol — допуск по модулю
+   (по умолчанию 0,5), check — SQL-эталон для инструменты/checknums.js.
+   Ввод понимается так, как его копируют из таблицы: пробелы тысяч
+   (и неразрывные), ₽ и %, запятая вместо точки.
+   ============================================================ */
+
+const Nums = {
+  parse: function (s) {
+    const t = String(s == null ? "" : s).replace(/[\s\u00a0\u202f]/g, "")
+      .replace(/(р|руб)\.?$/i, "").replace(/[₽%]/g, "").replace(/^[−–]/, "-").replace(",", ".");
+    return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+  },
+  /* "frac" — у поля в процентах ввели долю (0,4727 вместо 47,27):
+     частая ошибка, когда в ячейке нет процентного формата */
+  judge: function (f, s) {
+    if (!String(s == null ? "" : s).trim()) return "empty";
+    const v = Nums.parse(s);
+    if (v === null) return "nan";
+    const tol = f.tol === undefined ? 0.5 : f.tol;
+    if (Math.abs(v - f.answer) <= tol) return "ok";
+    return f.unit === "%" && Math.abs(v * 100 - f.answer) <= tol ? "frac" : "bad";
+  },
+  /* сохранённое — строка JSON с массивом; всё остальное (старый текст,
+     обрезанная запись) — пустые поля, а не сломанный урок */
+  load: function (raw, n) {
+    let a = [];
+    try { a = JSON.parse(raw); } catch (e) { a = []; }
+    if (!Array.isArray(a)) a = [];
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(typeof a[i] === "string" ? a[i] : "");
+    return out;
+  },
+  /* все поля пустые — пустая строка: иначе перенос прогресса из файла
+     счёл бы "[\"\",…]" ответом и не взял бы числа из файла */
+  pack: function (values) {
+    return values.some(function (v) { return String(v).trim(); }) ? JSON.stringify(values) : "";
+  },
+  html: function (fields, prefix) {
+    return '<ol class="nums">' + fields.map(function (f, i) {
+      const id = prefix + "-" + i;
+      return '<li class="nm" data-i="' + i + '">' +
+        '<label class="nm-l" for="' + id + '">' + f.label +
+          (f.unit ? ', <span class="nm-u">' + esc(f.unit) + "</span>" : "") + "</label>" +
+        '<span class="nm-row"><input class="nm-in" id="' + id + '" type="text" inputmode="decimal" ' +
+          'autocomplete="off" spellcheck="false" aria-describedby="' + id + '-h">' +
+        '<span class="nm-mark"></span></span>' +
+        '<p class="nm-h" id="' + id + '-h" hidden></p></li>';
+    }).join("") + "</ol>";
+  },
+  /* onEnter — Enter в поле запускает проверку */
+  mount: function (root, fields, values, save, onEnter) {
+    const ins = Array.prototype.slice.call(root.querySelectorAll(".nm-in"));
+    function clear(li) {
+      li.classList.remove("ok", "bad");
+      const h = $(".nm-h", li);
+      h.hidden = true; h.textContent = "";
+      $(".nm-mark", li).innerHTML = "";
+      $(".nm-in", li).removeAttribute("aria-invalid");
+    }
+    ins.forEach(function (inp, i) {
+      inp.value = values[i] || "";
+      inp.addEventListener("input", function () {
+        clear(inp.closest(".nm"));
+        save(Nums.pack(ins.map(function (x) { return x.value; })));
+      });
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && onEnter) { e.preventDefault(); onEnter(); }
+      });
+    });
+    return {
+      values: function () { return ins.map(function (x) { return x.value; }); },
+      /* Пустое поле — вердикта нет ни по одному полю: иначе можно было бы
+         подбирать числа, не тратя попыток. При неудаче фокус уходит на
+         первое неверное поле — скринридер прочтёт подпись и подсказку. */
+      check: function () {
+        const v = ins.map(function (inp, i) { return Nums.judge(fields[i], inp.value); });
+        const r = { ok: v.every(function (x) { return x === "ok"; }), empty: 0, bad: 0, nan: 0 };
+        v.forEach(function (x) { if (x === "empty") r.empty++; else if (x === "nan") r.nan++; else if (x !== "ok") r.bad++; });
+        if (r.empty) { ins.forEach(function (inp) { clear(inp.closest(".nm")); }); return r; }
+        let first = null;
+        ins.forEach(function (inp, i) {
+          const x = v[i], li = inp.closest(".nm"), h = $(".nm-h", li);
+          clear(li);
+          if (x === "ok") {
+            li.classList.add("ok");
+            $(".nm-mark", li).innerHTML = ICON.ok + '<span class="sr">верно</span>';
+            return;
+          }
+          li.classList.add("bad");
+          inp.setAttribute("aria-invalid", "true");
+          h.hidden = false;
+          h.textContent = x === "nan" ? "Введите число: цифры, запятая или точка."
+            : x === "frac" ? "Похоже на долю, а не на проценты: умножьте на 100 или включите процентный формат ячейки."
+            : fields[i].hint;
+          if (!first) first = inp;
+        });
+        if (first) first.focus();
+        return r;
+      }
+    };
+  }
+};
+
 const Drills = {
   kind: function (L, d) {
+    if (d.answer === "nums") return "nums";
     if (d.answer === "text" || L.kind === "text") return "text";
     if (L.kind === "sql") return "sql";
     if (/\bplt\.|\bax\.(plot|bar|barh|hist)\(/.test(Drills.code(d))) return "plot";
@@ -76446,6 +76954,11 @@ const Drills = {
 
   itemHtml: function (L, d, i) {
     const k = Drills.kind(L, d);
+    if (k === "nums") {
+      return '<div class="dr-work">' + Nums.html(d.fields, "nm-" + L.id + "-d" + i) +
+        '<div class="st-actions"><button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button></div>" +
+        '<div class="status dr-status"></div></div>';
+    }
     if (k === "text") {
       return '<div class="dr-work">' +
         '<textarea class="answer dr-ans" aria-label="Ваш ответ на задачу ' + (i + 1) + '" ' +
@@ -76513,6 +77026,20 @@ const Drills = {
     function tried() {
       Store.set("attempts", triesKey, Store.get("attempts", triesKey, 0) + 1);
       if (reveal) reveal.hidden = false;
+    }
+
+    if (k === "nums") {
+      const nm = Nums.mount(q(".dr-work"), d.fields, Nums.load(Store.get("code", codeKey, null), d.fields.length),
+        function (v) { Store.set("code", codeKey, v); }, function () { q(".dr-check").click(); });
+      q(".dr-check").addEventListener("click", function () {
+        const r = nm.check();
+        if (r.ok) { solve(); status("ok", "Сошлось", "Разбор ниже — сверьте, той ли формулой шли."); return; }
+        if (r.empty) { status("warn", "Заполните все поля", "Попытка не засчитана."); return; }
+        if (r.nan && !r.bad) { status("warn", "Не похоже на число", "Под полем написано, что поправить. Попытка не засчитана."); return; }
+        tried();
+        status("bad", "Не сошлось", "Под полем — что проверить. Разбор открыт ниже.");
+      });
+      return;
     }
 
     if (k === "text") {
@@ -76672,7 +77199,7 @@ function renderLesson(app, id) {
   /* Пока человек читает теорию, в фоне подтягиваем учебную базу —
      первый запуск кода не будет её ждать. И модуль следующего урока,
      если он в другом модуле, — переход дальше откроется сразу.     */
-  if (L.kind !== "text") idle(function () { Lazy.data().catch(function () {}); });
+  if (L.kind !== "text" && L.kind !== "sheet") idle(function () { Lazy.data().catch(function () {}); });
   const after = Plan.after(id);
   if (after && after.module !== L.module) {
     idle(function () { Lazy.content(after.module.id).catch(function () {}); });
@@ -76705,7 +77232,9 @@ function renderLesson(app, id) {
   }
 
   const isText = L.kind === "text";
-  const kindLabel = isText ? "разбор кейса" : (L.kind === "sql" ? "SQL" : "Python");
+  const isSheet = L.kind === "sheet";     /* числа из Excel в поля, без редактора */
+  const noCode = isText || isSheet;
+  const kindLabel = isText ? "разбор кейса" : isSheet ? "Excel и таблицы" : (L.kind === "sql" ? "SQL" : "Python");
   const hasDrills = !!(C.drills && C.drills.length);
   const hasQuiz = !!(C.quiz && C.quiz.length);
   const hasCards = !!(C.cards && C.cards.length);
@@ -76730,7 +77259,7 @@ function renderLesson(app, id) {
       '<div class="block-h"><h2>Тренажёр</h2></div>' +
       '<p class="block-intro">' +
       "Ещё " + C.drills.length + " " + plural(C.drills.length, "задача", "задачи", "задач") +
-      " на ту же базу. У каждой свой редактор и проверка, разбор открывается после первой попытки: " +
+      " на ту же базу. У каждой " + (L.kind === "sheet" ? "свои поля и проверка" : "свой редактор и проверка") + ", разбор открывается после первой попытки: " +
       'готовый ответ, который вы не пробовали написать сами, не запоминается. <span id="drCount"></span></p>' +
       '<div class="drills">';
     C.drills.forEach(function (d, i) {
@@ -76816,7 +77345,10 @@ function renderLesson(app, id) {
 
       '<div class="loader" id="loader"><span class="spin"></span><span id="loaderTxt"></span></div>' +
 
-      (isText
+      (isSheet
+        ? '<p class="nm-file"><a class="btn" id="fileBtn" href="' + Files.url(C.file) + '" download="' + C.file + '">' +
+            ICON.down + "Скачать данные · " + esc(C.file) + "</a></p>" + Nums.html(C.fields, "nm-" + id)
+        : isText
         ? '<textarea class="answer" id="answer" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
         : '<div class="editor-shell">' +
             '<div class="editor-h"><span>' + (L.kind === "sql" ? "запрос.sql" : "решение.py") + "</span>" +
@@ -76826,7 +77358,7 @@ function renderLesson(app, id) {
           "</div>") +
 
       '<div class="actions">' +
-        (isText ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
+        (noCode ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
           "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
         '<button class="btn check" id="checkBtn" type="button">' + ICON.check + "Проверить</button>" +
         '<button class="btn" id="hintBtn" type="button" aria-label="Подсказка">' + ICON.bulb +
@@ -76839,14 +77371,14 @@ function renderLesson(app, id) {
 
       '<div class="io">' +
         '<div class="io-box"><div class="io-h"><span>' +
-          (isText ? "разбор вашего ответа" : "ваш вывод") + "</span></div>" +
+          (noCode ? "разбор вашего ответа" : "ваш вывод") + "</span></div>" +
           '<div class="io-body" id="outBox"><div class="empty">' +
-          (isText ? "Напишите ответ и нажмите «Проверить»." : "Пока пусто — нажмите «Запустить код».") +
+          (isSheet ? "Введите числа и нажмите «Проверить»." : isText ? "Напишите ответ и нажмите «Проверить»." : "Пока пусто — нажмите «Запустить код».") +
           "</div></div></div>" +
         '<div class="io-box"><div class="io-h"><span>' +
-          (isText ? "эталонный разбор" : "ожидаемый результат") + "</span>" +
+          (noCode ? "эталонный разбор" : "ожидаемый результат") + "</span>" +
           '<span class="spacer"></span><button class="linkbtn" id="refBtn" type="button">' +
-            (isText ? "показать" : "показать числа") + "</button>" +
+            (noCode ? "показать" : "показать числа") + "</button>" +
           "</div>" +
           '<div class="io-body" id="refBox"></div></div>' +
       "</div>" +
@@ -76927,7 +77459,7 @@ function renderLesson(app, id) {
   /* ---------- эталон ---------- */
   const refBox = $("#refBox");
   let showRef = function () {};
-  if (isText) {
+  if (noCode) {
     refBox.innerHTML = '<div class="empty">Скрыт, чтобы не подсматривать. Сначала напишите свой ответ.</div>';
     $("#refBtn").addEventListener("click", function () {
       refBox.innerHTML = '<div class="theory" style="font-size:15px">' + C.reference + "</div>";
@@ -76987,10 +77519,13 @@ function renderLesson(app, id) {
   }
 
   /* ---------- редактор ---------- */
-  let editor = null, answerEl = null;
+  let editor = null, answerEl = null, nums = null;
   const savedCode = Store.get("code", id, null);
 
-  if (isText) {
+  if (isSheet) {
+    nums = Nums.mount($("#s-task"), C.fields, Nums.load(savedCode, C.fields.length),
+      function (v) { Store.set("code", id, v); }, function () { check(); });
+  } else if (isText) {
     answerEl = $("#answer");
     answerEl.value = savedCode || "";
     answerEl.addEventListener("input", function () { Store.set("code", id, answerEl.value); });
@@ -77011,6 +77546,7 @@ function renderLesson(app, id) {
   }
 
   function getCode() {
+    if (isSheet) return Nums.pack(nums.values());
     if (isText) return answerEl.value;
     return editor ? editor.get() : $("#editor").value;
   }
@@ -77209,8 +77745,20 @@ function renderLesson(app, id) {
     }
   }
 
+  function checkNums() {
+    const r = nums.check();
+    const n = C.fields.length, good = n - r.empty - r.bad - r.nan;
+    $("#outBox").innerHTML = '<div class="nm-sum">Верно ' + good + " из " + n + "</div>";
+    if (r.ok) return pass("Все " + n + " " + plural(n, "число", "числа", "чисел") + " сошлись с расчётом на той же базе. " +
+                          "Откройте эталонный разбор справа: там формулы, которыми их удобнее всего получить.");
+    if (r.empty) { setStatus("warn", "Заполните все поля", "Пустых полей: " + r.empty + " из " + n + ". Попытка не засчитана."); return; }
+    if (r.nan && !r.bad) { setStatus("warn", "Не похоже на число", "Под полем написано, что поправить. Попытка не засчитана."); return; }
+    fail("не сошлось " + (r.bad + r.nan) + " из " + n + ". Под каждым таким полем — что проверить.");
+  }
+
   function check() {
     clearStatus();
+    if (isSheet) return checkNums();
     if (isText) return checkText();
     if (L.kind === "sql") return checkSQL();
     if (C.expected.plot) return checkPlot();
@@ -77262,7 +77810,7 @@ function renderLesson(app, id) {
   });
 
   $("#solBtn").addEventListener("click", function () {
-    const body = (isText ? "" :
+    const body = (noCode ? "" :
       "<p>Эталонный код с комментариями. Сравнивайте не синтаксис, а подход: где вы пошли другим путём и почему.</p>" +
       "<pre>" + esc(C.solution) + "</pre>") + (C.solutionNote || C.reference || "");
     modal("Решение", '<div class="theory" style="font-size:16px">' + body + "</div>");
@@ -77270,12 +77818,12 @@ function renderLesson(app, id) {
   });
 
   $("#checkBtn").addEventListener("click", check);
-  if (!isText) $("#runBtn").addEventListener("click", run);
+  if (!noCode) $("#runBtn").addEventListener("click", run);
 
   function onKey(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      if (isText) check(); else run();
+      if (noCode) check(); else run();
     }
   }
   document.addEventListener("keydown", onKey);
@@ -77285,7 +77833,7 @@ function renderLesson(app, id) {
   const updateNav = mountLessonNav(id, null);
   if (Course.isDone(id)) {
     setStatus("ok", "Урок уже пройден",
-      "Можно перерешать: код сохранён, кнопка «Показать решение» открыта.");
+      "Можно перерешать: " + (isSheet ? "числа сохранены" : "код сохранён") + ", кнопка «Показать решение» открыта.");
   }
 
   /* ---------- таймер ---------- */
@@ -77322,7 +77870,7 @@ const Find = {
      слов, тем чаще человек попадает с первого раза.            */
   places: function () {
     const out = Course.flat.map(function (l) {
-      const kind = l.kind === "text" ? "разбор" : l.kind === "sql" ? "SQL" : "Python";
+      const kind = l.kind === "text" ? "разбор" : l.kind === "sheet" ? "таблицы" : l.kind === "sql" ? "SQL" : "Python";
       return { href: "#" + l.id, key: l.id, num: l.num, title: l.title,
                note: l.desc, where: l.module.num + ". " + l.module.title,
                hay: [l.desc, l.module.title, kind, l.say, l.sayTask, l.sayDrills]
