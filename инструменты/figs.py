@@ -1761,7 +1761,77 @@ def fig_answer_first():
     return svg.render()
 
 
+TREE_MONTHS = ("2024-05", "2024-06")
+
+
+def tree_data():
+    """Урок 4.1: выручка приложения за май и июнь, разложенная на четыре
+    множителя — активные за месяц × доля платящих × заказов на платящего × чек."""
+    con = db()
+    out = []
+    for m in TREE_MONTHS:
+        mau = con.execute("SELECT COUNT(DISTINCT user_id) FROM app_activity "
+                          "WHERE substr(activity_date, 1, 7) = ?", (m,)).fetchone()[0]
+        payers, orders, rev = con.execute(
+            "SELECT COUNT(DISTINCT user_id), COUNT(*), SUM(revenue) FROM app_orders "
+            "WHERE substr(order_date, 1, 7) = ?", (m,)).fetchone()
+        out.append({"mau": mau, "payers": payers, "orders": orders, "rev": rev,
+                    "pay": payers / mau, "opp": orders / payers, "aov": rev / orders})
+    return out
+
+
+def rub(v):
+    return f"{v:,.0f}".replace(",", " ")
+
+
+def chg(a, b):
+    return f"{100 * (b / a - 1):+.1f}%".replace(".", ",").replace("-", "−")
+
+
+def fig_metric_tree():
+    a, b = tree_data()
+    rows = [("активные за месяц", "mau", lambda v: rub(v)),
+            ("доля платящих", "pay", lambda v: pct(100 * v) + "%"),
+            ("заказов на платящего", "opp", lambda v: f"{v:.3f}".replace(".", ",")),
+            ("средний чек, ₽", "aov", lambda v: rub(v))]
+    ratios = [b[k] / a[k] for _, k, _ in rows]
+    svg = Svg("metric-tree", 352,
+              "Дерево выручки: май и июнь",
+              f"Выручка приложения за май — {rub(a['rev'])} рублей, за июнь — {rub(b['rev'])}, "
+              f"{chg(a['rev'], b['rev'])}. Она раскладывается на четыре множителя. Активных за месяц: "
+              f"{rub(a['mau'])} и {rub(b['mau'])}, {chg(a['mau'], b['mau'])}. Доля платящих: "
+              f"{pct(100 * a['pay'])} и {pct(100 * b['pay'])} процента, {chg(a['pay'], b['pay'])}. "
+              f"Заказов на платящего: {chg(a['opp'], b['opp'])}. Средний чек: {rub(a['aov'])} и "
+              f"{rub(b['aov'])} рублей, {chg(a['aov'], b['aov'])} — единственный множитель, который упал.")
+    svg.text(0, 14, "выручка приложения: май → июнь 2024", "f-hd", 12.5)
+    svg.rect(0, 26, 330, 40, "f-box")
+    svg.text(10, 50, "выручка, ₽", "f-hd", 12)
+    svg.text(256, 50, f"{rub(a['rev'])} → {rub(b['rev'])}", "f-t", 11.5, anchor="end")
+    svg.text(322, 50, chg(a["rev"], b["rev"]), "f-pen-t", 12, anchor="end")
+    y0, bh, gap, xt = 88, 34, 12, 14
+    mids = []
+    for i, (name, k, f) in enumerate(rows):
+        y = y0 + i * (bh + gap)
+        hot = ratios[i] < 1
+        svg.rect(30, y, 300, bh, "f-pen" if hot else "f-box")
+        svg.text(38, y + bh / 2 + 4, name, "f-pen-t" if hot else "f-sub", 10.5)
+        svg.text(262, y + bh / 2 + 4, f"{f(a[k])} → {f(b[k])}", "f-pen-t" if hot else "f-t", 11, anchor="end")
+        svg.text(322, y + bh / 2 + 4, chg(a[k], b[k]), "f-pen-t" if hot else "f-sub", 11, anchor="end")
+        svg.line(xt, y + bh / 2, 30, y + bh / 2)
+        if i:
+            svg.text(xt, y - gap / 2 + 4, "×", "f-sub", 12, anchor="middle")
+        mids.append(y + bh / 2)
+    svg.line(xt, 66, xt, mids[-1])
+    y = y0 + 4 * (bh + gap) + 14
+    prod = math.prod(ratios)
+    r2 = lambda v: f"{v:.3f}".replace(".", ",")
+    svg.text(0, y, " × ".join(r2(v) for v in ratios) + f" = {r2(prod)}", "f-pen-t", 11.5)
+    svg.note(0, y + 34, ["пользователей больше, а денег меньше —", "просел один множитель: чек"], 15)
+    return svg.render()
+
+
 FIGS_M4 = {
+    "metric-tree": fig_metric_tree,
     "answer-first": fig_answer_first,
     "dash-pyramid": fig_dash_pyramid,
     "rfm-map": fig_rfm_map,
@@ -1789,6 +1859,10 @@ def check_m4():
     got = [f"{100 * p / v:.2f}" for a, b in d.values() for v, p in (a, b)]
     if got != ["4.00", "4.20", "1.20", "1.30", "3.30", "2.17"]:
         errs.append(f"simpson-mix: {got} — пример должен расти в каналах и падать в целом")
+    a, b = tree_data()
+    got = [(t["mau"], t["payers"], t["orders"], round(t["rev"]), round(t["aov"])) for t in (a, b)]
+    if got != [(1053, 200, 317, 1181530, 3727), (1072, 212, 337, 1153450, 3423)]:
+        errs.append(f"metric-tree: {got} — не совпало с теорией урока 4.1")
     return errs
 
 
