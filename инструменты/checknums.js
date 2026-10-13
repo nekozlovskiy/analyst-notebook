@@ -3,7 +3,8 @@
    answer: "nums"):
    1. разбор ввода — Nums.parse / judge / load из app.js на сценариях;
    2. эталоны — у каждого поля запрос check на инструменты/shop.db даёт
-      answer в пределах tol (см. ниже, вторая часть).
+      answer в пределах tol (см. ниже, вторая часть); урок с db: "vilka"
+      сверяется с инструменты/vilka.db.
    Запуск: node инструменты/checknums.js            */
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const base = path.resolve(__dirname, "..");
@@ -57,7 +58,7 @@ for (const f of ["data.js", "content-core.js"].concat(
   vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), C0);
 const db = path.join(__dirname, "shop.db");
 let fields = 0;
-function checkFields(where, list) {
+function checkFields(where, list, dbPath) {
   if (!Array.isArray(list) || !list.length) { bad.push(where + ": нет fields"); return; }
   list.forEach(function (f, i) {
     const w = where + ", поле " + (i + 1);
@@ -65,23 +66,27 @@ function checkFields(where, list) {
     if (typeof f.answer !== "number") { bad.push(w + ": answer не число"); return; }
     fields++;
     try {
-      const out = execFileSync("sqlite3", [db], { input: f.check, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+      const out = execFileSync("sqlite3", [dbPath || db], { input: f.check, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
       const v = Number(out);
       if (out === "" || isNaN(v)) bad.push(w + ": check вернул «" + out + "», а не одно число");
       else if (Math.abs(v - f.answer) > (f.tol === undefined ? 0.5 : f.tol)) bad.push(w + ": в базе " + v + ", в уроке " + f.answer);
     } catch (e) { bad.push(w + ": " + String(e.stderr || e.message).trim().split("\n").pop()); }
   });
 }
+// самопроверка: vilka.db собрана из генератора «Вилки», а не из чужих данных
+checkFields("самопроверка vilka.db", [{ label: "строк orders", hint: "-", check: "SELECT COUNT(*) FROM orders;", answer: 31387, tol: 0 }],
+            path.join(__dirname, "vilka.db"));
 for (const mod of C0.window.COURSE.modules) for (const L of mod.lessons) {
   const C = C0.window.CONTENT[L.id];
   if (!C) continue;
+  const dbPath = C.db === "vilka" ? path.join(__dirname, "vilka.db") : db;
   if (L.kind === "sheet") {
-    checkFields(L.id + " задача", C.fields);
+    checkFields(L.id + " задача", C.fields, dbPath);
     if (!C.file || !fs.existsSync(path.join(base, C.file))) bad.push(L.id + ": нет файла " + C.file);
   }
   (C.drills || []).forEach(function (d, i) {
     const where = L.id + " тренажёр " + (i + 1) + " «" + d.title + "»";
-    if (d.answer === "nums") checkFields(where, d.fields);
+    if (d.answer === "nums") checkFields(where, d.fields, dbPath);
     else if (L.kind === "sheet" && d.answer !== "text") bad.push(where + ": в уроке sheet задача — nums или text");
   });
 }

@@ -27,7 +27,7 @@ step() {
 
 syntax() {
   local ok=0
-  for f in app.js sw.js data.js data-taxi.js interview.js glossary.js lessons.js tinker.js cheats.js content-*.js; do
+  for f in app.js sw.js data.js data-taxi.js data-vilka.js interview.js glossary.js lessons.js tinker.js cheats.js content-*.js; do
     node --check "$f" || ok=1
   done
   return $ok
@@ -110,11 +110,13 @@ step "Тренажёр" "эталон задачи тренажёра не вы�
 step "Карточки" "ошибка в карточках повторения (node инструменты/checkcards.js)" node инструменты/checkcards.js
 step "Словарь" "ошибка в словаре терминов (node инструменты/checkterms.js)" node инструменты/checkterms.js
 step "Шпаргалки" "пример кода в шпаргалке не выполняется или ошибка в разметке cheats.js (node инструменты/checkcheats.js)" node инструменты/checkcheats.js
-step "Файлы xlsx" "delta-market.xlsx или app-journal.xlsx не совпадает с data.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файлы" python3 инструменты/mkxlsx.py --check
+step "Файлы xlsx" "xlsx-файлы уроков не совпадают с data.js / data-vilka.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файлы" python3 инструменты/mkxlsx.py --check
 step "База такси" "data-taxi.js не совпадает с генератором — python3 инструменты/gen_taxi.py" python3 инструменты/gen_taxi.py --check
+step "База «Вилки»" "data-vilka.js не совпадает с генератором — python3 инструменты/gen_vilka.py" python3 инструменты/gen_vilka.py --check
 step "Такси в движке" "data-taxi.js не совпадает с shop.db или Taxi.wants сломан (node инструменты/checktaxi.js)" node инструменты/checktaxi.js
 step "Пробное собеседование" "решение задачи interview.js не сходится с expected или пул неполный (node инструменты/checkinterview.js)" node инструменты/checkinterview.js
 step "Числовые ответы" "разбор ввода в полях для чисел сломан или эталон поля разошёлся с базой (node инструменты/checknums.js)" node инструменты/checknums.js
+step "Код модуля 7" "эталонный код Colab в content-m7.js не печатает числа полей (python3 инструменты/checkvilka.py)" python3 инструменты/checkvilka.py
 step "Карта навыков" "ошибка в COURSE.skills (lessons.js) или в расчёте ступеней Skills (node инструменты/checkskills.js)" node инструменты/checkskills.js
 step "Шаги уроков" "решение шага урока 0.1, 0.2 или практикума не даёт ожидаемый ответ (node инструменты/checksteps.js <урок>)" steps_all
 step "Порядок шагов" "урок пропал, или шаг, карточка, вопрос либо задача тренажёра вставлены или удалены в середине — у учеников сдвинется прогресс (node инструменты/checkorder.js)" node инструменты/checkorder.js

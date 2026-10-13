@@ -264,7 +264,9 @@ function idle(f) {
 const Lazy = {
   has: function (moduleId) {
     const m = Course.data.modules.filter(function (x) { return x.id === moduleId; })[0];
-    return !!m && m.lessons.every(function (l) { return !!window.CONTENT[l.id]; });
+    /* неготовых уроков (ready: false) в файле модуля нет — их не ждём,
+       иначе модуль никогда не «загружен» и урок перезагружает его по кругу */
+    return !!m && m.lessons.every(function (l) { return !l.ready || !!window.CONTENT[l.id]; });
   },
   content: function (moduleId) {
     return Lazy.has(moduleId) ? Promise.resolve() : loadScript("content-" + moduleId + ".js");
@@ -526,7 +528,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "app-journal.xlsx", "data-taxi.js", "interview.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "content-m7.js", "data.js", "cheats.js", "delta-market.xlsx", "app-journal.xlsx", "vilka.xlsx", "data-taxi.js", "interview.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -2530,15 +2532,16 @@ const Route = {
   wide: {
     w: 964, h: 250,
     at: { m0l1: [0, 10], m0l2: [0, 100], m1: [200, 10], m2: [200, 100], m3: [400, 100],
-          m4: [600, 100], m5: [600, 192], m6: [800, 100] },
+          m4: [600, 100], m5: [600, 192], m6: [800, 100], m7: [800, 10] },
     via: { "m1>m4": ["r", "t", "hv"], "m3>m5": ["b", "l", "vh"], "m5>m6": ["r", "b", "hv"] },
     dflt: ["r", "l", "mid"]
   },
   tall: {
     w: 368, h: 402,
     at: { m0l1: [2, 10], m0l2: [202, 10], m1: [2, 94], m2: [202, 94], m3: [202, 178],
-          m4: [2, 262], m5: [202, 262], m6: [2, 346] },
-    via: { "m3>m4": ["l", "t", "hv"], "m5>m6": ["b", "r", "vh"] },
+          m4: [2, 262], m5: [202, 262], m6: [202, 346], m7: [2, 346] },
+    /* m6 справа, m7 слева: иначе стрелки m5>m6 и m4>m7 пересекаются */
+    via: { "m3>m4": ["l", "t", "hv"], "m4>m6": ["r", "l", "mid"] },
     dflt: ["b", "t", "mid"]
   },
 
@@ -5603,7 +5606,7 @@ function renderLesson(app, id) {
   /* Урок есть в программе, но модуль с его содержимым ещё не загружен:
      показываем тихую заглушку и дорисовываем урок, когда модуль придёт.
      Если за это время человек ушёл на другую страницу — ничего не делаем. */
-  if (L && !window.CONTENT[id]) {
+  if (L && L.ready && !window.CONTENT[id]) {
     document.title = L.num + " " + L.title + " — Тетрадь аналитика";
     mountHeader("");
     app.appendChild(el("main", { class: "wrap lesson-wrap" },
@@ -5786,9 +5789,12 @@ function renderLesson(app, id) {
 
       '<div class="loader" id="loader"><span class="spin"></span><span id="loaderTxt"></span></div>' +
 
-      (isSheet
+      /* файл урока: у sheet — всегда, у text — если задан (урок 7.1 — загрузить в Colab) */
+      (C.file && (isSheet || isText)
         ? '<p class="nm-file"><a class="btn" id="fileBtn" href="' + Files.url(C.file) + '" download="' + C.file + '">' +
-            ICON.down + "Скачать данные · " + esc(C.file) + "</a></p>" + Nums.html(C.fields, "nm-" + id)
+            ICON.down + "Скачать данные · " + esc(C.file) + "</a></p>" : "") +
+      (isSheet
+        ? Nums.html(C.fields, "nm-" + id)
         : isText
         ? '<textarea class="answer" id="answer" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
         : '<div class="editor-shell">' +
