@@ -25,6 +25,18 @@ rows = list(csv.reader(io.StringIO(body)))[1:]
 rows = [(int(r[0]),) + tuple(v if v != "" else None for v in r[1:7]) for r in rows if r]
 con.executemany("INSERT INTO leads VALUES (?,?,?,?,?,?,?)", rows)
 print("leads", len(rows))
+# база «Дельта Такси» (урок 6.4): DDL и CSV из data-taxi.js, пустая ячейка — NULL
+t = (BASE / "data-taxi.js").read_text(encoding="utf-8")
+con.executescript(re.search(r"\bsql: `(.*?)`", t, re.S).group(1))
+num = lambda v, f: None if v == "" else f(v)
+for key, table, cast in (("ridersCSV", "riders", (int, str, str, str)),
+                         ("driversCSV", "drivers", (int, str, str, str)),
+                         ("tripsCSV", "trips", (int, int, int, str, str, str, str, int,
+                                                    str, float, float, float, int))):
+    body = re.search(r"\b%s: `(.*?)`" % key, t, re.S).group(1)
+    rows = [tuple(num(v, f) for f, v in zip(cast, r)) for r in list(csv.reader(io.StringIO(body)))[1:] if r]
+    con.executemany("INSERT INTO %s VALUES (%s)" % (table, ",".join("?" * len(cast))), rows)
+    print(table, len(rows))
 con.commit()
 con.close()
 print("база собрана:", p)

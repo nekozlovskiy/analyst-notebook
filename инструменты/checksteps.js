@@ -29,7 +29,7 @@ const { spawnSync } = require("child_process");
 const base = path.resolve(__dirname, "..");
 const ctx = { window: { SH: {}, CONTENT: {}, DATA: {} }, console };
 vm.createContext(ctx);
-const files = ["data.js", "content-core.js"].concat(
+const files = ["data.js", "data-taxi.js", "content-core.js"].concat(
   fs.readdirSync(base).filter(function (f) { return /^content-m\d+\.js$/.test(f); }).sort());
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), ctx);
 
@@ -129,6 +129,17 @@ fillFromCsv(ctx.window.DATA.appOrdersCSV, "INSERT INTO app_orders VALUES (?,?,?)
   function (c) { return [+c[0], c[1], +c[2]]; });
 fillFromCsv(ctx.window.DATA.leadsCSV, "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
   function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
+/* база «Дельта Такси» (урок 6.4) — как Taxi.fill в app.js */
+db.exec(ctx.window.TAXI.sql);
+{
+  const n = function (v) { return v === "" ? null : +v; }, t = function (v) { return v === "" ? null : v; };
+  fillFromCsv(ctx.window.TAXI.ridersCSV, "INSERT INTO riders VALUES (?,?,?,?)",
+    function (c) { return [+c[0], c[1], c[2], c[3]]; });
+  fillFromCsv(ctx.window.TAXI.driversCSV, "INSERT INTO drivers VALUES (?,?,?,?)",
+    function (c) { return [+c[0], c[1], c[2], c[3]]; });
+  fillFromCsv(ctx.window.TAXI.tripsCSV, "INSERT INTO trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    function (c) { return [+c[0], +c[1], n(c[2]), c[3], c[4], c[5], t(c[6]), n(c[7]), c[8], n(c[9]), n(c[10]), +c[11], n(c[12])]; });
+}
 
 function query(sql) {
   const st = db.prepare(sql);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Собирает delta-market.xlsx для урока 6.5 из data.js.
+"""Собирает delta-market.xlsx для урока 6.6 из data.js.
 
     python3 инструменты/mkxlsx.py           # записать файл в корень сайта
     python3 инструменты/mkxlsx.py --check   # сверить с файлом в ветке

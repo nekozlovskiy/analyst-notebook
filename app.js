@@ -274,10 +274,13 @@ const Lazy = {
   },
   cheats: function () {
     return window.CHEATS ? Promise.resolve() : loadScript("cheats.js");
+  },
+  taxi: function () {
+    return window.TAXI ? Promise.resolve() : loadScript("data-taxi.js");
   }
 };
 
-/* Файлы для скачивания (xlsx урока 6.5). В собранном офлайн-файле
+/* Файлы для скачивания (xlsx урока 6.6). В собранном офлайн-файле
    рядом ничего нет — build.py кладёт их в window.FILES data:-ссылками. */
 const Files = {
   url: function (name) { return (window.FILES && window.FILES[name]) || name; }
@@ -520,7 +523,7 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "data.js", "cheats.js", "delta-market.xlsx", "data-taxi.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -2490,14 +2493,70 @@ function sqlLast(db, code) {
   return last;
 }
 
+/* ============================================================
+   База «Дельта Такси» (урок 6.4) — в отдельном data-taxi.js, чтобы
+   остальные SQL-уроки её не качали. Запрос, в котором есть таблица
+   такси, сам подгружает её в общую базу (Engine.sql(code)).
+   ============================================================ */
+const Taxi = {
+  TABLES: /\b(trips|drivers|riders)\b/i,
+  wants: function (code) { return Taxi.TABLES.test(String(code || "")); },
+  fill: function (db) {
+    const D = window.TAXI, nul = function (v) { return v === "" ? null : v; };
+    /* повтор после сбоя на середине не должен упереться в «already exists» */
+    db.run("DROP TABLE IF EXISTS trips; DROP TABLE IF EXISTS riders; DROP TABLE IF EXISTS drivers;");
+    db.run(D.sql);
+    fillFromCsv(db, D.ridersCSV, "INSERT INTO riders VALUES (?,?,?,?)",
+      function (c) { return [+c[0], c[1], c[2], c[3]]; });
+    fillFromCsv(db, D.driversCSV, "INSERT INTO drivers VALUES (?,?,?,?)",
+      function (c) { return [+c[0], c[1], c[2], c[3]]; });
+    fillFromCsv(db, D.tripsCSV, "INSERT INTO trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      function (c) {
+        const n = function (v) { return v === "" ? null : +v; };
+        return [+c[0], +c[1], n(c[2]), c[3], c[4], c[5], nul(c[6]), n(c[7]), c[8], n(c[9]), n(c[10]), +c[11], n(c[12])];
+      });
+  }
+};
+
 const Engine = {
   db: null,
   py: null,
   pyReady: null,
   pyPkgs: {},
 
-  sql: async function () {
-    if (Engine.db) return Engine.db;
+  shopReady: null,
+  taxiReady: null,
+  taxiDb: null,
+
+  /* code — текст запроса: если в нём есть таблица такси, она один раз
+     заливается в ту же базу. Промисы общие — запросы, пришедшие, пока
+     база грузится, получают одну базу и одну заливку. */
+  sql: async function (code) {
+    const db = await Engine.shop();
+    if (Taxi.wants(code) && Engine.taxiDb !== db) {
+      if (!Engine.taxiReady) {
+        Engine.taxiReady = Lazy.taxi().then(function () {
+          try { Taxi.fill(db); }
+          catch (e) { throw new Error("База такси не залилась: " + e.message); }
+          Engine.taxiDb = db;
+        }, function () { throw new Error("База такси не загрузилась — похоже, пропал интернет."); });
+        Engine.taxiReady.catch(function () { Engine.taxiReady = null; });
+      }
+      await Engine.taxiReady;
+    }
+    return db;
+  },
+
+  shop: function () {
+    if (Engine.db) return Promise.resolve(Engine.db);
+    if (!Engine.shopReady) {
+      Engine.shopReady = Engine.shopOpen();
+      Engine.shopReady.catch(function () { Engine.shopReady = null; });
+    }
+    return Engine.shopReady;
+  },
+
+  shopOpen: async function () {
     /* база и движок качаются одновременно */
     await Promise.all([Lazy.data(), loadScript(CDN.sqlBase + "sql-wasm.js")]);
     const SQL = await window.initSqlJs({ locateFile: function (f) { return CDN.sqlBase + f; } });
@@ -4472,7 +4531,7 @@ const Steps = {
       async function runSql(code) {
         if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
         try {
-          const db = await Engine.sql();
+          const db = await Engine.sql(code);
           if (open !== n || !document.body.contains(li)) return false;
           try { last = sqlLast(db, code); }
           catch (e) {
@@ -4722,7 +4781,7 @@ function renderStepsLesson(app, L, C) {
 const Run = {
   queue: Promise.resolve(),
   sql: async function (code) {
-    const db = await Engine.sql();
+    const db = await Engine.sql(code);
     try {
       return { res: sqlLast(db, code) };
     } catch (e) { return { err: "SQLite: " + e.message }; }
@@ -5188,6 +5247,8 @@ function renderLesson(app, id) {
      первый запуск кода не будет её ждать. И модуль следующего урока,
      если он в другом модуле, — переход дальше откроется сразу.     */
   if (L.kind !== "text" && L.kind !== "sheet") idle(function () { Lazy.data().catch(function () {}); });
+  /* Урок на такси: заливаем её в базу заранее, а не на первом запросе. */
+  if (L.base === "taxi") idle(function () { Engine.sql("trips").catch(function () {}); });
   const after = Plan.after(id);
   if (after && after.module !== L.module) {
     idle(function () { Lazy.content(after.module.id).catch(function () {}); });
@@ -5584,7 +5645,7 @@ function renderLesson(app, id) {
 
   async function runSQL(code) {
     loader(true, "Поднимаю базу в браузере...");
-    const db = await Engine.sql();
+    const db = await Engine.sql(code);
     loader(false);
     let last;
     try {
