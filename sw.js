@@ -103,6 +103,9 @@ self.addEventListener("fetch", function (e) {
      остальное честно падает: и загрузчик уроков, и движки умеют
      сказать, что связи нет. */
   function lastResort(err) {
+    /* скачивание файла урока — тоже переход по адресу: оболочка
+       сохранилась бы под именем delta-market.xlsx. Ошибка честнее. */
+    if (/\.xlsx$/.test(url.pathname)) return new Response("", { status: 503, statusText: "Offline" });
     if (req.mode === "navigate") return caches.match("./index.html");
     throw err;
   }
