@@ -1919,7 +1919,7 @@ const Mock = {
           if (!code.trim()) { out.innerHTML = '<div class="empty">Редактор пуст — напишите запрос.</div>'; return; }
           if (Mock.writes(code)) { out.innerHTML = '<div class="empty">' + Mock.WRITES + "</div>"; return; }
           d.ran[x.id] = code; Mock.save(d); marks();
-          out.innerHTML = '<div class="empty">' + (Engine.db ? "Выполняю…" : "Поднимаю базу в браузере…") + "</div>";
+          out.innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
           let html;
           try {
             const r = await Run.sql(code);
@@ -2929,6 +2929,14 @@ const Engine = {
       await Engine.taxiReady;
     }
     return db;
+  },
+
+  /* подпись, пока ждём ответа на запрос: первый запрос к такси при уже
+     поднятой базе магазина ещё качает и заливает её (430 КБ) */
+  wait: function (code) {
+    if (!Engine.db) return "Поднимаю базу в браузере…";
+    if (Taxi.wants(code) && Engine.taxiDb !== Engine.db) return "Подгружаю базу такси…";
+    return "Выполняю…";
   },
 
   shop: function () {
@@ -4628,7 +4636,7 @@ function renderSandbox(app) {
     drawHist();
     rb.disabled = true;
     out.innerHTML = '<div class="empty">' + (kind === "python" && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
-      : kind === "sql" && !Engine.db ? "Поднимаю базу в браузере…" : "Выполняю…") + "</div>";
+      : kind === "sql" ? Engine.wait(code) : "Выполняю…") + "</div>";
     try {
       if (kind === "sql") {
         const r = await Run.sql(code);
@@ -4913,7 +4921,7 @@ const Steps = {
       }
 
       async function runSql(code) {
-        if (!Engine.db) q(".st-res").innerHTML = '<div class="empty">Поднимаю базу в браузере…</div>';
+        if (Engine.wait(code) !== "Выполняю…") q(".st-res").innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
         try {
           const db = await Engine.sql(code);
           if (open !== n || !document.body.contains(li)) return false;
@@ -5516,7 +5524,7 @@ const Drills = {
       const rb = q(".dr-run");
       rb.disabled = true;
       res.innerHTML = '<div class="empty">' + (py && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
-        : !py && !Engine.db ? "Поднимаю базу в браузере…" : "Выполняю…") + "</div>";
+        : !py ? Engine.wait(code) : "Выполняю…") + "</div>";
       try {
         const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
         if (r.err) {
@@ -6028,7 +6036,7 @@ function renderLesson(app, id) {
   }
 
   async function runSQL(code) {
-    loader(true, "Поднимаю базу в браузере...");
+    loader(true, Engine.wait(code));
     const db = await Engine.sql(code);
     loader(false);
     let last;
