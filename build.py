@@ -18,6 +18,7 @@ content-*.js, data.js, app.js), а потом пересобирать. Прав
 нет других файлов, которые можно было бы подгрузить.
 """
 import base64
+import json
 import pathlib
 import re
 import sys
@@ -85,8 +86,12 @@ for name in ("lessons.js", "content-core.js", "glossary.js", "tinker.js"):
                 "<script>\n" + read(name) + "\n</script>")
 
 lazy = "".join("<script>\n" + read(n) + "\n</script>\n" for n in LAZY)
+# файлы для скачивания из уроков — data:-ссылками, app.js берёт их из window.FILES
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+files = "<script>\nwindow.FILES = %s;\n</script>\n" % json.dumps(
+    {"delta-market.xlsx": data_uri("delta-market.xlsx", XLSX)})
 html = swap(html, '<script src="app.js"></script>',
-            lazy + "<script>\n" + read("app.js") + "\n</script>")
+            files + lazy + "<script>\n" + read("app.js") + "\n</script>")
 
 # иконки — внутрь: рядом с файлом их не будет
 html = swap(html, 'href="favicon.svg"', 'href="%s"' % data_uri("favicon.svg", "image/svg+xml"))

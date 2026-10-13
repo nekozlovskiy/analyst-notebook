@@ -110,6 +110,8 @@ step "Тренажёр" "эталон задачи тренажёра не вы�
 step "Карточки" "ошибка в карточках повторения (node инструменты/checkcards.js)" node инструменты/checkcards.js
 step "Словарь" "ошибка в словаре терминов (node инструменты/checkterms.js)" node инструменты/checkterms.js
 step "Шпаргалки" "пример кода в шпаргалке не выполняется или ошибка в разметке cheats.js (node инструменты/checkcheats.js)" node инструменты/checkcheats.js
+step "Файл xlsx" "delta-market.xlsx не совпадает с data.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файл" python3 инструменты/mkxlsx.py --check
+step "Числовые ответы" "разбор ввода в полях для чисел сломан или эталон поля разошёлся с базой (node инструменты/checknums.js)" node инструменты/checknums.js
 step "Карта навыков" "ошибка в COURSE.skills (lessons.js) или в расчёте ступеней Skills (node инструменты/checkskills.js)" node инструменты/checkskills.js
 step "Шаги уроков" "решение шага урока 0.1, 0.2 или практикума не даёт ожидаемый ответ (node инструменты/checksteps.js <урок>)" steps_all
 step "Порядок шагов" "урок пропал, или шаг, карточка, вопрос либо задача тренажёра вставлены или удалены в середине — у учеников сдвинется прогресс (node инструменты/checkorder.js)" node инструменты/checkorder.js
