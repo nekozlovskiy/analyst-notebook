@@ -104,7 +104,7 @@ self.addEventListener("fetch", function (e) {
      сказать, что связи нет. */
   function lastResort(err) {
     /* скачивание файла урока — тоже переход по адресу: оболочка
-       сохранилась бы под именем delta-market.xlsx. Ошибка честнее. */
+       сохранилась бы под именем delta-market.xlsx или app-journal.xlsx. Ошибка честнее. */
     if (/\.xlsx$/.test(url.pathname)) return new Response("", { status: 503, statusText: "Offline" });
     if (req.mode === "navigate") return caches.match("./index.html");
     throw err;

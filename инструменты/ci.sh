@@ -110,7 +110,7 @@ step "Тренажёр" "эталон задачи тренажёра не вы�
 step "Карточки" "ошибка в карточках повторения (node инструменты/checkcards.js)" node инструменты/checkcards.js
 step "Словарь" "ошибка в словаре терминов (node инструменты/checkterms.js)" node инструменты/checkterms.js
 step "Шпаргалки" "пример кода в шпаргалке не выполняется или ошибка в разметке cheats.js (node инструменты/checkcheats.js)" node инструменты/checkcheats.js
-step "Файл xlsx" "delta-market.xlsx не совпадает с data.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файл" python3 инструменты/mkxlsx.py --check
+step "Файлы xlsx" "delta-market.xlsx или app-journal.xlsx не совпадает с data.js — запустите python3 инструменты/mkxlsx.py и закоммитьте файлы" python3 инструменты/mkxlsx.py --check
 step "База такси" "data-taxi.js не совпадает с генератором — python3 инструменты/gen_taxi.py" python3 инструменты/gen_taxi.py --check
 step "Такси в движке" "data-taxi.js не совпадает с shop.db или Taxi.wants сломан (node инструменты/checktaxi.js)" node инструменты/checktaxi.js
 step "Пробное собеседование" "решение задачи interview.js не сходится с expected или пул неполный (node инструменты/checkinterview.js)" node инструменты/checkinterview.js

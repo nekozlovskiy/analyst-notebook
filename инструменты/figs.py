@@ -1731,7 +1731,7 @@ def fig_dash_pyramid():
 
 
 def fig_answer_first():
-    """Урок 4.7: вывод первым. Доли дочитавших условные — иллюстрация
+    """Урок 4.8: вывод первым. Доли дочитавших условные — иллюстрация
     фразы урока «до последнего абзаца доходит меньшинство»."""
     reach = [100, 60, 35, 15]
     acad = ["метод", "расчёты", "оговорки", "вывод"]
@@ -1830,7 +1830,152 @@ def fig_metric_tree():
     return svg.render()
 
 
+BI_CHAIN = [("Подключение", "откуда данные", "app-journal.xlsx: 3 листа = 3 таблицы", None),
+            ("Датасет", "таблицы, связи, поля, формулы", "app_users + app_orders, левая связь по user_id",
+             "чинят здесь: неверная связь таблиц"),
+            ("Чарт", "один график над одним датасетом", "ARPU по каналам", None),
+            ("Дашборд", "страница из чартов и селекторов", "6 элементов, среди них селектор «Платформа»",
+             "чинят здесь: селектор не влияет на график")]
+
+
+def bi_chain_data():
+    """Урок 4.7: листы app-journal.xlsx (каждый лист — таблица подключения)
+    и пункты письма Олега (элементы дашборда)."""
+    import zipfile
+    with zipfile.ZipFile(ROOT / "app-journal.xlsx") as z:
+        sheets = re.findall(r'<sheet [^>]*name="([^"]+)"', z.read("xl/workbook.xml").decode())
+    s = (ROOT / "content-m4.js").read_text(encoding="utf-8")
+    t = s[s.index("window.CONTENT.m4l8"):]
+    t = t[t.index("ticket:"):]
+    body = t[:t.index("`,", t.index("body: `"))]
+    return sheets, body.count("<li>"), "селектор «Платформа»" in body
+
+
+def fig_bi_chain():
+    sheets, items, _ = bi_chain_data()
+    svg = Svg("bi-chain", 0,
+              "Четыре объекта DataLens: подключение, датасет, чарт, дашборд",
+              f"Цепочка сверху вниз. Подключение хранит, откуда данные: файл app-journal.xlsx, {len(sheets)} листа — "
+              f"{len(sheets)} таблицы. Датасет хранит таблицы, связи, поля и формулы: app_users и app_orders, "
+              "левая связь по user_id; неверную связь чинят здесь. Чарт — один график над одним датасетом: "
+              f"ARPU по каналам. Дашборд — страница из чартов и селекторов: {items} элементов, среди них "
+              "селектор «Платформа»; селектор, который не влияет на график, чинят здесь.")
+    svg.text(0, 14, "каждый объект хранит своё", "f-hd", 12.5)
+    y, bw, gap, ax = 28, W - PAD - 6, 20, 40
+    for i, (name, keeps, ex, fix) in enumerate(BI_CHAIN):
+        h = 64 if fix else 46
+        svg.rect(0, y, bw, h)
+        svg.text(10, y + 19, name, "f-hd", 13)
+        svg.text(106, y + 19, keeps, "f-sub", 10.5)
+        svg.text(10, y + 37, ex, "f-t", 11)
+        if fix:
+            svg.text(10, y + 55, fix, "f-pen-t", 10.5)
+        y += h
+        if i < len(BI_CHAIN) - 1:
+            svg.line(ax, y, ax, y + gap - 1, "f-soft")
+            svg.path(f"M{ax - 4} {y + gap - 6} L{ax} {y + gap - 1} L{ax + 4} {y + gap - 6}", "f-soft")
+            y += gap
+    svg.note(0, y + 30, ["ошибку чинят в том объекте,", "где она живёт"], 15)
+    svg.h = y + 30 + 18 + 8
+    return svg.render()
+
+
+MONTHS_RU = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+
+
+def mau_months_data():
+    """Урок 4.7: линия MAU по месяцам из датасета «пользователи + активность»
+    и число дней, если оставить группировку даты по умолчанию."""
+    con = db()
+    months = con.execute("SELECT strftime('%Y-%m', activity_date), COUNT(DISTINCT user_id) "
+                         "FROM app_activity GROUP BY 1 ORDER BY 1").fetchall()
+    days = con.execute("SELECT COUNT(DISTINCT activity_date) FROM app_activity").fetchone()[0]
+    return months, days
+
+
+def fig_bi_chart_editor():
+    months, days = mau_months_data()
+    peak = max(months, key=lambda r: r[1])
+    mn = lambda m: MONTHS_RU[int(m[5:7]) - 1]
+    svg = Svg("bi-chart-editor", 0,
+              "Редактор чарта DataLens: поля, секции и превью для линии MAU",
+              "Условная схема редактора сверху вниз. Поля датасета «пользователи + активность»: измерения "
+              "activity_date, platform, channel и показатель user_id. Секции: в X — activity_date с группировкой "
+              "«Месяц», в Y — user_id с агрегацией «Количество уникальных», COUNTD; Цвета и Фильтры пусты. "
+              f"По умолчанию дата группируется по дню, и на линии {days} точек вместо {len(months)}. "
+              f"Превью — MAU по месяцам 2024 года: январь {months[0][1]}, пик в {mn(peak[0])}е — {peak[1]}, "
+              f"сентябрь {months[-1][1]}.")
+    bw = W - PAD - 6
+    # поля датасета
+    svg.text(0, 14, "поля датасета «пользователи + активность»", "f-hd", 12.5)
+    top = 24
+    svg.rect(0, top, bw, 96)
+    cols = ((10, "измерения", ["activity_date", "platform", "channel"]), (180, "показатели", ["user_id"]))
+    for x, head, fields in cols:
+        svg.text(x, top + 18, head, "f-sub", 10.5)
+        for i, f in enumerate(fields):
+            y = top + 26 + i * 22
+            svg.rect(x, y, 116, 18, "f-box", 3)
+            svg.text(x + 7, y + 13, f, "f-t", 11)
+    y = top + 96
+
+    def arrow(y, label):
+        ax = 40
+        svg.line(ax, y, ax, y + 21, "f-soft")
+        svg.path(f"M{ax - 4} {y + 16} L{ax} {y + 21} L{ax + 4} {y + 16}", "f-soft")
+        svg.text(ax + 12, y + 15, label, "f-sub", 10.5)
+        return y + 22
+
+    y = arrow(y, "поля перетаскивают в секции")
+    # секции
+    zones = [("X", "activity_date", "группировка «Месяц»", True),
+             ("Y", "user_id", "«Количество уникальных» = COUNTD", False),
+             ("Цвета", "пусто", None, False),
+             ("Фильтры", "пусто", None, False)]
+    z0 = y
+    svg.rect(0, z0, bw, 0)            # высота ниже
+    box = len(svg.parts) - 1
+    for i, (name, field, how, hot) in enumerate(zones):
+        h = 62 if hot else (44 if how else 26)
+        if i:
+            svg.line(0, y, bw, y)
+        svg.text(10, y + 17, name, "f-hd", 12)
+        svg.text(76, y + 17, field, "f-t" if field != "пусто" else "f-sub", 11 if field != "пусто" else 10.5)
+        if how:
+            svg.text(76, y + 34, how, "f-sub", 10.5)
+        if hot:
+            svg.rect(3, y + 3, bw - 6, h - 6, "f-pen", 4)
+            svg.text(10, y + 51, f"по умолчанию — по дню: {days} точки вместо {len(months)}", "f-pen-t", 10.5)
+        y += h
+    svg.parts[box] = svg.parts[box].replace('height="0"', f'height="{y - z0:g}"')
+    y = arrow(y, "превью")
+    # превью: линия MAU
+    p0, ph = y, 132
+    svg.rect(0, p0, bw, ph)
+    svg.text(10, p0 + 18, "MAU по месяцам, 2024", "f-sub", 10.5)
+    x0, x1, yb, yt = 24, bw - 20, p0 + ph - 24, p0 + 38
+    vmax = max(v for _, v in months)
+    svg.line(x0 - 8, yb, x1 + 8, yb)
+    pts = []
+    for i, (m, v) in enumerate(months):
+        x = x0 + i * (x1 - x0) / (len(months) - 1)
+        py = yb - (yb - yt) * v / vmax
+        pts.append((x, py))
+        svg.text(x, yb + 14, mn(m), "f-sub", 9, anchor="middle")
+    svg.path("M" + " L".join(f"{x:.1f} {py:.1f}" for x, py in pts), "f-raw")
+    for (x, py), (m, v) in zip(pts, months):
+        svg.circle(x, py, 2.2, "f-box")
+        if (m, v) == peak or m == months[0][0]:
+            svg.text(x, py - 7, str(v), "f-t", 10.5, anchor="middle")
+    y = p0 + ph
+    svg.note(0, y + 30, ["группировка решает, что значит", "одна точка: день или месяц"], 15)
+    svg.h = y + 30 + 18 + 8
+    return svg.render()
+
+
 FIGS_M4 = {
+    "bi-chain": fig_bi_chain,
+    "bi-chart-editor": fig_bi_chart_editor,
     "metric-tree": fig_metric_tree,
     "answer-first": fig_answer_first,
     "dash-pyramid": fig_dash_pyramid,
@@ -1863,6 +2008,16 @@ def check_m4():
     got = [(t["mau"], t["payers"], t["orders"], round(t["rev"]), round(t["aov"])) for t in (a, b)]
     if got != [(1053, 200, 317, 1181530, 3727), (1072, 212, 337, 1153450, 3423)]:
         errs.append(f"metric-tree: {got} — не совпало с теорией урока 4.1")
+    sheets, items, sel = bi_chain_data()
+    if sheets != ["app_users", "app_activity", "app_orders"] or items != 6 or not sel:
+        errs.append(f"bi-chain: листы {sheets}, пунктов в письме {items}, селектор «Платформа»: {sel} — "
+                    "схема урока 4.7 ждёт 3 листа и 6 элементов с селектором")
+    months, days = mau_months_data()
+    got = [v for _, v in months]
+    if ([m for m, _ in months] != [f"2024-{k:02d}" for k in range(1, 10)]
+            or got != [512, 787, 956, 1039, 1053, 1072, 314, 85, 32] or days != 274):
+        errs.append(f"bi-chart-editor: MAU {months}, дней {days} — теория урока 4.7 ждёт "
+                    "9 месяцев 2024 (январь 512, июнь 1072) и 274 дня")
     return errs
 
 
