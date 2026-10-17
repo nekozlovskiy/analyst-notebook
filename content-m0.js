@@ -22,7 +22,7 @@ window.CONTENT.m0l1 = {
       body: `
 <p>База данных — набор таблиц. В учебной базе «Дельта Маркет» их три: <code>users</code> — пользователи интернет-магазина, <code>orders</code> — их заказы, <code>events</code> — действия на сайте. Каждая строка таблицы — один объект, каждый столбец — одно его свойство.</p>
 <p>Запрос — просьба к базе показать данные. <code>SELECT *</code> значит «все столбцы», <code>FROM users</code> — из какой таблицы, <code>LIMIT 5</code> — не больше пяти строк. Точка с запятой завершает запрос.</p>
-<figure class="fig" data-fig="table-anatomy"><figcaption>Рис. Строка — один пользователь, столбец — одно его свойство; LIMIT 5 показывает 5 строк из 220.</figcaption></figure>
+<figure class="fig" data-fig="table-anatomy"><figcaption>Рис. Строка — один пользователь, столбец — одно его свойство; LIMIT 5 показывает 5 строк из 220</figcaption></figure>
 <p><strong>Задание.</strong> Запрос уже написан. Нажмите «Запустить» — под редактором появится таблица. Потом «Проверить»: курс сравнит ваш результат с эталоном. Так устроены все задачи курса.</p>`,
       starter: "SELECT *\nFROM users\nLIMIT 5;",
       expected: { ordered: false, columns: ["user_id", "signup_date", "channel", "city", "platform"],
@@ -131,7 +131,7 @@ window.CONTENT.m0l1 = {
 <p><code>GROUP BY</code> делит строки на группы с одинаковым значением и считает агрегат для каждой группы отдельно. <code>GROUP BY city</code> вместе с <code>COUNT(*)</code> — сколько пользователей в каждом городе, одна строка на город.</p>
 <p>В <code>SELECT</code> такого запроса стоят столбец группировки и агрегаты. Другие столбцы туда не пишут: у группы нет одного <code>user_id</code>, их в ней много.</p>
 <p>Сортировать можно по имени, которое дали через <code>AS</code>.</p>
-<figure class="fig" data-fig="group-collapse"><figcaption>Рис. GROUP BY оставляет одну строку на город, COUNT(*) считает строки внутри: 220 пользователей сжимаются в 5 строк.</figcaption></figure>
+<figure class="fig" data-fig="group-collapse"><figcaption>Рис. GROUP BY оставляет одну строку на город, COUNT(*) считает строки внутри: 220 пользователей сжимаются в 5 строк</figcaption></figure>
 <p><strong>Задание.</strong> Посчитайте, сколько пользователей пришло из каждого канала: <code>channel</code> и <code>users_cnt</code>, от большего к меньшему.</p>`,
       starter: "SELECT channel\nFROM users;",
       expected: { ordered: true, columns: ["channel", "users_cnt"],
@@ -322,7 +322,7 @@ window.CONTENT.m0l2 = {
 <li><code>print(…)</code> — напечатать.</li>
 </ol>
 <p>Каждая открытая скобка должна закрыться. Если запутались — разложите на строки: <code>avg = sum(r) / len(r)</code>, ниже <code>print(round(avg, 2))</code>. Результат тот же.</p>
-<figure class="fig" data-fig="inside-out"><figcaption>Рис. Другой пример на том же списке: Python считает от внутренних скобок к внешним: сначала max(r) и min(r), потом вычитание и round, последним print.</figcaption></figure>
+<figure class="fig" data-fig="inside-out"><figcaption>Рис. Другой пример на том же списке: Python считает от внутренних скобок к внешним: сначала max(r) и min(r), потом вычитание и round, последним print</figcaption></figure>
 <p><strong>Задание.</strong> Напечатайте средний заказ клиента с двумя знаками.</p>`,
       starter: "r = [2997.2, 4968.24, 1994.76]\nprint(sum(r))",
       expected: { stdout: "3320.07" },
@@ -828,7 +828,7 @@ for r in q:
     if r &gt; 3000:
         big = big + 1
 print("крупных:", big)</code></pre>
-<figure class="fig" data-fig="loop-trace"><figcaption>Рис. Условие проверяется на каждом проходе, а +1 срабатывает только там, где оно True: у клиента 13 — в 3 проходах из 4.</figcaption></figure>`,
+<figure class="fig" data-fig="loop-trace"><figcaption>Рис. Условие проверяется на каждом проходе, а +1 срабатывает только там, где оно True: у клиента 13 — в 3 проходах из 4</figcaption></figure>`,
       task: "<p><strong>Задание.</strong> Посчитайте, сколько заказов клиента 3 дороже 3000, и напечатайте <code>крупных: N</code>.</p>",
       starter: "q = [1361.84, 9071.54, 3071.02, 1796.6]\nbig = 0\n",
       expected: { stdout: "крупных: 2" },

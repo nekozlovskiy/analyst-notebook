@@ -21,6 +21,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DB = ROOT / "инструменты" / "shop.db"
+VILKA_DB = ROOT / "инструменты" / "vilka.db"   # база финального проекта, модуль 7
 W = 340
 PAD = 4     # поле слева: рамка на x = 0 и почерк, выступающий левее точки, не обрезаются
 
@@ -36,6 +37,10 @@ def num(v):
 
 def db():
     return sqlite3.connect(DB)
+
+
+def vdb():
+    return sqlite3.connect(VILKA_DB)
 
 
 class Svg:
@@ -2921,10 +2926,780 @@ def check_m0():
     return errs
 
 
+# ---------------------------------------------------------------- схемы m7
+# Числа — из инструменты/vilka.db (та же база, что проверяет checknums.js).
+# Ответы задач модуля 7 на схемах не показывать.
+
+VILKA_SHEETS = ("customers", "restaurants", "orders", "experiment")
+# этап маршрута: урок, что берёт на вход, какой результат пополняет
+ROUTE = [("m7l1", "письмо Арине, все листы в Colab", "ноутбук"),
+         ("m7l2", "orders, customers, experiment", "ноутбук"),
+         ("m7l3", "orders + customers, SQL", "ноутбук"),
+         ("m7l4", "orders + customers, pandas", "ноутбук"),
+         ("m7l5", "experiment + orders", "ноутбук"),
+         ("m7l6", "чистая таблица из ноутбука", "дашборд"),
+         ("m7l7", "числа этапов 7.2–7.6", "записка")]
+ROUTE_OUT = {"ноутбук": "Google Colab", "дашборд": "DataLens", "записка": "одна страница"}
+
+
+def ru_rows(n):
+    """«7030 строк», «4563 строки»: число как в уроке 7.1, слово по числу."""
+    s = f"{n:,}".replace(",", " ") if n >= 10000 else str(n)
+    k = n % 100
+    w = "строка" if k % 10 == 1 and k != 11 else \
+        "строки" if 2 <= k % 10 <= 4 and not 12 <= k <= 14 else "строк"
+    return f"{s} {w}"
+
+
+def project_route_data():
+    """Урок 7.1: листы vilka.xlsx и число строк в каждом (vilka.db — те же
+    листы), названия уроков 7.1–7.7 из lessons.js."""
+    c = vdb()
+    counts = {t: c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in VILKA_SHEETS}
+    lj = (ROOT / "lessons.js").read_text(encoding="utf-8")
+    titles = {lid: re.search(r'id: "' + lid + r'", title: "([^"]+)"', lj).group(1) for lid, _, _ in ROUTE}
+    return counts, titles
+
+
+def fig_project_route():
+    counts, titles = project_route_data()
+    svg = Svg("project-route", 0,
+              "Маршрут финального проекта: книга vilka.xlsx, семь этапов, три результата",
+              "Сверху книга vilka.xlsx, четыре листа: customers — " + str(counts["customers"]) + " строк, "
+              f"restaurants — {counts['restaurants']}, orders — {counts['orders']}, experiment — "
+              f"{counts['experiment']}. Ниже семь этапов по урокам. 7.1 — письмо Арине и загрузка всех листов "
+              "в Colab. 7.2 — качество данных на листах orders, customers и experiment. 7.3 — деньги в SQL "
+              "по orders и customers. 7.4 — когорты в pandas по тем же листам. 7.5 — A/B-тест по experiment "
+              "и orders. 7.6 — дашборд по чистой таблице из ноутбука. 7.7 — записка по числам этапов 7.2–7.6. "
+              "Справа — что выходит: этапы 7.1–7.5 собираются в ноутбук Colab, 7.6 — дашборд DataLens, "
+              "7.7 — записка на одну страницу. После этапа 7.2 все расчёты идут на очищенных данных.")
+    R = W - PAD
+    svg.text(0, 14, "файл, семь этапов, три результата", "f-hd", 12.5)
+    # книга: четыре листа плиткой
+    svg.text(2, 40, "vilka.xlsx", "f-hd", 12)
+    svg.text(R, 40, "4 листа", "f-sub", 10.5, "end")
+    tw, ty, th = (R - 3 * 4) / 4, 48, 40
+    for i, t in enumerate(VILKA_SHEETS):
+        x = i * (tw + 4)
+        svg.rect(x, ty, tw, th, "f-box", 4)
+        svg.text(x + 6, ty + 17, t, "f-t", 10.5)
+        svg.text(x + 6, ty + 32, ru_rows(counts[t]), "f-sub", 10)
+    # этапы
+    bw, bh, gap, ax = 226, 40, 10, 16
+    y = ty + th + 22
+    svg.line(ax, ty + th, ax, y - 1, "f-soft")
+    svg.path(f"M{ax - 4} {y - 6} L{ax} {y - 1} L{ax + 4} {y - 6}", "f-soft")
+    spans = {}
+    for i, (lid, src, out) in enumerate(ROUTE):
+        svg.rect(0, y, bw, bh, "f-box", 4)
+        svg.text(8, y + 17, lid[1] + "." + lid[3], "f-sub", 11)
+        svg.text(32, y + 17, titles[lid], "f-hd", 11.5)
+        svg.text(32, y + 32, src, "f-sub", 10)
+        a, b = spans.get(out, (y, y + bh))
+        spans[out] = (min(a, y), max(b, y + bh))
+        y += bh
+        if i < len(ROUTE) - 1:
+            svg.line(ax, y, ax, y + gap, "f-soft")
+            y += gap
+    # справа: какой результат собирают этапы
+    bx, ox = bw + 8, bw + 18
+    for out, (a, b) in spans.items():
+        svg.path(f"M{bx - 4} {a + 3} L{bx} {a + 3} L{bx} {b - 3} L{bx - 4} {b - 3}", "f-soft")
+        m = (a + b) / 2
+        svg.line(bx, m, ox - 1, m, "f-soft")
+        svg.rect(ox, m - 20, R - ox, 40, "f-pen", 4)
+        svg.text(ox + (R - ox) / 2, m - 3, out, "f-pen-t", 12, "middle")
+        svg.text(ox + (R - ox) / 2, m + 12, ROUTE_OUT[out], "f-sub", 9.5, "middle")
+    svg.note(0, y + 30, ["после этапа 7.2 все расчёты", "идут на очищенных данных"], 15)
+    svg.h = y + 30 + 18 + 8
+    return svg.render()
+
+
+DIRT_IDS = (503926, 503931)     # урок 7.2: семь строк orders подряд, в них все три вида грязи
+
+
+def three_dirts_data():
+    """Урок 7.2: настоящий кусок orders (order_id 503926–503931, 7 строк
+    вместе с повтором) и что с ним делает каждая чистка. Деньги — сумма
+    блюд items_sum: формула выручки «Вилки» в теории 7.2 ещё не введена.
+    Возвращает строки (order_id, customer_id, status, items_sum, platform,
+    повтор ли) и шаги [(подпись, строк, сумма)]."""
+    raw = vdb().execute(
+        "SELECT o.order_id, o.customer_id, o.status, o.items_sum, c.platform, o.created_at, "
+        "o.restaurant_id, o.delivery_fee FROM orders o JOIN customers c USING(customer_id) "
+        "WHERE o.order_id BETWEEN ? AND ? ORDER BY o.order_id, o.rowid", DIRT_IDS).fetchall()
+    seen, rows = set(), []
+    for r in raw:
+        rows.append(r[:5] + (r in seen,))      # повтор — та же строка целиком, все столбцы
+        seen.add(r)
+    uniq = [r for r in rows if not r[5]]
+    clean = [r for r in uniq if r[4] != "internal"]
+    money = [r for r in clean if r[2] == "delivered"]
+    steps = [("все строки", rows), ("drop_duplicates()", uniq),
+             ("без platform = internal", clean), ("status = 'delivered'", money)]
+    return rows, [(s, len(rs), sum(r[3] for r in rs)) for s, rs in steps], clean
+
+
+def fig_three_dirts():
+    rows, steps, clean = three_dirts_data()
+    R = W - PAD
+    cancel = sum(r[2] == "cancelled" for r in clean)
+    (_, n0, s0), (_, n1, s1), (_, n2, s2), (_, n3, s3) = steps
+    dup = next(r for r in rows if r[5])
+    ints = [r for r in rows if r[4] == "internal"]
+    canc = next(r for r in rows if r[2] == "cancelled")
+    svg = Svg("three-dirts", 0,
+              "Три вида грязи на семи строках orders и что с ними делает чистка",
+              f"Семь строк orders подряд, order_id от {rows[0][0]} до {rows[-1][0]}. Заказ {dup[0]} записан "
+              f"дважды, строка повторена целиком. Заказы {ints[0][0]} и {ints[1][0]} сделали клиенты "
+              f"{ints[0][1]} и {ints[1][1]}, у них в customers platform = internal, это служебные аккаунты. "
+              f"Заказ {canc[0]} отменён, статус cancelled. Сумма блюд по всем строкам — {s0} ₽, {n0} строк. "
+              f"drop_duplicates() оставляет {n1} строк и {s1} ₽. Без служебных аккаунтов — {n2} строки "
+              f"и {s2} ₽. Для денег остаются только доставленные: {n3} строки, {s3} ₽. Отменённый заказ "
+              f"остаётся в таблице: в доле отмен он {cancel} из {n2}. Сырая сумма {s0} ₽, чистая {s3} ₽.")
+    rh, tw, T = 26, 226, 22
+    mids = table(svg, 0, T, tw, f"orders: {len(rows)} строк подряд",
+                 [("order_id", 6, None), ("customer", 62, None), ("status", 114, None),
+                  ("items_sum", tw - 6, "end")],
+                 [(str(r[0]), str(r[1]), r[2], str(r[3])) for r in rows], rh)
+    # что выбросит чистка — зачёркнуто; отмена — пунктиром: в таблице остаётся
+    tx = tw + 10
+    for r, m in zip(rows, mids):
+        if r[5] or r[4] == "internal":
+            svg.line(4, m, tw - 4, m, "f-raw")
+        if r[2] == "cancelled":
+            svg.rect(2, m - rh / 2 + 2, tw - 4, rh - 4, "f-dash", 3)
+    i = rows.index(dup)
+    svg.path(f"M{tx - 6} {mids[i - 1]:g} L{tx - 3} {mids[i - 1]:g} L{tx - 3} {mids[i]:g} L{tx - 6} {mids[i]:g}", "f-soft")
+    svg.text(tx, mids[i - 1] + 4, "дубль: та же", "f-sub", 10)
+    svg.text(tx, mids[i] + 4, "строка целиком", "f-sub", 10)
+    i = rows.index(canc)
+    svg.text(tx, mids[i] - 2, "отмена: не деньги,", "f-sub", 10)
+    svg.text(tx, mids[i] + 11, "но в доле отмен", "f-sub", 10)
+    a, b = rows.index(ints[0]), rows.index(ints[-1])
+    svg.path(f"M{tx - 6} {mids[a] - 6:g} L{tx - 3} {mids[a] - 6:g} L{tx - 3} {mids[b] + 6:g} L{tx - 6} {mids[b] + 6:g}", "f-soft")
+    svg.text(tx, mids[a] + 4, "служебные:", "f-sub", 10)
+    svg.text(tx, mids[b] + 4, "platform internal", "f-sub", 10)
+    # шаги чистки: сколько строк и какая сумма остаются
+    y = mids[-1] + rh / 2 + 44
+    sm = table(svg, 0, y, R, "что оставляет каждая чистка",
+               [("шаг", 8, None), ("строк", 238, "end"), ("сумма блюд, ₽", R - 8, "end")],
+               [(s, str(n), str(v)) for s, n, v in steps], rh)
+    svg.rect(1, sm[-1] - rh / 2 + 1, R - 2, rh - 2, "f-pen", 3)
+    y = sm[-1] + rh / 2
+    svg.text(0, y + 18, f"отмена остаётся в таблице: {cancel} из {n2} заказов", "f-sub", 10.5)
+    svg.note(0, y + 50, [f"сырая сумма {s0} ₽,", f"чистая {s3} ₽"], 15)
+    svg.h = y + 50 + 18 + 8
+    return svg.render()
+
+
+GMV_MONTH = "2025-03"     # урок 7.3: месяц из абзаца теории; июнь и январь — ответы задач
+
+
+def gmv_layers_data():
+    """Урок 7.3: деньги за март 2025 по чистым данным, как в CTE урока —
+    DISTINCT, без platform = 'internal', только status = 'delivered'.
+    Возвращает (GMV, комиссия 20%, плата за доставку, выручка «Вилки»)."""
+    gmv, fee = vdb().execute(
+        "WITH o AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) "
+        "WHERE c.platform <> 'internal'), d AS (SELECT * FROM o WHERE status = 'delivered') "
+        "SELECT SUM(items_sum), SUM(delivery_fee) FROM d WHERE substr(created_at, 1, 7) = ?",
+        (GMV_MONTH,)).fetchone()
+    com = round(0.2 * gmv)
+    return gmv, com, fee, com + fee
+
+
+def pct_of(a, b):
+    """37,78: доля a от b в процентах, запятая как в тексте."""
+    return f"{100 * a / b:.2f}".replace(".", ",")
+
+
+def fig_gmv_layers():
+    gmv, com, fee, rev = gmv_layers_data()
+    R = W - PAD
+    k = R / gmv                          # длина полосы — по настоящим рублям
+    xc, xf = com * k, (com + fee) * k
+    times = f"{gmv / rev:.1f}".replace(".", ",")
+    svg = Svg("gmv-layers", 0,
+              "Два слоя денег за март 2025: GMV ресторанов и выручка «Вилки»",
+              f"Март 2025 года, чистые данные: без дублей, без служебных аккаунтов, только доставленные "
+              f"заказы. Длины полос пропорциональны рублям. Верхняя полоса — GMV, сумма блюд items_sum, "
+              f"{rub(gmv)} ₽: это деньги ресторанов, «Вилка» их только проводит. Из GMV 20% — комиссия "
+              f"«Вилки», {rub(com)} ₽, остальные 80% уходят ресторанам. Ниже, вне полосы GMV, — плата "
+              f"за доставку delivery_fee, {rub(fee)} ₽: её платят клиенты сверх суммы блюд, в GMV она "
+              f"не входит. Нижняя полоса — выручка «Вилки»: комиссия плюс доставка, {rub(rev)} ₽, "
+              f"{pct_of(rev, gmv)}% от GMV. Сказать «заработали 4 млн» — завысить заработок в {times} раза.")
+    svg.text(0, 14, f"март 2025, чистые данные, ₽", "f-hd", 12.5)
+    bh = 34
+    # слой 1: GMV, из него комиссия
+    y = 44
+    svg.text(0, y, "GMV: сумма блюд items_sum", "f-hd", 12)
+    svg.text(R, y, "деньги ресторанов", "f-sub", 10.5, "end")
+    y += 8
+    svg.rect(xc, y, R - xc, bh, "f-box", 0)
+    svg.rect(0, y, xc, bh, "f-tint", 0, ' fill-opacity="0.22"')
+    svg.rect(0, y, xc, bh, "f-pen", 0)
+    svg.text(xc / 2, y + 21, "20%", "f-pen-t", 11.5, "middle")
+    svg.text(xc + 8, y + 21, "80% уходит ресторанам", "f-sub", 10.5)
+    svg.text(R - 8, y + 21, rub(gmv), "f-t", 12.5, "end")
+    gy = y + bh
+    svg.text(0, gy + 16, f"комиссия «Вилки» 20%: {rub(com)}", "f-sub", 10.5)
+    # слой 2: плата за доставку — вне GMV, отдельный поток от клиентов
+    y = gy + 50
+    svg.text(0, y, "плата за доставку delivery_fee", "f-hd", 12)
+    y += 8
+    fy = y
+    svg.rect(xc, y, xf - xc, bh, "f-tint", 0, ' fill-opacity="0.45"')
+    svg.rect(xc, y, xf - xc, bh, "f-pen", 0)
+    svg.text(xf + 8, y + 14, rub(fee), "f-t", 12.5)
+    svg.text(xf + 8, y + 28, "платят клиенты, в GMV не входит", "f-sub", 10.5)
+    # слой 3: выручка «Вилки» = комиссия + доставка
+    y = fy + bh + 42
+    svg.text(0, y, "выручка «Вилки» = комиссия + доставка", "f-hd", 12)
+    y += 8
+    svg.rect(0, y, xc, bh, "f-tint", 0, ' fill-opacity="0.22"')
+    svg.rect(xc, y, xf - xc, bh, "f-tint", 0, ' fill-opacity="0.45"')
+    svg.rect(0, y, xf, bh, "f-pen", 0)
+    svg.text(xf + 8, y + 14, rub(rev), "f-pen-t", 12.5)
+    svg.text(xf + 8, y + 28, f"{pct_of(rev, gmv)}% от GMV", "f-sub", 10.5)
+    # пунктир: где кончаются комиссия и доставка
+    for x in (xc, xf):
+        svg.line(x, gy, x, y, "f-dash")
+    y += bh
+    svg.note(0, y + 34, ["«заработали 4 млн» завышает", f"заработок в {times} раза"], 15)
+    svg.h = y + 34 + 18 + 8
+    return svg.render()
+
+
+COHORT = "2025-02"      # урок 7.4: когорта из примера теории; март, январь, апрель — ответы задач
+VILKA_MONTHS = ("январь", "февраль", "март", "апрель", "май", "июнь")
+
+
+def cohort_feb_data():
+    """Урок 7.4: февральская когорта 2025 на чистых данных, как в теории —
+    без platform = 'internal', только delivered, уникальные клиенты, возраст
+    в календарных месяцах, знаменатель — вся когорта. Возвращает (размер,
+    [(месяц, возраст, клиентов)], клиентов когорты в эксперименте,
+    дней в месяце регистрации)."""
+    c = vdb()
+    size = c.execute("SELECT COUNT(*) FROM customers WHERE platform <> 'internal' "
+                     "AND substr(signup_date, 1, 7) = ?", (COHORT,)).fetchone()[0]
+    rows = c.execute(
+        "WITH k AS (SELECT customer_id FROM customers WHERE platform <> 'internal' "
+        "AND substr(signup_date, 1, 7) = ?) "
+        "SELECT substr(o.created_at, 1, 7) m, COUNT(DISTINCT o.customer_id) FROM orders o "
+        "JOIN k USING(customer_id) WHERE o.status = 'delivered' GROUP BY m ORDER BY m",
+        (COHORT,)).fetchall()
+    y0, m0 = map(int, COHORT.split("-"))
+    ages = [(VILKA_MONTHS[int(m[5:]) - 1], (int(m[:4]) - y0) * 12 + int(m[5:]) - m0, n) for m, n in rows]
+    exp = c.execute(
+        "SELECT COUNT(DISTINCT e.customer_id) FROM experiment e JOIN customers c USING(customer_id) "
+        "WHERE c.platform <> 'internal' AND substr(c.signup_date, 1, 7) = ?", (COHORT,)).fetchone()[0]
+    days = int(c.execute("SELECT strftime('%d', date(? || '-01', '+1 month', '-1 day'))",
+                         (COHORT,)).fetchone()[0])
+    return size, ages, exp, days
+
+
+def fig_cohort_feb():
+    size, ages, exp, days = cohort_feb_data()
+    R = W - PAD
+    late = 25                                # клиент из примера теории: пришёл 25 февраля
+    left = days - late + 1
+    exp_i = next(i for i, (m, _, _) in enumerate(ages) if m == "май")
+    svg = Svg("cohort-feb", 0,
+              f"Февральская когорта 2025: доля из {size} клиентов с доставленным заказом в M0–M4",
+              f"Февральская когорта 2025 года, {size} клиентов без служебных аккаунтов. Столбцы — доля "
+              f"когорты с хотя бы одним доставленным заказом в каждом календарном месяце, знаменатель у всех "
+              f"один, {size}. "
+              + ". ".join(f"{m}, {a_label(a)}: {n} из {size}, {pct_of(n, size)}%" for m, a, n in ages)
+              + f". M0 ниже остальных: месяц регистрации неполный, клиент, пришедший {late} февраля, имел "
+              f"для заказа в феврале {left} дня из {days}. M3, май, выделен: он совпадает с экспериментом "
+              f"бесплатной доставки, в нём {exp} клиента когорты из {size}. Удержание сравнивают с M1, "
+              f"а майский скачок не записывают в лояльность без разбора эксперимента.")
+    svg.text(0, 14, f"февральская когорта 2025: {size} клиента", "f-hd", 12.5)
+    svg.text(0, 30, f"доля с доставленным заказом, знаменатель {size}", "f-sub", 10.5)
+    yt, yb = 56, 216
+    Y = lambda v: yb - (yb - yt) * v / 100
+    cw, bw = R / len(ages), 38
+    svg.line(0, Y(100), R, Y(100), "f-row")
+    svg.text(R, Y(100) - 3, f"100% = {size}", "f-sub", 9.5, "end")
+    for i, (m, a, n) in enumerate(ages):
+        cx = cw * i + cw / 2
+        top = Y(100 * n / size)
+        if a == 0:
+            svg.rect(cx - bw / 2, top, bw, yb - top, "f-dash", 0)
+        elif i == exp_i:
+            svg.rect(cx - bw / 2, top, bw, yb - top, "f-tint", 0, ' fill-opacity="0.22"')
+            svg.rect(cx - bw / 2, top, bw, yb - top, "f-pen", 0)
+        else:
+            svg.rect(cx - bw / 2, top, bw, yb - top, "f-box", 0)
+        svg.text(cx, top - 6, pct_of(n, size) + "%", "f-pen-t" if i == exp_i else "f-t", 11.5, "middle")
+        svg.text(cx, yb + 16, m, "f-t", 11.5, "middle")
+        svg.text(cx, yb + 30, a_label(a), "f-sub", 10.5, "middle")
+        svg.text(cx, yb + 44, f"{n} из {size}", "f-sub", 10, "middle")
+    svg.line(0, yb, R, yb, "f-soft")
+    # M0: месяц регистрации неполный
+    c0 = cw / 2
+    t0 = Y(100 * ages[0][2] / size)
+    for k, s in enumerate(("месяц", "регистрации", "неполный")):
+        svg.text(c0, t0 - 50 + k * 13, s, "f-sub", 10, "middle")
+    # M3: эксперимент бесплатной доставки
+    ce = cw * exp_i + cw / 2
+    svg.text(ce, yt + 14, "эксперимент бесплатной", "f-sub", 10, "middle")
+    svg.text(ce, yt + 27, f"доставки: {exp} из {size}", "f-sub", 10, "middle")
+    svg.line(ce, yt + 33, ce, Y(100 * ages[exp_i][2] / size) - 20, "f-soft")
+    # шкала дней февраля: сколько дней на заказ в M0 у пришедшего 25-го
+    y = yb + 78
+    svg.text(0, y, f"M0: дни февраля, на заказ у пришедшего {late}-го", "f-hd", 11.5)
+    y += 8
+    dw = R / days
+    for d in range(1, days + 1):
+        x = (d - 1) * dw
+        if d >= late:
+            svg.rect(x + 1, y, dw - 2, 14, "f-tint", 1.5, ' fill-opacity="0.22"')
+        svg.rect(x + 1, y, dw - 2, 14, "f-box", 1.5)
+    for d in (1, late, days):
+        svg.text((d - 0.5) * dw, y + 27, str(d), "f-sub", 9.5, "middle")
+    svg.text((late - 1) * dw - 4, y + 27, f"{left} дня из {days}", "f-sub", 10, "end")
+    y += 27
+    svg.note(0, y + 34, ["удержание сравнивают с M1,", "майский скачок пока не лояльность"], 15)
+    svg.h = y + 34 + 18 + 8
+    return svg.render()
+
+
+def a_label(a):
+    return f"M{a}"
+
+
+def ru_count(n, one, few, many):
+    k = n % 100
+    return f"{n} " + (one if k % 10 == 1 and k != 11 else
+                      few if 2 <= k % 10 <= 4 and not 12 <= k <= 14 else many)
+
+
+def exp_window_data():
+    """Урок 7.5: даты эксперимента из vilka.db. Назначение — min/max
+    assigned_at; первый и последний день эксперимента — первый и последний
+    доставленный заказ без платы за доставку (бесплатная доставка была
+    только в эксперименте). Участников без служебных аккаунтов, назначенных
+    в первый и в последний день. Заказы на схеме не считаются: числа по
+    заказам участников близки к ответам задач 7.5."""
+    c = vdb()
+    a0, a1 = c.execute("SELECT MIN(assigned_at), MAX(assigned_at) FROM experiment").fetchone()
+    s, e = c.execute("SELECT MIN(date(created_at)), MAX(date(created_at)) FROM orders "
+                     "WHERE status = 'delivered' AND delivery_fee = 0").fetchone()
+    n = dict(c.execute("SELECT e.assigned_at, COUNT(*) FROM experiment e JOIN customers c "
+                       "USING(customer_id) WHERE c.platform <> 'internal' AND e.assigned_at IN (?, ?) "
+                       "GROUP BY 1", (a0, a1)).fetchall())
+    return a0, a1, s, e, n[a0], n[a1]
+
+
+def fig_exp_window():
+    import datetime as dt
+    a0, a1, s, e, n0, n1 = exp_window_data()
+    D = dt.date.fromisoformat
+    may1, end = D(s).replace(day=1), D(e)
+    stop = end + dt.timedelta(days=1)                     # «< 2025-06-02»
+    may31 = end.replace(day=1) - dt.timedelta(days=1)
+    total = (stop - may1).days + 1                        # 1 мая … 2 июня, клетки шкалы
+    R = W - PAD
+    dw = R / total
+    X = lambda d: (d - may1).days * dw                    # левый край дня
+    lanes = [(D(a0), n0), (D(a1), n1)]
+    days = [((stop - a).days, (a - may1).days) for a, _ in lanes]   # дней в окне, лишних дней мая
+    dm = lambda d: f"{d.day} {'мая' if d.month == 5 else 'июня'}"
+    svg = Svg("exp-window", 0,
+              "Окно эксперимента у каждого участника своё: от assigned_at по 1 июня, а не весь май",
+              f"Шкала дней с 1 мая по 2 июня 2025 года. Эксперимент шёл с {dm(D(s))} по {dm(end)}, "
+              f"участников назначали в группы с {D(a0).day} по {dm(D(a1))}. Заказ относится к эксперименту, "
+              f"если created_at не раньше assigned_at и строго меньше 2025-06-02. Сверху верное окно для двух "
+              f"участников. Назначенный {dm(D(a0))}, таких {n0}: окно с {dm(D(a0))} по {dm(end)}, "
+              f"{ru_count(days[0][0], 'день', 'дня', 'дней')}. Назначенный {dm(D(a1))}, таких {n1}: окно "
+              f"с {dm(D(a1))} по {dm(end)}, {ru_count(days[1][0], 'день', 'дня', 'дней')}. Снизу неверное окно, "
+              f"весь май с 1 по 31 мая. У назначенного {dm(D(a0))} оно захватывает "
+              f"{ru_count(days[0][1], 'день', 'дня', 'дней')} до назначения, с 1 по {D(a0).day - 1} мая, "
+              f"у назначенного {dm(D(a1))} — {ru_count(days[1][1], 'день', 'дня', 'дней')}, с 1 по "
+              f"{D(a1).day - 1} мая: в эти дни бесплатной доставки у них не было. И у обоих теряет "
+              f"{dm(end)}, последний день эксперимента.")
+    svg.text(0, 14, "окно эксперимента у каждого своё", "f-hd", 12.5)
+    svg.text(0, 30, "в окне: assigned_at ≤ created_at < 2025-06-02", "f-sub", 10.5)
+    # шкала дней: 1 мая … 2 июня
+    y = 66
+    svg.text(X(D(s)), y - 6, f"эксперимент: {dm(D(s))} – {dm(end)}", "f-sub", 10)
+    for i in range(total):
+        d = may1 + dt.timedelta(days=i)
+        svg.rect(i * dw + 0.8, y, dw - 1.6, 10, "f-dash" if d == stop else "f-box", 1.5)
+    ly = y + 22
+    for d in (may1, D(a0), D(a1), may31):            # дни мая — под шкалой
+        svg.text(X(d) + dw / 2, ly, str(d.day), "f-sub", 9.5, "middle")
+    svg.text(0, ly + 13, "май", "f-sub", 9.5)
+    for d in (end, stop):                            # дни июня — над шкалой, иначе 31, 1, 2 слипаются
+        svg.text(X(d) + dw / 2, y - 4, str(d.day), "f-sub", 9.5, "middle")
+    svg.text(R - 2, y - 17, "июнь", "f-sub", 9.5, "end")
+    bh, bars = 16, []
+
+    def lane_label(yy, a, n):
+        svg.text(0, yy, f"назначен {dm(a)}", "f-t", 11.5)
+        svg.text(R - 3, yy, ru_count(n, "участник", "участника", "участников"), "f-sub", 10, "end")
+
+    # верно: окно от assigned_at по 1 июня
+    y = ly + 44
+    svg.text(0, y, "верно: от assigned_at по 1 июня", "f-hd", 12)
+    y += 22
+    for (a, n), (k, _) in zip(lanes, days):
+        lane_label(y, a, n)
+        by = y + 6
+        bars.append(by)
+        svg.line(0, by + bh / 2, X(a), by + bh / 2, "f-row")
+        svg.rect(X(a), by, X(stop) - X(a), bh, "f-tint", 2, ' fill-opacity="0.22"')
+        svg.rect(X(a), by, X(stop) - X(a), bh, "f-pen", 2)
+        svg.text((X(a) + X(stop)) / 2, by + 12, ru_count(k, "день", "дня", "дней"), "f-pen-t", 11, "middle")
+        y = by + bh + 22
+    # неверно: весь май
+    y += 14
+    svg.text(0, y, "неверно: весь май, 1–31 мая", "f-hd", 12)
+    y += 22
+    for (a, n), (_, extra) in zip(lanes, days):
+        lane_label(y, a, n)
+        by = y + 6
+        bars.append(by)
+        svg.rect(0, by, X(a), bh, "f-dash", 2)
+        svg.rect(X(a), by, X(stop) - dw - X(a), bh, "f-box", 2)
+        svg.rect(X(end), by, dw, bh, "f-dash", 2)
+        svg.text(0, by + bh + 13, f"1–{a.day - 1} мая: {ru_count(extra, 'день', 'дня', 'дней')} до назначения",
+                 "f-sub", 10)
+        svg.text(R - 3, by + bh + 13, f"{dm(end)} потерян", "f-sub", 10, "end")
+        y = by + bh + 13 + 22
+    # граница окна: строго меньше 2 июня — у каждой полосы, подписи не перечёркивает
+    for b in bars:
+        svg.line(X(stop), b - 4, X(stop), b + bh + 4, "f-dash")
+    svg.note(0, y + 14, ["заказы до назначения не видели", "бесплатной доставки"], 15)
+    svg.h = y + 14 + 18 + 8
+    return svg.render()
+
+
+def bi_pipeline_data():
+    """Урок 7.6: путь данных от vilka.xlsx до DataLens. Строк в листе orders,
+    строк чистой таблицы (DISTINCT, без platform = 'internal', delivered —
+    как vilka_clean.csv), повторённых строк среди доставленных заказов
+    обычных клиентов, служебных аккаунтов с заказами и на сколько процентов
+    выручка доставленных по сырому листу больше чистой. Сами рубли выручки —
+    ответы задач 7.6, на схему идёт только процент."""
+    c = vdb()
+    raw = c.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+    clean_q = ("SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) "
+               "WHERE c.platform <> 'internal'")
+    clean = c.execute(f"SELECT COUNT(*) FROM ({clean_q}) WHERE status = 'delivered'").fetchone()[0]
+    dup = c.execute("SELECT COUNT(*) FROM orders o JOIN customers c USING(customer_id) "
+                    "WHERE c.platform <> 'internal' AND o.status = 'delivered'").fetchone()[0] - clean
+    internal = c.execute("SELECT COUNT(DISTINCT o.customer_id) FROM orders o JOIN customers c "
+                         "USING(customer_id) WHERE c.platform = 'internal'").fetchone()[0]
+    r_raw = c.execute("SELECT SUM(0.2 * items_sum + delivery_fee) FROM orders "
+                      "WHERE status = 'delivered'").fetchone()[0]
+    r_clean = c.execute(f"SELECT SUM(0.2 * items_sum + delivery_fee) FROM ({clean_q}) "
+                        "WHERE status = 'delivered'").fetchone()[0]
+    more = f"{100 * (r_raw / r_clean - 1):.2f}".replace(".", ",")
+    cols = [r[1] for r in c.execute("PRAGMA table_info(orders)")] + ["revenue", "city", "platform"]
+    return raw, clean, dup, internal, more, cols
+
+
+def fig_bi_pipeline():
+    raw, clean, dup, internal, more, cols = bi_pipeline_data()
+    R = W - PAD
+    svg = Svg("bi-pipeline", 0,
+              "Путь данных «Вилки»: vilka.xlsx, Colab, vilka_clean.csv, DataLens",
+              f"Сверху сырая книга vilka.xlsx: 4 листа, в листе orders {rub(raw)} строк, среди них дубли, "
+              "заказы служебных аккаунтов и отмены. Ниже Colab: загрузка, чистка — drop_duplicates, без "
+              "platform internal, только delivered — и merge с городом и платформой клиента. Из ноутбука "
+              f"выходит vilka_clean.csv: {rub(clean)} строк, одна строка — один доставленный заказ, столбцы "
+              f"от {cols[0]} до {cols[-1]}, среди них revenue, city и platform. Внизу DataLens: подключение "
+              "«Файлы», датасет, где проверяют типы created_at и revenue, чарты и селектор «Платформа» на "
+              "одном датасете — та же цепочка объектов, что в уроке 4.7. Справа перечёркнута прямая "
+              f"загрузка сырого файла в DataLens: выручка по ней на {more}% больше чистой — {dup} повторённые "
+              f"строки обычных клиентов и заказы {internal} служебных аккаунтов. Чистят в ноутбуке, "
+              "DataLens только агрегирует.")
+    svg.text(0, 14, "от выгрузки до дашборда", "f-hd", 12.5)
+    bw, gap, ax = 214, 24, 40          # основной путь — левая колонка; справа — обход
+    bx = bw + 12                       # линия обхода: из книги сразу в DataLens
+
+    def arrow_down(y0, y1, x=ax):
+        svg.line(x, y0, x, y1 - 1, "f-soft")
+        svg.path(f"M{x - 4} {y1 - 6} L{x} {y1 - 1} L{x + 4} {y1 - 6}", "f-soft")
+
+    # 1. сырая книга — на всю ширину: от неё идут обе ветки
+    y = 28
+    svg.rect(0, y, R, 46)
+    svg.text(10, y + 19, "vilka.xlsx", "f-hd", 13)
+    svg.text(R - 10, y + 19, f"4 листа, orders: {ru_rows(raw)}", "f-sub", 10.5, "end")
+    svg.text(10, y + 36, "дубли, служебные аккаунты, отмены", "f-t", 11)
+    top = y + 46
+    # 2. Colab
+    y = top + gap
+    arrow_down(top, y)
+    svg.rect(0, y, bw, 82)
+    svg.text(10, y + 19, "Colab", "f-hd", 13)
+    svg.text(62, y + 19, "загрузка и чистка", "f-sub", 10.5)
+    svg.text(10, y + 37, "drop_duplicates()", "f-t", 10.5)
+    svg.text(10, y + 53, "без internal, только delivered", "f-t", 10.5)
+    svg.text(10, y + 71, "merge: city, platform клиента", "f-t", 10.5)
+    y += 82
+    # 3. чистая таблица — ради неё схема
+    y0 = y
+    y += gap
+    arrow_down(y0, y)
+    svg.rect(0, y, bw, 98, "f-pen")
+    svg.text(10, y + 19, "vilka_clean.csv", "f-pen-t", 13)
+    svg.text(10, y + 37, ru_rows(clean), "f-pen-t", 11.5)
+    svg.text(10, y + 54, "одна строка — один", "f-t", 10.5)
+    svg.text(10, y + 70, "доставленный заказ", "f-t", 10.5)
+    svg.text(10, y + 87, f"{cols[0]} … {', '.join(cols[-3:])}", "f-sub", 10)
+    y += 98
+    # 4. DataLens — на всю ширину: сюда приходит и обход
+    y0 = y
+    y += gap
+    arrow_down(y0, y)
+    dl = y
+    svg.rect(0, y, R, 100)
+    svg.text(10, y + 19, "DataLens", "f-hd", 13)
+    svg.text(R - 10, y + 19, "цепочка урока 4.7", "f-sub", 10.5, "end")
+    svg.text(10, y + 38, "подключение «Файлы» → датасет → чарты", "f-t", 10.5)
+    svg.text(10, y + 56, "датасет: created_at — дата и время,", "f-t", 10.5)
+    svg.text(10, y + 72, "revenue — дробное число", "f-t", 10.5)
+    svg.text(10, y + 90, "селектор «Платформа»: один датасет, все чарты", "f-sub", 10.5)
+    y += 100
+    # обход: сырой файл сразу в DataLens — перечёркнут
+    svg.line(bx, top, bx, dl - 1, "f-dash")
+    svg.path(f"M{bx - 4} {dl - 6} L{bx} {dl - 1} L{bx + 4} {dl - 6}", "f-dash")
+    cy = top + 22
+    svg.line(bx - 7, cy - 7, bx + 7, cy + 7, "f-raw")
+    svg.line(bx - 7, cy + 7, bx + 7, cy - 7, "f-raw")
+    tx, ty = bx + 10, top + 52
+    for i, s in enumerate(["сырой файл", "напрямую:", f"выручка на {more}%", "больше чистой:",
+                           f"{dup} повторённые", "строки и заказы", f"{internal} служебных", "аккаунтов"]):
+        svg.text(tx, ty + i * 15, s, "f-sub", 10)
+    svg.note(0, y + 30, ["чистят в ноутбуке, DataLens", "только агрегирует"], 15)
+    svg.h = y + 30 + 18 + 8
+    return svg.render()
+
+
+BI_PIPELINE_CAP = ("DataLens получает готовую таблицу из ноутбука: 24 948 доставленных заказов vilka_clean.csv, "
+                   "а не сырой файл, выручка по которому на 11,34% больше")
+
+
+def check_bi_pipeline(m7):
+    """Путь данных bi-pipeline: строки и доли из vilka.db, те же числа в теории
+    и данных урока 7.6, подпись и место метки; ответов задач модуля 7 нет,
+    кроме чисел, которые прямо названы в уроке 7.6."""
+    errs = []
+    got = bi_pipeline_data()
+    want = (31387, 24948, 252, 30, "11,34",
+            ["order_id", "customer_id", "restaurant_id", "created_at", "items_sum", "delivery_fee",
+             "status", "revenue", "city", "platform"])
+    if got != want:
+        errs.append(f"bi-pipeline: путь данных в vilka.db {got}, ждали {want}")
+    raw, clean, dup, internal, more, cols = got
+    lesson = m7[m7.find("window.CONTENT.m7l6 ="):m7.find("window.CONTENT.m7l7 =")]
+    for said in (f"на {more}% больше чистой: в неё попадают {dup} повторённые строки обычных клиентов "
+                 f"и заказы {internal} служебных аккаунтов",
+                 f"<code>vilka_clean.csv</code> из ячейки в теории: {rub(clean)} строк",
+                 ", ".join(cols[:6]) + ",\nstatus, revenue, city, platform",
+                 "Одна строка — один доставленный заказ",
+                 "<code>created_at</code> — «Дата и время»",
+                 "<code>revenue</code> — «Дробное число»",
+                 "Подключение → Файлы",
+                 "Селектор — «На основе датасета», поле <code>platform</code>",
+                 "как в уроке 4.7",
+                 BI_PIPELINE_CAP):
+        if said not in lesson:
+            errs.append(f"bi-pipeline: урок 7.6 не говорит «{said}»")
+    if f"orders {raw}" not in m7[:m7.find("window.CONTENT.m7l2 =")]:
+        errs.append(f"bi-pipeline: теория 7.1 не называет orders {raw}")
+    at = lesson.find('data-fig="bi-pipeline"')
+    if not lesson.find("Одна строка — один доставленный заказ") < at < lesson.find("<h3>Типы полей</h3>"):
+        errs.append("bi-pipeline: метка стоит не после абзаца «Одна строка — один доставленный заказ» в уроке 7.6")
+    # 24 948 и 30 — ответы задач 7.2, но урок 7.6 называет их сам (данные и
+    # теория): на схеме они не подсказывают ничего, чего ученик ещё не прочёл
+    named = {clean, internal}
+    shown = {raw, clean, dup, internal, float(more.replace(",", ".")), 4}
+    errs += m7_no_answers("bi-pipeline", shown - named, m7)
+    return errs
+
+
+FIGS_M7 = {
+    "project-route": fig_project_route,
+    "three-dirts": fig_three_dirts,
+    "gmv-layers": fig_gmv_layers,
+    "cohort-feb": fig_cohort_feb,
+    "exp-window": fig_exp_window,
+    "bi-pipeline": fig_bi_pipeline,
+}
+
+
+def check_three_dirts(m7):
+    """Кусок orders для three-dirts: в нём ровно одна полная копия, два заказа
+    internal, одна отмена; суммы шагов пересчитаны; ответов уроков модуля 7 нет."""
+    errs = []
+    rows, steps, clean = three_dirts_data()
+    if [(s, n, v) for s, n, v in steps] != [("все строки", 7, 4750), ("drop_duplicates()", 6, 3950),
+                                           ("без platform = internal", 4, 3600),
+                                           ("status = 'delivered'", 3, 3010)]:
+        errs.append(f"three-dirts: шаги чистки на куске orders изменились: {steps}")
+    if [r[0] for r in rows if r[5]] != [503927] or \
+            [r[0] for r in rows if r[4] == "internal"] != [503930, 503931] or \
+            [r[0] for r in rows if r[2] == "cancelled"] != [503929] or \
+            sum(r[2] == "cancelled" for r in clean) != 1:
+        errs.append("three-dirts: в куске orders другие дубль, internal или отмена")
+    ids = [r[0] for r in rows]
+    if len(ids) - len(set(ids)) != 1:
+        errs.append("three-dirts: повтор в куске не полная копия строки")
+    cap = f"в деньгах остаются {steps[3][1]} строки из {steps[0][1]} и {steps[3][2]} ₽ из {steps[0][2]} ₽"
+    if cap not in m7:
+        errs.append(f"three-dirts: подпись в теории 7.2 не говорит «{cap}»")
+    shown = {float(v) for _, n, v in steps} | {float(n) for _, n, _ in steps}
+    errs += m7_no_answers("three-dirts", shown, m7)
+    return errs
+
+
+def m7_no_answers(fid, shown, m7):
+    """Ни одно число схемы не совпадает с answer: задач модуля 7."""
+    answers = {float(a) for a in re.findall(r"answer: ([0-9.]+)", m7)}
+    hit = {float(v) for v in shown} & answers
+    return [f"{fid}: схема показывает ответ задачи модуля 7: {sorted(hit)}"] if hit else []
+
+
+def check_gmv_layers(m7):
+    """Март 2025 в gmv-layers: суммы из vilka.db, те же числа в теории 7.3
+    и в подписи; ответов задач модуля 7 на схеме нет."""
+    errs = []
+    gmv, com, fee, rev = gmv_layers_data()
+    if (gmv, com, fee, rev) != (4024000, 804800, 715494, 1520294):
+        errs.append(f"gmv-layers: деньги за март в vilka.db {(gmv, com, fee, rev)}, "
+                    "ждали (4024000, 804800, 715494, 1520294)")
+    exact = vdb().execute(
+        "WITH o AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) "
+        "WHERE c.platform <> 'internal') SELECT SUM(0.2 * items_sum + delivery_fee) FROM o "
+        "WHERE status = 'delivered' AND substr(created_at, 1, 7) = ?", (GMV_MONTH,)).fetchone()[0]
+    if abs(exact - rev) > 0.5:
+        errs.append(f"gmv-layers: SUM(0.2 * items_sum + delivery_fee) = {exact}, на схеме {rev}")
+    times = f"{gmv / rev:.1f}".replace(".", ",")
+    said = (f"За март 2025 года по чистым данным GMV — {rub(gmv)} ₽, выручка «Вилки» — {rub(rev)} ₽, "
+            f"{pct_of(rev, gmv)}% от GMV. Слайд «Вилка заработала в марте 4 млн» завышает заработок "
+            f"в {times} раза.")
+    if said not in m7:
+        errs.append(f"gmv-layers: в теории 7.3 нет абзаца «{said}»")
+    if "комиссия 20% от <code>items_sum</code>" not in m7:
+        errs.append("gmv-layers: теория 7.3 больше не говорит о комиссии 20%")
+    cap = (f"из {rub(gmv)} ₽ GMV «Вилке» остаются комиссия {rub(com)} ₽ и плата за доставку "
+           f"{rub(fee)} ₽, вместе {rub(rev)} ₽, {pct_of(rev, gmv)}%")
+    if cap not in m7:
+        errs.append(f"gmv-layers: подпись в теории 7.3 не говорит «{cap}»")
+    if m7.find('data-fig="gmv-layers"') < m7.find("window.CONTENT.m7l3 =") or \
+            m7.find('data-fig="gmv-layers"') > m7.find("window.CONTENT.m7l4 ="):
+        errs.append("gmv-layers: метка стоит не в уроке 7.3")
+    shown = {gmv, com, fee, rev, round(100 * rev / gmv, 2), 20, 80, float(times.replace(",", "."))}
+    errs += m7_no_answers("gmv-layers", shown, m7)
+    return errs
+
+
+def check_cohort_feb(m7):
+    """Февральская когорта в cohort-feb: числа из vilka.db, те же в таблице
+    и абзацах теории 7.4 и в подписи; ответов задач модуля 7 на схеме нет."""
+    errs = []
+    size, ages, exp, days = cohort_feb_data()
+    if (size, ages, exp, days) != (1233, [("февраль", 0, 382), ("март", 1, 673), ("апрель", 2, 656),
+                                         ("май", 3, 714), ("июнь", 4, 607)], 1004, 28):
+        errs.append(f"cohort-feb: февральская когорта в vilka.db {(size, ages, exp, days)}, ждали "
+                    "1233 клиента, 382/673/656/714/607 в M0–M4, 1004 в эксперименте, 28 дней")
+    if [pct_of(n, size) for _, _, n in ages] != ["30,98", "54,58", "53,20", "57,91", "49,23"]:
+        errs.append("cohort-feb: доли когорты по возрастам изменились")
+    lesson = m7[m7.find("window.CONTENT.m7l4 ="):m7.find("window.CONTENT.m7l5 =")]
+    for m, a, n in ages:
+        row = f"<tr><td>{m}</td><td>M{a}</td><td>{n}</td><td>{pct_of(n, size)}%</td></tr>"
+        if row not in lesson:
+            errs.append(f"cohort-feb: в таблице теории 7.4 нет строки «{row}»")
+    for said in (f"В феврале 2025 года зарегистрировались {size} клиента (без служебных аккаунтов)",
+                 "клиент, пришедший 25 февраля, успел заказать в феврале только за четыре дня",
+                 f"в нём {exp} клиента февральской когорты из {size}",
+                 f"Майский рост — {pct_of(ages[3][2], size)}% в M3"):
+        if said not in lesson:
+            errs.append(f"cohort-feb: теория 7.4 не говорит «{said}»")
+    cap = (f"Из {size} клиентов февраля в марте заказали {pct_of(ages[1][2], size)}%: M0 занижен "
+           "неполным месяцем, майский скачок совпадает с экспериментом")
+    if cap not in lesson:
+        errs.append(f"cohort-feb: подпись в теории 7.4 не говорит «{cap}»")
+    at = lesson.find('data-fig="cohort-feb"')
+    if not lesson.find("Майский рост") < at < lesson.find("<h3>Таблица когорт в pandas</h3>"):
+        errs.append("cohort-feb: метка стоит не после примера февральской когорты в уроке 7.4")
+    shown = {size, exp, days, 25, days - 25 + 1, 100} | {n for _, _, n in ages} | \
+            {round(100 * n / size, 2) for _, _, n in ages}
+    errs += m7_no_answers("cohort-feb", shown, m7)
+    return errs
+
+
+EXP_WINDOW_CAP = ("Окно у каждого своё: 28 дней у назначенных 5 мая, 22 дня у назначенных 11 мая; "
+                  "«весь май» берёт дни до назначения и теряет 1 июня")
+
+
+def check_exp_window(m7):
+    """Даты exp-window: назначение 5–11 мая и бесплатная доставка 5 мая –
+    1 июня по vilka.db, те же даты и граница "2025-06-02" в теории 7.5,
+    подпись и место метки; ответов задач модуля 7 на схеме нет."""
+    errs = []
+    got = exp_window_data()
+    if got != ("2025-05-05", "2025-05-11", "2025-05-05", "2025-06-01", 673, 675):
+        errs.append(f"exp-window: даты эксперимента в vilka.db {got}, ждали назначение 2025-05-05 – "
+                    "2025-05-11, бесплатную доставку 2025-05-05 – 2025-06-01, 673 и 675 участников")
+    lesson = m7[m7.find("window.CONTENT.m7l5 ="):m7.find("window.CONTENT.m7l6 =")]
+    for said in ("Эксперимент шёл с 5 мая по 1 июня 2025 года",
+                 "<code>assigned_at</code> от 5 до 11 мая",
+                 '(w["created_at"] &gt;= w["assigned_at"]) &amp; (w["created_at"] &lt; "2025-06-02")',
+                 "1 июня, последний день эксперимента, в май не входит",
+                 EXP_WINDOW_CAP):
+        if said not in lesson:
+            errs.append(f"exp-window: теория 7.5 не говорит «{said}»")
+    at = lesson.find('data-fig="exp-window"')
+    if not lesson.find("Весь май целиком — ошибка") < at < lesson.find("<h3>Метрика на пользователя"):
+        errs.append("exp-window: метка стоит не после абзаца «Весь май целиком» в уроке 7.5")
+    shown = {673, 675, 28, 22, 4, 10, 1, 5, 11, 31, 2, 2025}
+    errs += m7_no_answers("exp-window", shown, m7)
+    return errs
+
+
+def check_m7():
+    """Числа схем m7 — ровно те, что видит ученик в уроках модуля 7."""
+    errs = []
+    counts, titles = project_route_data()
+    want = {"customers": 7030, "restaurants": 150, "orders": 31387, "experiment": 4563}
+    if counts != want:
+        errs.append(f"project-route: строки листов в vilka.db {counts}, ждали {want}")
+    m7 = (ROOT / "content-m7.js").read_text(encoding="utf-8")
+    errs += check_three_dirts(m7)
+    errs += check_gmv_layers(m7)
+    errs += check_cohort_feb(m7)
+    errs += check_exp_window(m7)
+    errs += check_bi_pipeline(m7)
+    said = ", ".join(f"{t} {counts[t]}" for t in ("customers", "restaurants", "orders", "experiment"))
+    if "Должно получиться: " + said + "." not in m7:
+        errs.append(f"project-route: в теории урока 7.1 нет строки «{said}» — сверьте проверку загрузки")
+    if titles != {"m7l1": "Техзадание и рабочее место", "m7l2": "Качество данных",
+                  "m7l3": "SQL-выгрузка: GMV и выручка", "m7l4": "pandas: когорты и средний чек",
+                  "m7l5": "A/B: бесплатная доставка", "m7l6": "Дашборд проекта", "m7l7": "Записка заказчику"}:
+        errs.append(f"project-route: названия уроков модуля 7 в lessons.js изменились: {titles}")
+    # листы, которые схема приписывает этапу, упоминаются в тексте этого урока
+    parts = re.split(r"\nwindow\.CONTENT\.(m7l\d) = ", m7)
+    text = dict(zip(parts[1::2], parts[2::2]))
+    for lid, src, _ in ROUTE:
+        for t in VILKA_SHEETS:
+            if t in src and f"{t}" not in text[lid]:
+                errs.append(f"project-route: урок {lid} не упоминает лист {t}, а схема его приписывает")
+    return errs
+
+
 MODULES = {"m0": (FIGS_M0, check_m0, {}),
            "m1": (FIGS_M1, check_m1, SANDBOX_M1), "m2": (FIGS_M2, check_m2, {}),
            "m3": (FIGS_M3, check_m3, SANDBOX_M3), "m4": (FIGS_M4, check_m4, {}),
-           "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {})}
+           "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {}),
+           "m7": (FIGS_M7, check_m7, {})}
 
 if __name__ == "__main__":
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
