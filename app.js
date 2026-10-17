@@ -155,16 +155,8 @@ const Course = (function () {
       flat.push(l);
     });
   });
-  /* Порядок прохождения: урок с полем before встаёт прямо перед
-     указанным уроком (0.2–0.5 «Python с нуля» — перед 2.1). Карта курса и
-     номера уроков остаются по местам в модулях. */
-  const order = flat.filter(function (l) { return !l.before; });
-  flat.forEach(function (l) {
-    if (!l.before) return;
-    const at = order.findIndex(function (x) { return x.id === l.before; });
-    order.splice(at < 0 ? order.length : at, 0, l);
-  });
-  const readyList = order.filter(function (l) { return l.ready; });
+  /* Порядок прохождения — по номерам, как в карте курса: 0.1 → 0.5 → 1.1 … */
+  const readyList = flat.filter(function (l) { return l.ready; });
 
   const api = {
     data: C,
@@ -857,13 +849,14 @@ const Plan = {
 
   /* Модуль со сданным итоговым тестом закрыт экстерном: его уроков нет
      в плане. Уроки модуля 0 закрываются вместе с модулем, к которому
-     ведут: 0.1 — с модулем 1 (needs), 0.2–0.5 — с модулем 2 (before). */
+     готовят: 0.1 — с модулем 1 (needs), 0.2–0.5 — с модулем 2 (prep). */
   anyClosed: function () { return Course.ready.some(function (l) { return !Course.isDone(l.id) && Plan.closed(l); }); },
   closed: function (l) {
     let m = l.module;
     if (m.num === 0) {
-      m = l.before ? Course.byId(l.before).module
-        : Course.data.modules.filter(function (x) { return (x.needs || []).indexOf(l.id) >= 0; })[0];
+      m = Course.data.modules.filter(function (x) {
+        return l.prep ? x.id === l.prep : (x.needs || []).indexOf(l.id) >= 0;
+      })[0];
     }
     return !!m && ModuleTest.passed(m);
   },
@@ -2452,8 +2445,8 @@ function renderSummary(app, id) {
 
   /* Что дальше — по порядку прохождения, а не по карте: первый
      непройденный урок после последнего урока модуля. Если он не из
-     следующего модуля (0.2 после модуля 1, 2.1 после модуля 0), зовём
-     прямо в урок. */
+     следующего модуля (следующий уже пройден целиком), зовём прямо
+     в урок. */
   const at = Math.max.apply(null, m.lessons.map(function (l) { return Course.ready.indexOf(l); }));
   const after = closed ? Course.ready.slice(at + 1).filter(function (l) { return !Course.isDone(l.id); })[0] || null : null;
   const detour = !!after && after.module !== mods[mods.indexOf(m) + 1];
