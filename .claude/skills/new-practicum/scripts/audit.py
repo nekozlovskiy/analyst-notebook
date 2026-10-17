@@ -4,7 +4,7 @@
     python3 .claude/skills/new-practicum/scripts/audit.py            # все Python-уроки
     python3 …/audit.py m3                                             # печатать только модуль 3
 
-Уроки выстраиваются в порядке прохождения (с учётом поля before в lessons.js).
+Уроки выстраиваются в порядке прохождения — по номерам, как в lessons.js.
 «Объяснено» — всё, что встречается в шагах, теории, практикуме, карточках и
 условиях тренажёра урока или раньше; «требуется» — код решения основной задачи
 и тренажёра. Для каждой конструкции Python/pandas, которую урок требует раньше,
@@ -26,11 +26,7 @@ const c = { window: { SH: {}, CONTENT: {}, DATA: {} } }; vm.createContext(c);
 for (const f of ["data.js", "content-core.js"].concat(fs.readdirSync(".").filter(f => /^content-m\d+\.js$/.test(f)).sort(), ["lessons.js"]))
   vm.runInContext(fs.readFileSync(f, "utf8"), c);
 const all = c.window.COURSE.modules.flatMap(m => m.lessons);
-const order = [];
-all.filter(l => !l.before).forEach(l => {
-  all.filter(b => b.before === l.id).forEach(b => order.push(b));
-  order.push(l);
-});
+const order = all;   /* порядок прохождения — по номерам, как в карте */
 const strip = h => String(h || "").replace(/<[^>]+>/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
 const out = [];
 for (const L of order) {
