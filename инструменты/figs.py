@@ -10,6 +10,9 @@
 
     python3 инструменты/figs.py m1           # пересобрать схемы модуля 1
     python3 инструменты/figs.py m1 --check   # только сверить числа с базой
+    python3 инструменты/figs.py --render-all # нарисовать все схемы всех модулей, ничего
+                                             # не записывая: ловит падение одной схемы
+                                             # из-за правки в общем коде (хук и ci.sh)
 """
 import html
 import json
@@ -3701,7 +3704,25 @@ MODULES = {"m0": (FIGS_M0, check_m0, {}),
            "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {}),
            "m7": (FIGS_M7, check_m7, {})}
 
+def render_all():
+    """Все схемы и песочницы всех модулей — без записи. Список упавших."""
+    errs = []
+    for m, (figs, _, boxes) in MODULES.items():
+        for k, f in list(figs.items()) + list(boxes.items()):
+            try:
+                f()
+            except Exception as e:                  # noqa: BLE001 — нужна любая ошибка схемы
+                errs.append(f"{m} {k}: {type(e).__name__}: {e}")
+    return errs
+
+
 if __name__ == "__main__":
+    if "--render-all" in sys.argv:
+        errs = render_all()
+        if errs:
+            sys.exit("Схемы не рисуются:\n" + "\n".join(errs))
+        print("Все схемы рисуются: " + ", ".join(MODULES))
+        sys.exit(0)
     mod = sys.argv[1] if len(sys.argv) > 1 else ""
     if mod not in MODULES:
         sys.exit("укажите модуль: " + ", ".join(MODULES))

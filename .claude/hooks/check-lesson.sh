@@ -12,7 +12,9 @@
 #                             и app.js ещё и поиск случайных иероглифов
 #                             (U+2E00–U+FEFF): дважды они уже попадали в уроки;
 #                             для content-m*.js — checkorder.js: шаги, карточки,
-#                             вопросы и тренажёр не сдвинулись относительно main.
+#                             вопросы и тренажёр не сдвинулись относительно main;
+#                             после правки инструменты/figs.py — figs.py
+#                             --render-all: все схемы всех модулей рисуются.
 #
 # На вход — JSON события на stdin. Ошибка проверки: код 2 и причина в stderr,
 # её видит Claude и исправляет сразу.
@@ -52,6 +54,19 @@ if [ "$mode" = "guard" ]; then
            --grep="from [^ /]+/${branch_re}\$" 2>/dev/null || true)
   if [ -n "$merged" ]; then
     deny "Ветка $branch уже слита в main ($merged): новые правки — в новую ветку от свежего origin/main. Незакоммиченное переносится так: git stash; git switch main; git merge --ff-only origin/main; git switch -c <имя>; git stash pop."
+  fi
+  exit 0
+fi
+
+# figs.py: все схемы всех модулей рисуются. --check сверяет только числа,
+# а падение схемы из-за правки общего кода (имя, затёртое в другом
+# разделе файла) иначе всплыло бы только на выпуске.
+if [ "$name" = "figs.py" ]; then
+  root=$(cd "$(dirname "$0")/../.." && pwd)
+  [ "$(cd "$(dirname "$file")" 2>/dev/null && pwd)" = "$root/инструменты" ] || exit 0
+  if ! out=$(python3 "$root/инструменты/figs.py" --render-all 2>&1); then
+    echo "$out" | tail -8 >&2
+    exit 2
   fi
   exit 0
 fi

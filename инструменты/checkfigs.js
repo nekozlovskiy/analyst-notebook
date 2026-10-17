@@ -5,7 +5,8 @@
    - у схемы role="img", <title> и <desc> — её читает диктор;
    - viewBox не шире 340 — схемы рисуются под телефон;
    - цвета только классами .f-*: заданный напрямую цвет пропадёт
-     в тёмной теме.
+     в тёмной теме;
+   - подпись «Рис. …» без номера и без точки в конце.
    Запуск: node инструменты/checkfigs.js                          */
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const base = path.resolve(__dirname, "..");
@@ -24,6 +25,13 @@ for (const [id, C] of Object.entries(ctx.window.CONTENT)) {
   for (const m of text.matchAll(/data-fig="([\w-]+)"/g)) {
     used[m[1]] = true;
     if (!FIGS[m[1]]) bad.push(id + ": метка data-fig=\"" + m[1] + "\", а схемы нет — запустите figs.py");
+  }
+  /* подпись как у всех схем курса: «Рис. …» без номера и без точки в конце */
+  for (const m of text.matchAll(/data-fig="([\w-]+)"[^>]*>\s*<figcaption>([\s\S]*?)<\/figcaption>/g)) {
+    const cap = m[2].trim();
+    if (!/^Рис\. /.test(cap)) bad.push(id + " " + m[1] + ": подпись начинается не с «Рис. »");
+    else if (/^Рис\. \d/.test(cap)) bad.push(id + " " + m[1] + ": у подписи номер — в курсе подписи без номеров");
+    if (/\.$/.test(cap)) bad.push(id + " " + m[1] + ": подпись кончается точкой — в курсе без точки");
   }
 }
 for (const [fid, svg] of Object.entries(FIGS)) {
