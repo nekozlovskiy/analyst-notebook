@@ -4,7 +4,8 @@
    1. разбор ввода — Nums.parse / judge / load из app.js на сценариях;
    2. эталоны — у каждого поля запрос check на инструменты/shop.db даёт
       answer в пределах tol (см. ниже, вторая часть); урок с db: "vilka"
-      сверяется с инструменты/vilka.db.
+      сверяется с инструменты/vilka.db; поле с py: true (p-value)
+      без check — его сверяет инструменты/checkvilka.py.
    Запуск: node инструменты/checknums.js            */
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const base = path.resolve(__dirname, "..");
@@ -58,10 +59,22 @@ for (const f of ["data.js", "content-core.js"].concat(
   vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), C0);
 const db = path.join(__dirname, "shop.db");
 let fields = 0;
-function checkFields(where, list, dbPath) {
+function checkFields(where, list, dbPath, codeId) {
   if (!Array.isArray(list) || !list.length) { bad.push(where + ": нет fields"); return; }
   list.forEach(function (f, i) {
     const w = where + ", поле " + (i + 1);
+    if (f.py) {
+      // p-value и другие числа без SQL: их сверяет checkvilka.py по коду урока —
+      // только поля задачи (не тренажёра) и только если у урока есть VILKA_CODE
+      if (!f.label || !f.hint) bad.push(w + ": нет label или hint");
+      if (typeof f.answer !== "number") bad.push(w + ": answer не число");
+      if (typeof f.tol !== "number" || f.tol >= 1) bad.push(w + ": у py-поля нужен tol меньше 1 (иначе допуск 0,5)");
+      if (f.check) bad.push(w + ": py: true и check сразу — SQL-сверка молча отключится");
+      if (dbPath !== path.join(__dirname, "vilka.db")) bad.push(w + ": py: true — только в уроке с db: \"vilka\"");
+      if (!codeId || !(C0.window.VILKA_CODE || {})[codeId]) bad.push(w + ": py: true — только в поле задачи урока с кодом в VILKA_CODE (его сверяет checkvilka.py)");
+      fields++;
+      return;
+    }
     for (const k of ["label", "hint", "check"]) if (!f[k]) bad.push(w + ": нет " + k);
     if (typeof f.answer !== "number") { bad.push(w + ": answer не число"); return; }
     fields++;
@@ -78,12 +91,16 @@ checkFields("самопроверка vilka.db", [{ label: "строк orders", 
             path.join(__dirname, "vilka.db"));
 for (const mod of C0.window.COURSE.modules) for (const L of mod.lessons) {
   const C = C0.window.CONTENT[L.id];
-  if (!C) continue;
+  if (!C) {
+    // урок с ready: true без содержимого: движок грузил бы модуль по кругу
+    if (L.ready) bad.push(L.id + ": урок готов (ready: true), а в content-*.js его нет");
+    continue;
+  }
   const dbPath = C.db === "vilka" ? path.join(__dirname, "vilka.db") : db;
   if (L.kind === "sheet") {
-    checkFields(L.id + " задача", C.fields, dbPath);
-    if (!C.file || !fs.existsSync(path.join(base, C.file))) bad.push(L.id + ": нет файла " + C.file);
+    checkFields(L.id + " задача", C.fields, dbPath, L.id);
   }
+  if ((L.kind === "sheet" || C.file) && (!C.file || !fs.existsSync(path.join(base, C.file)))) bad.push(L.id + ": нет файла " + C.file);
   (C.drills || []).forEach(function (d, i) {
     const where = L.id + " тренажёр " + (i + 1) + " «" + d.title + "»";
     if (d.answer === "nums") checkFields(where, d.fields, dbPath);
