@@ -16,7 +16,7 @@
 <meta property="og:locale" content="ru_RU">
 <meta property="og:site_name" content="Тетрадь аналитика">
 <meta property="og:title" content="Тетрадь аналитика — курс подготовки к Junior Data Analyst">
-<meta property="og:description" content="55 уроков: SQL, Python, статистика и продуктовые метрики. Каждый урок заканчивается задачей, которую вы решаете прямо в браузере.">
+<meta property="og:description" content="58 уроков: SQL, Python, статистика и продуктовые метрики. Каждый урок заканчивается задачей, которую вы решаете прямо в браузере.">
 <meta property="og:url" content="https://nekozlovskiy.github.io/analyst-notebook/">
 <meta property="og:image" content="https://nekozlovskiy.github.io/analyst-notebook/og.png">
 <meta property="og:image:width" content="1200">
@@ -2514,7 +2514,7 @@ window.COURSE = {
     { id: "metrics",    group: "Продукт",    title: "Воронки и метрики",           lessons: ["m4l2", "m4l4", "m4l5"] },
     { id: "case",       group: "Продукт",    title: "Продуктовый кейс и дашборд",  lessons: ["m4l1", "m4l6", "m4l8", "m4l7", "m6l5"] },
     { id: "sheets",     group: "Продукт",    title: "Excel и Google Таблицы",      lessons: ["m6l7"] },
-    { id: "final",      group: "Продукт",    title: "Финальный проект",            lessons: ["m7l1", "m7l2", "m7l3", "m7l4"] }
+    { id: "final",      group: "Продукт",    title: "Финальный проект",            lessons: ["m7l1", "m7l2", "m7l3", "m7l4", "m7l5", "m7l6", "m7l7"] }
   ],
 
   modules: [
@@ -2873,12 +2873,21 @@ window.COURSE = {
           say: "когорта отвечает на вопрос, который выручка прячет",
           sayTask: "сначала таблица когорт, потом выводы",
           sayDrills: "«M1 апрельской когорты» — посмотрите, что было в мае" },
-        { id: "m7l5", title: "A/B: бесплатная доставка", kind: "sheet", ready: false,
-          desc: "конверсия выросла — а деньги?" },
-        { id: "m7l6", title: "Дашборд проекта", kind: "sheet", ready: false,
-          desc: "дашборд DataLens по чистым данным" },
-        { id: "m7l7", title: "Записка заказчику", kind: "text", ready: false,
-          desc: "решение по эксперименту и деньги" }
+        { id: "m7l5", title: "A/B: бесплатная доставка", kind: "sheet", ready: true,
+          desc: "конверсия выросла — а деньги?",
+          say: "значимый рост, за который платит компания, — ещё не успех",
+          sayTask: "сначала SRM, потом конверсия, решает выручка на пользователя",
+          sayDrills: "«Заказы у порога» — так выглядит бесплатная доставка в данных" },
+        { id: "m7l6", title: "Дашборд проекта", kind: "sheet", ready: true,
+          desc: "дашборд DataLens по чистой таблице из ноутбука",
+          say: "числа дашборда и ноутбука должны совпадать по построению",
+          sayTask: "чистая таблица из Colab, потом DataLens",
+          sayDrills: "«Дашборд на сыром файле» — насколько он соврёт" },
+        { id: "m7l7", title: "Записка заказчику", kind: "text", ready: true,
+          desc: "решение по эксперименту, деньги и портфолио",
+          say: "записку читают первой, а часто — единственной",
+          sayTask: "решение первым абзацем, три числа под ним",
+          sayDrills: "«Первый абзац» — перепишите так, чтобы решили правильно" }
       ]
     }
   ]
@@ -34654,7 +34663,7 @@ experiment    4563 строки   customer_id, group, assigned_at</code></pre>
     { q: "Как в Colab превратить xlsx в базу для SQL?",
       a: "pd.read_excel(файл, sheet_name=None) даёт словарь «лист → DataFrame»; каждый кладётся в SQLite в памяти через to_sql(имя, con, index=False). Запросы — pd.read_sql(\"…\", con)." },
     { q: "Что значит «ноутбук выполняется сверху вниз»?",
-      a: "После «Выполнить все» в новой сессии все ячейки проходят без ошибок и печатают те же числа. Проверяющий запускает ноутбук именно так." },
+      a: "В новой сессии, после загрузки vilka.xlsx и «Выполнить все», все ячейки проходят без ошибок и печатают те же числа. Проверяющий запускает ноутбук именно так." },
     { q: "Почему файл vilka.xlsx пропадает из Colab на следующий день?",
       a: "Он лежит в сессионном хранилище: после простоя среду выполнения сбрасывают вместе с файлами и переменными. Код ноутбука остаётся — файл загружают снова и выполняют ячейки сверху вниз." },
     { q: "Как писать SQL в Colab, если данные в SQLite в памяти?",
@@ -35374,6 +35383,762 @@ ${vilkaPre(window.VILKA_CODE.m7l4)}
       d: "Сводная таблица: index, columns, values и aggfunc — здесь nunique для уникальных клиентов." },
     { t: "DataFrame.div", url: "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.div.html", src: "pandas", lang: "EN",
       d: "Деление с выравниванием: axis=0 делит каждую строку на своё значение из Series." }
+  ]
+};
+
+
+
+/* урок 7.5: после load + clean; p-value через math.erf, как в модуле 3 — scipy не нужен */
+window.VILKA_CODE.m7l5 = `import math
+
+def norm_cdf(x):
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
+def p_two_sided(z):
+    return 2 * (1 - norm_cdf(abs(z)))
+
+n = experiment.groupby("group").size()
+nc, nt = n["control"], n["test"]
+z_srm = (nt - (nc + nt) / 2) / math.sqrt((nc + nt) * 0.25)
+
+w = delivered.merge(experiment, on="customer_id")
+w = w[(w["created_at"] >= w["assigned_at"]) & (w["created_at"] < "2025-06-02")]
+per = w.groupby("customer_id", as_index=False).agg(orders=("order_id", "size"), revenue=("revenue", "sum"))
+u = experiment.merge(per, on="customer_id", how="left").fillna({"orders": 0, "revenue": 0})
+
+buyers = u[u["orders"] > 0].groupby("group").size()
+pc, pt = buyers["control"] / nc, buyers["test"] / nt
+pool = buyers.sum() / (nc + nt)
+z_conv = (pt - pc) / math.sqrt(pool * (1 - pool) * (1 / nc + 1 / nt))
+
+check_test = w.loc[w["group"] == "test", "items_sum"].mean()
+m = u.groupby("group")["revenue"].mean()
+v = u.groupby("group")["revenue"].var()
+z_rev = (m["test"] - m["control"]) / math.sqrt(v["test"] / nt + v["control"] / nc)
+
+print(f"p-value SRM: {p_two_sided(z_srm):.4f}")
+print(f"конверсия test, %: {100 * pt:.2f}")
+print(f"p-value конверсии: {p_two_sided(z_conv):.4f}")
+print(f"средний чек test: {check_test:.2f}")
+print(f"выручка Вилки на пользователя test: {m['test']:.2f}")
+print(f"p-value выручки на пользователя: {p_two_sided(z_rev):.4f}")`;
+
+window.CONTENT.m7l5 = {
+  intro: "Третий вопрос Арины — раскатывать ли бесплатную доставку от 1500 ₽. Продукт уже видит рост конверсии и считает вопрос решённым. Этот этап — проверить, честен ли сплит, значим ли рост и, главное, зарабатывает ли на нём «Вилка».",
+  duration: "≈ 2,5 часа",
+  plan: [
+    { m: "35 мин", w: "Теория: SRM, окно эксперимента, конверсия против денег" },
+    { m: "75 мин", w: "Задача: шесть чисел эксперимента в Colab" },
+    { m: "25 мин", w: "Тренажёр: потерянная плата, заказы у порога" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "5 мин",  w: "Заметки" }
+  ],
+  file: "vilka.xlsx",
+  db: "vilka",
+  theory: `
+<p class="lead">В модуле 3 A/B-тест заканчивался p-value. В тестовом задании он заканчивается решением о деньгах: значимый рост метрики, за который компания платит больше, чем получает, — повод не раскатывать.</p>
+
+<h3>Сначала — честен ли сплит</h3>
+<p>SRM (sample ratio mismatch, урок 3.7) — первая проверка любого эксперимента. Пользователей делили поровну, значит, в каждой группе ожидается половина участников. В уроке 3.7 SRM проверяли хи-квадратом; для двух групп то же самое короче: z для доли test против 0,5, и z² равен хи-квадрату, p-value тот же. Размеры групп — <code>n = experiment.groupby("group").size()</code>.</p>
+<pre><code>z_srm = (n_test - (n_control + n_test) / 2) / math.sqrt((n_control + n_test) * 0.25)</code></pre>
+<p>Если p-value SRM меньше 0,05, группы набраны нечестно, и остальные числа эксперимента читать нельзя. Если больше — сплит в порядке. Служебные аккаунты убирают до проверки: код чистки из урока 7.2 уже вырезал их из <code>experiment</code>.</p>
+
+<h3>Окно эксперимента</h3>
+<p>Эксперимент шёл с 5 мая по 1 июня 2025 года, а клиента назначали в группу в первую неделю — <code>assigned_at</code> от 5 до 11 мая. Заказ относится к эксперименту, если сделан не раньше дня назначения и не позже 1 июня:</p>
+<pre><code>w = delivered.merge(experiment, on="customer_id")
+w = w[(w["created_at"] &gt;= w["assigned_at"]) &amp; (w["created_at"] &lt; "2025-06-02")]</code></pre>
+<p>Весь май целиком — ошибка: заказы до назначения не видели бесплатной доставки, а 1 июня, последний день эксперимента, в май не входит. «По 1 июня включительно» — это строго меньше 2 июня; строку с датой pandas сам сравнивает с датой.</p>
+
+<h3>Метрика на пользователя: знаменатель — все участники</h3>
+<p>Конверсия — доля участников группы с хотя бы одним доставленным заказом в окне. Выручка на пользователя — вся выручка «Вилки» группы в окне, делённая на всех участников, включая не заказавших. Поэтому у каждого участника своя строка, и у тех, кто не заказывал, выручка 0:</p>
+<pre><code>per = w.groupby("customer_id", as_index=False).agg(orders=("order_id", "size"), revenue=("revenue", "sum"))
+u = experiment.merge(per, on="customer_id", how="left").fillna({"orders": 0, "revenue": 0})</code></pre>
+<p><code>merge(…, how="left")</code> к таблице участников оставляет всех, как левое соединение в модуле 2; у незаказавших в <code>orders</code> и <code>revenue</code> пропуски, и <code>fillna</code> со словарём ставит нули сразу в оба столбца.</p>
+
+<h3>Значимость</h3>
+<ul>
+  <li><strong>Конверсия</strong> — z-тест для двух долей с общей долей, как в уроке 3.3.</li>
+  <li><strong>Выручка на пользователя</strong> — разница средних, делённая на <code>√(var_test / n_test + var_control / n_control)</code>, как в t-тесте Уэлча из урока 3.4. При двух тысячах человек в группе t почти не отличается от z, поэтому p-value считают той же <code>norm_cdf</code>.</li>
+</ul>
+<p>В Colab есть scipy, и <code>scipy.stats.ttest_ind(…, equal_var=False)</code> посчитает t-тест одной строкой. Формулой надёжнее для тестового: проверяющий видит, что именно вы сравнивали.</p>
+
+<h3>Из чего складывается выручка «Вилки» на пользователя</h3>
+<p>Выручка на пользователя = 20% от GMV на пользователя + плата за доставку на пользователя. В control: 0,2 × 1115,50 + 203,31 = 426,41 ₽. Бесплатная доставка двигает слагаемые в разные стороны:</p>
+<ul>
+  <li><strong>GMV растёт</strong>: заказывают чаще, а корзину добирают до порога. В control 10,13% заказов попадают в 1500–1749 ₽ — сразу за порогом; в test таких заказов заметно больше.</li>
+  <li><strong>Плата за доставку падает</strong>: за заказы от 1500 ₽ в test её нет совсем.</li>
+</ul>
+<p>Что перевесит, показывает только расчёт: конверсия — не выручка, и рост одной не означает роста другой.</p>
+
+<div class="callout trap">
+  <span class="ct">Решение — не по p-value конверсии</span>
+  <p>«Конверсия выросла значимо — раскатываем» — самый частый ответ в тестовом и самый слабый. Вопрос заказчика — окупается ли бесплатная доставка. Ответ на него — выручка «Вилки» на пользователя и её значимость, а конверсия, чек и GMV объясняют, почему она такая.</p>
+</div>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Акции с бесплатной доставкой, скидки и кешбэк почти всегда поднимают конверсию — за деньги компании. Аналитик, который приносит вместе с конверсией выручку на пользователя, экономит продукту квартал раскатки убыточной механики.</p>
+</div>
+`,
+
+  ticket: {
+    from: "Арина, руководитель продукта «Вилки»",
+    subj: "Бесплатная доставка: раскатываем?",
+    body: `
+<p>Продукт смотрел дашборд эксперимента: конверсия в test выше, хотят раскатывать бесплатную доставку от 1500 ₽ на всех с июля. Мне нужно понять до планёрки, стоит ли. Посмотри, пожалуйста, честно ли разделили группы, значим ли рост и что с нашими деньгами.</p>
+<p><strong>Задание.</strong> Посчитайте в Colab на чистых данных шесть чисел: p-value проверки SRM, конверсию в заказ в test, p-value разницы конверсий, средний чек заказа в test, выручку «Вилки» на пользователя в test и p-value разницы выручки на пользователя. p-value — долей, например 0,0123. Конверсию — в процентах, например 12,34.</p>
+`
+  },
+
+  schema: `
+<p>Файл <code>vilka.xlsx</code>, кнопка «Скачать данные» над полями. В начале ноутбука — код загрузки (урок 7.1) и код чистки (урок 7.2): после них <code>experiment</code> и <code>delivered</code> без служебных аккаунтов и дублей.</p>
+<pre><code>experiment  customer_id, group (control / test), assigned_at — день, с которого клиент в эксперименте
+delivered   доставленные заказы + revenue = 0.2 * items_sum + delivery_fee</code></pre>
+<ul>
+  <li><strong>Окно</strong>: <code>assigned_at</code> ≤ <code>created_at</code> &lt; 2 июня 2025 года.</li>
+  <li><strong>Конверсия</strong> — доля участников группы с хотя бы одним доставленным заказом в окне.</li>
+  <li><strong>Средний чек</strong> — средний <code>items_sum</code> доставленных заказов группы в окне.</li>
+  <li><strong>Выручка на пользователя</strong> — выручка «Вилки» группы в окне, делённая на всех участников группы.</li>
+  <li><strong>p-value</strong> — двусторонний, через <code>norm_cdf</code> из модуля 3: <code>2 * (1 - norm_cdf(abs(z)))</code>.</li>
+</ul>
+<p><strong>Как проверяется задание.</strong> Допуск — 0,005 в p-value SRM и выручки, 0,0006 в p-value конверсии, 0,06 процентного пункта в конверсии, 50 копеек в рублях.</p>
+`,
+
+  fields: [
+    { label: "p-value проверки SRM", answer: 0.9408, tol: 0.005, py: true,
+      hint: "Ожидаемое в каждой группе — половина участников без служебных аккаунтов. z = (n_test − (n_control + n_test) / 2) / √((n_control + n_test) · 0,25), p = 2 · (1 − norm_cdf(|z|))." },
+    { label: "Конверсия в заказ в test", unit: "%", answer: 53.72, tol: 0.06,
+      hint: "Доля участников test с доставленным заказом в окне от assigned_at по 1 июня. 58,79 — взят весь май вместо окна; 54,03 — в группе остались служебные аккаунты.",
+      check: "WITH x AS (SELECT e.customer_id, e.\"group\" AS g, e.assigned_at AS a FROM experiment e JOIN customers c USING(customer_id) WHERE c.platform <> 'internal'), d AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered'), w AS (SELECT x.g, d.* FROM d JOIN x USING(customer_id) WHERE d.created_at >= x.a AND d.created_at < '2025-06-02') SELECT ROUND(100.0 * COUNT(DISTINCT customer_id) / (SELECT COUNT(*) FROM x WHERE g = 'test'), 2) FROM w WHERE g = 'test';" },
+    { label: "p-value разницы конверсий", answer: 0.0031, tol: 0.0006, py: true,
+      hint: "z-тест для двух долей из урока 3.3: общая доля = все покупатели обеих групп / все участники; z = (p_test − p_control) / √(p · (1 − p) · (1/n_test + 1/n_control)). Вводите долей, не процентом; если Python напечатал 3.1e-03, это 0,0031." },
+    { label: "Средний чек заказа в test", unit: "₽", answer: 1278.92, tol: 0.5,
+      hint: "Средний items_sum доставленных заказов test в окне. 1136,23 — остались служебные аккаунты с заказами по 100–200 ₽.",
+      check: "WITH x AS (SELECT e.customer_id, e.\"group\" AS g, e.assigned_at AS a FROM experiment e JOIN customers c USING(customer_id) WHERE c.platform <> 'internal'), d AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered'), w AS (SELECT x.g, d.* FROM d JOIN x USING(customer_id) WHERE d.created_at >= x.a AND d.created_at < '2025-06-02') SELECT ROUND(AVG(items_sum), 2) FROM w WHERE g = 'test';" },
+    { label: "Выручка «Вилки» на пользователя в test", unit: "₽", answer: 429.15, tol: 0.5,
+      hint: "Выручка test в окне, делённая на всех участников test. 798,81 — поделено только на заказавших.",
+      check: "WITH x AS (SELECT e.customer_id, e.\"group\" AS g, e.assigned_at AS a FROM experiment e JOIN customers c USING(customer_id) WHERE c.platform <> 'internal'), d AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered'), w AS (SELECT x.g, d.* FROM d JOIN x USING(customer_id) WHERE d.created_at >= x.a AND d.created_at < '2025-06-02') SELECT ROUND(SUM(0.2 * items_sum + delivery_fee) / (SELECT COUNT(*) FROM x WHERE g = 'test'), 2) FROM w WHERE g = 'test';" },
+    { label: "p-value разницы выручки на пользователя", answer: 0.8826, tol: 0.005, py: true,
+      hint: "У каждого участника — его выручка в окне, у незаказавших 0. z = (среднее_test − среднее_control) / √(var_test / n_test + var_control / n_control)." }
+  ],
+
+  hints: [
+    "Начните с размеров групп: <code>experiment.groupby(\"group\").size()</code>. Из них — SRM. Потом окно: <code>delivered.merge(experiment, on=\"customer_id\")</code> и фильтр по <code>assigned_at</code> и 2 июня.",
+    "Таблица «участник → заказы и выручка в окне»: <code>groupby(\"customer_id\").agg(...)</code>, затем <code>experiment.merge(per, on=\"customer_id\", how=\"left\").fillna(...)</code> — так в ней остаются все участники. Конверсия — доля строк с <code>orders &gt; 0</code> в группе.",
+    "p-value — через <code>norm_cdf</code> из модуля 3: <code>2 * (1 - norm_cdf(abs(z)))</code>. Для конверсии — z для двух долей с общей долей, для выручки — разница средних на <code>math.sqrt(var_t / n_t + var_c / n_c)</code>, дисперсии — <code>u.groupby(\"group\")[\"revenue\"].var()</code>: pandas делит на n − 1, как <code>var</code> из модуля 3."
+  ],
+
+  reference: `
+<p><strong>Эталонное решение.</strong> После кода загрузки (урок 7.1) и чистки (урок 7.2):</p>
+${vilkaPre(window.VILKA_CODE.m7l5)}
+<pre><code>p-value SRM: 0.9408
+конверсия test, %: 53.72
+p-value конверсии: 0.0031
+средний чек test: 1278.92
+выручка Вилки на пользователя test: 429.15
+p-value выручки на пользователя: 0.8826</code></pre>
+<p><strong>Как это читать.</strong></p>
+<ul>
+  <li>Сплит честный: 2264 участника в control и 2269 в test, p-value SRM 0,94.</li>
+  <li>Конверсия выросла с 49,34% до 53,72%, на 4,38 процентного пункта, p = 0,0031 — рост не случайный. Чек тоже вырос: 1278,92 ₽ против 1230,15 ₽.</li>
+  <li>GMV на пользователя вырос на 221,47 ₽ (1336,98 против 1115,50), плата за доставку на пользователя упала на 41,55 ₽ (161,76 против 203,31).</li>
+  <li>Выручка «Вилки» на пользователя: 429,15 ₽ против 426,41 ₽, +2,74 ₽ при p = 0,88. Рост заказов почти целиком съела потерянная плата за доставку: 20% от +221,47 ₽ — это +44,29 ₽, минус 41,55 ₽.</li>
+</ul>
+<p>Вывод для Арины: бесплатная доставка от 1500 ₽ поднимает конверсию и оборот ресторанов, но «Вилке» не приносит денег — разница в выручке на пользователя неотличима от нуля. Раскатывать в таком виде не стоит; варианты — выше порог или доставка за полцены, их надо проверять отдельным экспериментом.</p>
+`,
+
+  drills: [
+    { title: "Сколько платы за доставку не получили", level: "easy", answer: "nums",
+      body: `<p>Сколько «Вилка» получила бы за доставку заказов test в окне эксперимента, которые пришли бесплатно, если бы брала обычный тариф для заказов от 1500 ₽ — 149 ₽? Обычная плата за доставку у «Вилки»: 249 ₽ за заказ до 1500 ₽ и 149 ₽ от 1500 ₽ — это видно по <code>delivery_fee</code> в control.</p>`,
+      fields: [{ label: "Неполученная плата за доставку", unit: "₽", answer: 133802, tol: 1,
+        hint: "Заказы test в окне с delivery_fee = 0, умноженные на 149.",
+        check: "WITH x AS (SELECT e.customer_id, e.\"group\" AS g, e.assigned_at AS a FROM experiment e JOIN customers c USING(customer_id) WHERE c.platform <> 'internal'), d AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered'), w AS (SELECT x.g, d.* FROM d JOIN x USING(customer_id) WHERE d.created_at >= x.a AND d.created_at < '2025-06-02') SELECT COUNT(*) * 149 FROM w WHERE g = 'test' AND delivery_fee = 0;" }],
+      solution: `free = w[(w["group"] == "test") & (w["delivery_fee"] == 0)]
+print(len(free) * 149)
+# 133802
+
+898 бесплатных доставок × 149 ₽ = 133 802 ₽.`,
+      note: "Это верхняя оценка: часть этих заказов без акции была бы меньше 1500 ₽ и стоила бы 249 ₽ доставки, а часть не случилась бы вовсе. Поэтому эффект считают сравнением групп, а не по одной группе." },
+    { title: "Заказы у порога", level: "mid", answer: "nums",
+      body: `<p>Какая доля доставленных заказов test в окне эксперимента стоила от 1500 ₽? В control — 24,79%.</p>`,
+      fields: [{ label: "Доля заказов от 1500 ₽ в test", unit: "%", answer: 37.86, tol: 0.06,
+        hint: "Заказы test в окне с items_sum ≥ 1500, делённые на все заказы test в окне.",
+        check: "WITH x AS (SELECT e.customer_id, e.\"group\" AS g, e.assigned_at AS a FROM experiment e JOIN customers c USING(customer_id) WHERE c.platform <> 'internal'), d AS (SELECT DISTINCT o.* FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered'), w AS (SELECT x.g, d.* FROM d JOIN x USING(customer_id) WHERE d.created_at >= x.a AND d.created_at < '2025-06-02') SELECT ROUND(100.0 * SUM(items_sum >= 1500) / COUNT(*), 2) FROM w WHERE g = 'test';" }],
+      solution: `t = w[w["group"] == "test"]
+print(round(100 * (t["items_sum"] >= 1500).mean(), 2))
+# 37.86
+
+В control 24,79% заказов от 1500 ₽, в test — 37,86%.
+Больше всего выросла полоса сразу за порогом, 1500–1749 ₽:
+10,13% в control и 22,34% в test.`,
+      note: "Клиенты добирают корзину до порога бесплатной доставки — поэтому растёт средний чек. Для «Вилки» это плюс 20% комиссии с добавки, но минус вся плата за доставку." }
+  ],
+
+  quiz: [
+    {
+      q: "С чего начинать разбор любого A/B-теста?",
+      opts: [
+        "С p-value ключевой метрики",
+        "С проверки SRM: совпадают ли размеры групп с задуманным сплитом",
+        "С графика метрики по дням",
+        "С расчёта MDE"
+      ],
+      right: 1,
+      why: "Если группы набраны нечестно, разница в метриках может быть следствием отбора, а не изменения. SRM проверяют первым, и при p-value ниже 0,05 дальше не идут."
+    },
+    {
+      q: "Почему для эксперимента нельзя взять все заказы мая?",
+      opts: [
+        "Май слишком длинный",
+        "В мае были отмены",
+        "Заказы до дня назначения не видели бесплатной доставки, а 1 июня — последний день эксперимента",
+        "Так требует SRM"
+      ],
+      right: 2,
+      why: "Окно эксперимента у каждого участника своё: от assigned_at до конца эксперимента. Заказы до назначения разбавляют эффект в test, а календарный месяц обрезает последний день."
+    },
+    {
+      q: "Допустим, конверсия в test значимо выше. Что ещё нужно, чтобы рекомендовать раскатку?",
+      opts: [
+        "Ничего: значимость доказана",
+        "Чтобы рост был больше 5 процентных пунктов",
+        "Чтобы средний чек тоже вырос",
+        "Чтобы выросла выручка компании на пользователя с учётом потерянной платы за доставку"
+      ],
+      right: 3,
+      why: "Бесплатная доставка оплачивается из выручки сервиса. Конверсия и чек растут за счёт этих денег, и решение принимают по выручке на пользователя, а не по конверсии."
+    },
+    {
+      q: "Почему выручку на пользователя делят на всех участников группы, а не на заказавших?",
+      opts: [
+        "Так метрика учитывает и долю заказавших, и сколько каждый принёс — именно её меняет эксперимент",
+        "Так получается больше",
+        "Так проще считать",
+        "Заказавших слишком мало"
+      ],
+      right: 0,
+      why: "На заказавших делят ARPPU: она не видит, что в test заказывать стали чаще. Выручка на всех участников — единственная метрика, где эффект конверсии и эффект денег на заказ складываются."
+    }
+  ],
+
+  cards: [
+    { q: "Что такое SRM и как его проверить?",
+      a: "Sample ratio mismatch — размеры групп не совпадают с задуманным сплитом. Для сплита 50/50: z = (n_test − n/2) / √(n · 0,25), p = 2 · (1 − norm_cdf(|z|)). При p ниже 0,05 эксперимент не читают." },
+    { q: "Какие заказы относятся к эксперименту?",
+      a: "Сделанные участником не раньше дня его назначения (assigned_at) и не позже последнего дня эксперимента. Календарный месяц вместо окна разбавляет эффект." },
+    { q: "Как получить таблицу «участник → метрика» с нулями у незаказавших?",
+      a: "Агрегировать заказы по customer_id, присоединить к таблице участников левым соединением merge(..., how=\"left\") и заполнить пропуски нулями fillna." },
+    { q: "Из чего складывается выручка «Вилки» на пользователя?",
+      a: "20% от GMV на пользователя плюс плата за доставку на пользователя. Бесплатная доставка двигает их в разные стороны: GMV растёт, плата падает." },
+    { q: "Почему для выручки на пользователя хватает z, а не t?",
+      a: "При тысячах наблюдений в группе распределение t почти совпадает с нормальным. Формула та же, что у t-теста Уэлча: разница средних / √(var_t/n_t + var_c/n_c)." },
+    { q: "Как сформулировать вывод, если промежуточная метрика и метрика денег расходятся?",
+      a: "Решением по метрике денег, а промежуточную — объяснением: что выросло, во что это обошлось и что в итоге с деньгами компании. Если механика не окупается, следующий шаг — другой её вариант в новом эксперименте." }
+  ],
+
+  links: [
+    { t: "Diagnosing Sample Ratio Mismatch in A/B Testing", url: "https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/", src: "Microsoft Research", lang: "EN",
+      d: "Почему SRM проверяют первым и какие причины несовпадения групп встречаются чаще всего." },
+    { t: "DataFrame.merge", url: "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html", src: "pandas", lang: "EN",
+      d: "how=\"left\": так к таблице участников приклеивают их заказы, не теряя незаказавших." },
+    { t: "scipy.stats.ttest_ind", url: "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html", src: "SciPy", lang: "EN",
+      d: "t-тест Уэлча одной функцией (equal_var=False) — проверка вашей формулы в Colab." }
+  ]
+};
+
+
+
+/* урок 7.6: после load + clean; чистая таблица для DataLens и пять чисел из сохранённого CSV */
+window.VILKA_CODE.m7l6 = `clean = delivered.merge(customers[["customer_id", "city", "platform"]], on="customer_id")
+clean.to_csv("vilka_clean.csv", index=False)
+
+csv = pd.read_csv("vilka_clean.csv", parse_dates=["created_at"])
+month = csv["created_at"].dt.strftime("%Y-%m")
+print(f"выручка за полугодие: {csv['revenue'].sum():.2f}")
+print(f"выручка за апрель: {csv.loc[month == '2025-04', 'revenue'].sum():.2f}")
+print(f"выручка Казани: {csv.loc[csv['city'] == 'Казань', 'revenue'].sum():.2f}")
+print(f"клиентов с заказом в июне: {csv.loc[month == '2025-06', 'customer_id'].nunique()}")
+print(f"выручка ios: {csv.loc[csv['platform'] == 'ios', 'revenue'].sum():.2f}")`;
+
+window.CONTENT.m7l6 = {
+  intro: "Арина просила не только ноутбук, но и дашборд, который можно открыть на планёрке. Этап — собрать его в DataLens так, чтобы каждое число на нём совпадало с ноутбуком. Главное решение здесь принимается до DataLens: на каких данных строить.",
+  duration: "≈ 2,5 часа",
+  plan: [
+    { m: "25 мин", w: "Теория: чистая таблица для BI и состав дашборда" },
+    { m: "85 мин", w: "Задача: выгрузка из Colab, дашборд в DataLens, пять чисел" },
+    { m: "25 мин", w: "Тренажёр: дашборд на сыром файле, клиенты iOS" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "5 мин",  w: "Заметки" }
+  ],
+  file: "vilka.xlsx",
+  db: "vilka",
+  theory: `
+<p class="lead">В уроке 4.7 дашборд строился из трёх листов, связанных в DataLens. Там данные были чистыми. У «Вилки» нет: дубли и служебные аккаунты в BI-инструменте убрать трудно, а ошибиться легко. Поэтому чистят там, где это уже сделано, — в ноутбуке — и в DataLens загружают готовую таблицу.</p>
+
+<h3>Почему не загружать vilka.xlsx напрямую</h3>
+<p>Выручка «Вилки» по доставленным заказам всего сырого файла на 11,34% больше чистой: в неё попадают 252 повторённые строки обычных клиентов и заказы 30 служебных аккаунтов. Служебные аккаунты можно отфильтровать, связав в датасете листы <code>orders</code> и <code>customers</code>, а повторённые строки так не убрать: дубль — такая же строка, как оригинал. Дашборд, который расходится с ноутбуком, проверяющий заметит первым делом.</p>
+
+<h3>Чистая таблица из Colab</h3>
+<p>После кода загрузки и чистки — одна ячейка: доставленные заказы со столбцом <code>revenue</code>, к ним город и платформа клиента, и всё это в CSV.</p>
+<pre><code>clean = delivered.merge(customers[["customer_id", "city", "platform"]], on="customer_id")
+clean.to_csv("vilka_clean.csv", index=False)
+
+from google.colab import files
+files.download("vilka_clean.csv")</code></pre>
+<p>Одна строка — один доставленный заказ. Связи в DataLens не нужны: всё, что нужно дашборду, уже в одной таблице. Файл весит около 2 МБ. <code>files.download</code> работает только в Colab; если браузер не начал скачивание, тот же файл есть в панели «Файлы» — правый клик, «Скачать».</p>
+
+<h3>Типы полей</h3>
+<p>При загрузке CSV DataLens угадывает типы по первым строкам. Проверьте в датасете на вкладке «Поля»:</p>
+<ul>
+  <li><code>created_at</code> — «Дата и время»: в CSV она записана как <code>2025-01-02 18:51:00</code>. Если тип «Строка», линия по месяцам не построится.</li>
+  <li><code>revenue</code> — «Дробное число»: выручка с заказа дробная, например <code>513.0</code>.</li>
+  <li><code>customer_id</code> и <code>order_id</code> — «Целое число»; агрегацию к ним в чартах выбирают сами: «Количество уникальных».</li>
+</ul>
+
+<h3>Что на дашборде</h3>
+<table class="tbl">
+  <tr><th>Чарт</th><th>Что внутри</th></tr>
+  <tr><td>Индикатор «Выручка «Вилки»</td><td><code>revenue</code>, агрегация «Сумма»</td></tr>
+  <tr><td>Линия «Выручка по месяцам»</td><td>X — <code>created_at</code> с группировкой «Месяц», Y — сумма <code>revenue</code></td></tr>
+  <tr><td>Столбцы «Выручка по городам»</td><td>X — <code>city</code>, Y — сумма <code>revenue</code></td></tr>
+  <tr><td>Линия «Клиенты с заказом по месяцам»</td><td>X — <code>created_at</code> по месяцам, Y — <code>customer_id</code>, «Количество уникальных»</td></tr>
+  <tr><td>Селектор «Платформа»</td><td>по полю <code>platform</code>; на одном датасете действует на все чарты сам</td></tr>
+</table>
+<p>Подписи — как в ноутбуке: «Выручка «Вилки», ₽», а не «revenue» и не «Сумма». Внизу дашборда — текст одной строкой: «Доставленные заказы января–июня 2025 года без дублей и служебных аккаунтов; выручка — комиссия 20% и плата за доставку».</p>
+
+<div class="callout trap">
+  <span class="ct">Публичная ссылка — только на учебных данных</span>
+  <p>Для портфолио дашборд публикуют по ссылке: «Поделиться → Опубликовать». С учебной базой так можно. С данными работодателя — никогда, даже «на минутку»: публичная ссылка открывает данные всем, у кого она есть.</p>
+</div>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Витрина данных для BI — обычная практика: тяжёлую чистку делают в SQL или Python, а BI-инструмент получает готовую таблицу и только агрегирует. Так числа на дашборде и в отчётах аналитика совпадают по построению.</p>
+</div>
+`,
+
+  ticket: {
+    from: "Арина, руководитель продукта «Вилки»",
+    subj: "Дашборд к планёрке",
+    body: `
+<p>На планёрке хочу открыть живой дашборд, а не скриншоты. Нужны выручка за полугодие, выручка по месяцам и по городам, сколько клиентов заказывает каждый месяц и фильтр по платформе. Числа должны сходиться с твоим ноутбуком.</p>
+<p><strong>Задание.</strong> Выгрузите из Colab чистую таблицу <code>vilka_clean.csv</code>, соберите по ней дашборд в DataLens и введите пять чисел, которые на нём видны. Выручку — в рублях, можно с копейками и пробелами.</p>
+`
+  },
+
+  schema: `
+<p>Файл <code>vilka.xlsx</code>, кнопка «Скачать данные» над полями, — исходник для Colab. В DataLens загружается <code>vilka_clean.csv</code> из ячейки в теории: 24 948 строк, столбцы</p>
+<pre><code>order_id, customer_id, restaurant_id, created_at, items_sum, delivery_fee,
+status, revenue, city, platform</code></pre>
+<p><code>revenue</code> = 0,2 × <code>items_sum</code> + <code>delivery_fee</code>; <code>city</code> и <code>platform</code> — клиента. Все строки — доставленные заказы без дублей и служебных аккаунтов.</p>
+<p><strong>С чего начать в DataLens.</strong> Воркбук → «Создать → Подключение → Файлы → Загрузить файлы», <code>vilka_clean.csv</code>. Из подключения — датасет, проверьте типы полей, затем чарты («Создать → Чарт», тип визуализации) и дашборд. Шаги и названия кнопок — как в уроке 4.7: каждый объект сохраняйте, иначе его не будет в списке при сборке дашборда. Селектор — «На основе датасета», поле <code>platform</code>. Точное значение точки или столбца — во всплывающей подсказке при наведении: на оси DataLens округляет до миллионов.</p>
+<p><strong>Как проверяется задание.</strong> Допуск — рубль в выручке, ноль в числе клиентов.</p>
+`,
+
+  fields: [
+    { label: "Выручка «Вилки» за полугодие (индикатор)", unit: "₽", answer: 11636428, tol: 1,
+      hint: "Число больше выручки за полугодие в ноутбуке — дашборд построен на сыром vilka.xlsx с дублями и служебными аккаунтами; нужен vilka_clean.csv. Вместо рублей 24 948 — агрегация «Количество» вместо «Сумма».",
+      check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT ROUND(SUM(0.2 * items_sum + delivery_fee), 2) FROM d;" },
+    { label: "Выручка за апрель 2025 (линия по месяцам)", unit: "₽", answer: 2270421, tol: 1,
+      hint: "На линии created_at должен быть сгруппирован по месяцу. Если точек больше сотни — группировка по дню.",
+      check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT ROUND(SUM(0.2 * items_sum + delivery_fee), 2) FROM d WHERE substr(created_at, 1, 7) = '2025-04';" },
+    { label: "Выручка Казани за полугодие (столбцы по городам)", unit: "₽", answer: 1869932, tol: 1,
+      hint: "Столбец «Казань» на чарте по city. Селектор платформы при этом пустой — все платформы.",
+      check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT ROUND(SUM(0.2 * items_sum + delivery_fee), 2) FROM d WHERE city = 'Казань';" },
+    { label: "Клиентов с заказом в июне 2025", answer: 3714, tol: 0,
+      hint: "7450 — это заказы июня, а не клиенты: агрегация «Количество» вместо «Количество уникальных» по customer_id.",
+      check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT COUNT(DISTINCT customer_id) FROM d WHERE substr(created_at, 1, 7) = '2025-06';" },
+    { label: "Выручка за полугодие при селекторе «ios» (индикатор)", unit: "₽", answer: 4395916, tol: 1,
+      hint: "Если индикатор не изменился — селектор не действует на него: проверьте, что селектор и индикатор построены на одном датасете.",
+      check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT ROUND(SUM(0.2 * items_sum + delivery_fee), 2) FROM d WHERE platform = 'ios';" }
+  ],
+
+  hints: [
+    "Начните в Colab: после загрузки и чистки — ячейка с <code>merge</code> и <code>to_csv</code> из теории. Проверьте <code>len(clean)</code> — должно быть 24 948 — и скачайте файл.",
+    "В DataLens: подключение «Файлы» с <code>vilka_clean.csv</code>, датасет, на вкладке «Поля» — типы <code>created_at</code> «Дата и время» и <code>revenue</code> «Дробное число». Индикатор — сумма <code>revenue</code>.",
+    "Линии по месяцам: X — <code>created_at</code>, у поля в чарте группировка «Месяц». Клиенты — <code>customer_id</code> с агрегацией «Количество уникальных». Селектор «Платформа» на том же датасете фильтрует все чарты без настройки связей."
+  ],
+
+  reference: `
+<p><strong>Эталонное решение.</strong> В Colab после кода загрузки (урок 7.1) и чистки (урок 7.2) — выгрузка и проверка, что CSV даёт те же числа, что дашборд:</p>
+${vilkaPre(window.VILKA_CODE.m7l6)}
+<pre><code>выручка за полугодие: 11636428.00
+выручка за апрель: 2270421.00
+выручка Казани: 1869932.00
+клиентов с заказом в июне: 3714
+выручка ios: 4395916.00</code></pre>
+<p>Затем <code>files.download("vilka_clean.csv")</code> и DataLens:</p>
+<ol>
+  <li>Воркбук «Вилка». «Создать → Подключение → Файлы → Загрузить файлы», <code>vilka_clean.csv</code>; сохранить подключение.</li>
+  <li>«Создать датасет» из подключения. Вкладка «Поля»: <code>created_at</code> — «Дата и время», <code>revenue</code> — «Дробное число».</li>
+  <li>Чарты: индикатор (сумма <code>revenue</code>), линия по месяцам (X — <code>created_at</code>, «Месяц»), столбцы по <code>city</code>, линия клиентов (COUNTD <code>customer_id</code> по месяцам).</li>
+  <li>Дашборд: чарты, селектор по <code>platform</code>, текст с определением выручки и чистки. Опубликовать по ссылке — данные учебные.</li>
+</ol>
+<p>Проверка дашборда — сверка с ноутбуком: если индикатор показывает 11 636 428 ₽, а при селекторе «ios» — 4 395 916 ₽, дашборд и ноутбук считают одно и то же.</p>
+`,
+
+  drills: [
+    { title: "Дашборд на сыром файле", level: "easy", answer: "nums",
+      body: `<p>Коллега загрузил в DataLens лист <code>orders</code> прямо из <code>vilka.xlsx</code> и поставил фильтр <code>status = delivered</code>. Какую выручку «Вилки» покажет его индикатор?</p>`,
+      fields: [{ label: "Выручка на сыром файле", unit: "₽", answer: 12956308, tol: 1,
+        hint: "Сумма 0,2 · items_sum + delivery_fee по всем доставленным строкам сырого листа orders — с дублями и служебными аккаунтами.",
+        check: "SELECT ROUND(SUM(0.2 * items_sum + delivery_fee), 2) FROM orders WHERE status = 'delivered';" }],
+      solution: `raw = sheets["orders"]
+d = raw[raw["status"] == "delivered"]
+print(round((0.2 * d["items_sum"] + d["delivery_fee"]).sum()))
+# 12956308
+
+12 956 308 ₽ против 11 636 428 ₽ на чистой таблице:
+на 1 319 880 ₽, или 11,34%, больше.`,
+      note: "Фильтр по служебным аккаунтам в DataLens поставить можно, а убрать дубли — нет. Поэтому чистая таблица готовится в ноутбуке." },
+    { title: "Клиенты iOS в июне", level: "mid", answer: "nums",
+      body: `<p>На линии «Клиенты с заказом по месяцам» включите селектор «ios». Сколько клиентов на iOS сделали доставленный заказ в июне 2025 года?</p>`,
+      fields: [{ label: "Клиентов iOS с заказом в июне", answer: 1407, tol: 0,
+        hint: "COUNTD по customer_id, месяц — июнь, селектор — ios.",
+        check: "WITH d AS (SELECT DISTINCT o.*, c.city, c.platform FROM orders o JOIN customers c USING(customer_id) WHERE c.platform <> 'internal' AND o.status = 'delivered') SELECT COUNT(DISTINCT customer_id) FROM d WHERE substr(created_at, 1, 7) = '2025-06' AND platform = 'ios';" }],
+      solution: `june = csv[(month == "2025-06") & (csv["platform"] == "ios")]
+print(june["customer_id"].nunique())
+# 1407
+
+1407 клиентов iOS из 3714 клиентов с заказом в июне.`,
+      note: "Если линия не изменилась при выборе ios, селектор построен на другом датасете. На одной таблице, как здесь, он связывается со всеми чартами сам." }
+  ],
+
+  quiz: [
+    {
+      q: "Почему для дашборда «Вилки» в DataLens загружают таблицу из ноутбука, а не vilka.xlsx?",
+      opts: [
+        "DataLens не читает xlsx",
+        "В сыром файле дубли строк, а убрать их в DataLens нельзя: числа разойдутся с ноутбуком",
+        "CSV загружается быстрее",
+        "Так требует публикация по ссылке"
+      ],
+      right: 1,
+      why: "Служебные аккаунты можно отфильтровать в датасете, а повторённые строки — нет. Чистая таблица из ноутбука делает числа дашборда и ноутбука одинаковыми по построению."
+    },
+    {
+      q: "Линия «Клиенты по месяцам» показывает в июне столько же, сколько заказов. В чём ошибка?",
+      opts: [
+        "Не тот тип у created_at",
+        "Не выбран селектор",
+        "Агрегация «Количество» вместо «Количество уникальных» по customer_id",
+        "В CSV попали отмены"
+      ],
+      right: 2,
+      why: "«Количество» считает строки, а строка — заказ. Клиент с тремя заказами в июне даёт три строки и одного клиента: нужно COUNTD."
+    },
+    {
+      q: "У поля created_at в датасете тип «Строка». Что сломается?",
+      opts: [
+        "Индикатор выручки",
+        "Ничего",
+        "Селектор платформы",
+        "Группировка по месяцам на линиях: строку DataLens не умеет округлять до месяца"
+      ],
+      right: 3,
+      why: "Группировка «Месяц» есть только у дат. Тип меняют на вкладке «Поля» датасета на «Дата и время»."
+    },
+    {
+      q: "Можно ли опубликовать по ссылке такой же дашборд на данных работодателя?",
+      opts: [
+        "Нет: публичная ссылка открывает данные всем, у кого она есть",
+        "Да, если ссылку никому не отправлять",
+        "Да, если убрать имена клиентов",
+        "Да, на один день"
+      ],
+      right: 0,
+      why: "Ссылку пересылают, она попадает в истории браузеров и чаты. Для портфолио публикуют только учебные данные — как базу «Вилки»."
+    }
+  ],
+
+  cards: [
+    { q: "Почему чистить данные лучше в ноутбуке, а не в BI-инструменте?",
+      a: "В BI трудно или нельзя сделать часть чистки — например, убрать дубли строк. Чистая таблица из ноутбука делает числа дашборда и отчёта одинаковыми по построению." },
+    { q: "Как выгрузить таблицу из Colab для DataLens?",
+      a: "df.to_csv(\"имя.csv\", index=False), затем from google.colab import files и files.download(\"имя.csv\"). Если скачивание не началось — панель «Файлы», правый клик, «Скачать»." },
+    { q: "Какие типы полей проверить после загрузки CSV в DataLens?",
+      a: "Дату — «Дата и время», иначе не будет группировки по месяцам; деньги — «Дробное число», иначе не будет суммы. DataLens угадывает типы по первым строкам и может ошибиться." },
+    { q: "Чем «Количество» отличается от «Количество уникальных» в DataLens?",
+      a: "«Количество» считает строки, «Количество уникальных» — разные значения поля, как COUNT(DISTINCT …) в SQL. Клиентов считают уникальными, заказы — строками." },
+    { q: "Когда селектор в DataLens действует на все чарты сам?",
+      a: "Когда селектор и чарты построены на одном датасете. С несколькими датасетами связи селектора настраивают на дашборде вручную, как в уроке 4.7." },
+    { q: "Что подписать на дашборде, кроме названий чартов?",
+      a: "Период, что входит в данные и как считается главная метрика: «Доставленные заказы января–июня 2025 без дублей и служебных аккаунтов; выручка — комиссия 20% и плата за доставку»." }
+  ],
+
+  links: [
+    { t: "Подключение к файлам", url: "https://yandex.cloud/ru/docs/datalens/operations/connection/create-file", src: "Yandex DataLens", lang: "RU",
+      d: "Загрузка CSV и xlsx, ограничения на размер и как DataLens определяет типы столбцов." },
+    { t: "DataFrame.to_csv", url: "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_csv.html", src: "pandas", lang: "EN",
+      d: "Сохранение таблицы в CSV: index=False, разделитель, формат дат." },
+    { t: "Селектор на дашборде", url: "https://yandex.cloud/ru/docs/datalens/operations/dashboard/add-selector", src: "Yandex DataLens", lang: "RU",
+      d: "Как селектор связывается с чартами одного и разных датасетов." }
+  ]
+};
+
+
+window.CONTENT.m7l7 = {
+  intro: "Последний этап тестового — записка Арине на одну страницу. Её прочитают первой, а часто — единственной: ноутбук и дашборд откроют, только если записка убедила. Здесь же — что положить в портфолио и как оформить ссылки.",
+  duration: "≈ 2 часа",
+  plan: [
+    { m: "25 мин", w: "Теория: структура записки и чек-лист портфолио" },
+    { m: "50 мин", w: "Задача: записка Арине по итогам проекта" },
+    { m: "25 мин", w: "Тренажёр: первый абзац, разбор чужой записки" },
+    { m: "10 мин", w: "Самопроверка вопросами" },
+    { m: "10 мин", w: "Портфолио: ссылки и README" }
+  ],
+  theory: `
+<p class="lead">В уроке 4.8 записка собирала четыре расчёта одного модуля. Здесь — пять этапов проекта: чистка, деньги, когорты, эксперимент, дашборд. Принцип тот же, ставка выше: по этой записке вас сравнивают с другими кандидатами.</p>
+
+<h3>Структура на одну страницу</h3>
+<ol>
+  <li><strong>Решение — первым абзацем.</strong> Ответ на главный вопрос заказчика и цена вопроса. У Арины главный вопрос — раскатывать ли бесплатную доставку.</li>
+  <li><strong>Три числа, на которых стоит решение</strong>: конверсия, плата за доставку на пользователя и выручка «Вилки» на пользователя — каждое с тем, что в числителе и знаменателе.</li>
+  <li><strong>Ответы на остальные вопросы</strong> — сколько зарабатываем и держатся ли клиенты, по два-три предложения.</li>
+  <li><strong>Данные одной строкой</strong>: период, что вычищено и как считается выручка.</li>
+  <li><strong>Ограничения</strong>: чего анализ не знает.</li>
+  <li><strong>Следующий шаг</strong>: что проверить или сделать дальше.</li>
+  <li><strong>Ссылки</strong>: ноутбук и дашборд.</li>
+</ol>
+
+<h3>Как писать числа</h3>
+<ul>
+  <li>Решающие числа — со сравнением: не «выручка на пользователя 429,15 ₽», а «429,15 ₽ против 426,41 ₽ в control, разница неотличима от нуля (p = 0,88)».</li>
+  <li>GMV и выручку «Вилки» не смешивать: оборот ресторанов в записке подписывают «GMV», деньги сервиса — «выручка «Вилки».</li>
+  <li>p-value — в скобках, после вывода словами: «рост не случайный (p = 0,003)». Заказчику нужен вывод, а не статистика.</li>
+  <li>Округлять до значимого: «3,5 млн ₽» в тексте, точное число — в ноутбуке.</li>
+</ul>
+
+<h3>Ограничения проекта «Вилки»</h3>
+<ul>
+  <li>Эксперимент шёл четыре недели: долгий эффект бесплатной доставки на привычки клиентов он не показывает.</li>
+  <li>В расчёте нет себестоимости доставки для «Вилки»: если курьер стоит дороже 149 ₽, бесплатная доставка убыточнее, чем видно по выручке.</li>
+  <li>Удержание посчитано на полугодии: у майской когорты есть только один полный месяц после регистрации.</li>
+</ul>
+
+<h3>Чек-лист портфолио</h3>
+<table class="tbl">
+  <tr><th>Что</th><th>Где и как</th></tr>
+  <tr><td>Ноутбук Colab</td><td>«Настройки доступа → Все, у кого есть ссылка → Читатель». Первая ячейка — загрузка файла: <code>from google.colab import files</code> и <code>files.upload()</code>, чтобы любой, кто откроет ноутбук, мог загрузить <code>vilka.xlsx</code> и запустить его. Перед публикацией — «Среда выполнения → Отключиться и удалить среду выполнения», затем «Выполнить все» и загрузить файл в первой ячейке: все ячейки без ошибок, вывод сохранён.</td></tr>
+  <tr><td>Дашборд DataLens</td><td>Опубликован по ссылке — данные учебные. Подписи по-русски, текст с определением выручки.</td></tr>
+  <tr><td>Записка</td><td>Документ или PDF на одну страницу, ссылки на ноутбук и дашборд внутри.</td></tr>
+  <tr><td>README</td><td>По уроку 6.2: задача в двух строках, главный вывод с числом, что сделано, инструменты, ссылки, где взять <code>vilka.xlsx</code> для запуска ноутбука. Сначала результат, потом метод.</td></tr>
+</table>
+<p>В резюме проект описывают одной строкой с результатом, как в уроке 6.1: «Тестовое: разбор эксперимента с бесплатной доставкой — конверсия +4,4 п. п., выручка на пользователя без изменений, рекомендация не раскатывать; Python, SQL, DataLens».</p>
+
+<div class="callout trap">
+  <span class="ct">Записка — не пересказ ноутбука</span>
+  <p>«Сначала я загрузил данные, потом нашёл дубли, потом…» — так пишут отчёт о проделанной работе. Заказчику нужен ответ. Порядок работы остаётся в ноутбуке, в записке — решение и три числа под ним.</p>
+</div>
+
+<div class="callout work">
+  <span class="ct">Где это в работе</span>
+  <p>Записка на страницу с решением в первом абзаце — основной формат результата аналитика в продуктовой команде. Тестовое задание проверяет именно его: числа посчитают многие, решение по ним сформулируют немногие.</p>
+</div>
+`,
+
+  ticket: {
+    from: "Арина, руководитель продукта «Вилки»",
+    subj: "Записка к планёрке",
+    body: `
+<p>Спасибо за ноутбук и дашборд. В пятницу планёрка: мне нужна записка на одну страницу, которую я перешлю продукту и финансам. Главное — что делать с бесплатной доставкой, и коротко — про деньги и клиентов.</p>
+<p><strong>Задание.</strong> Напишите записку Арине по итогам проекта. В ней должно быть:</p>
+<ul>
+  <li>решение по бесплатной доставке в первом абзаце;</li>
+  <li>числа эксперимента: конверсия, выручка «Вилки» на пользователя, плата за доставку, значимость;</li>
+  <li>сколько «Вилка» зарабатывает и как держатся клиенты;</li>
+  <li>как подготовлены данные — одной строкой;</li>
+  <li>ограничения анализа и следующий шаг.</li>
+</ul>
+<p>Объём — 160–300 слов. Короткие абзацы, числа с единицами.</p>
+`
+  },
+
+  schema: `
+<p>Считать заново ничего не нужно: числа этапов 7.2–7.6 собраны здесь.</p>
+<pre><code>ДАННЫЕ (7.2)
+  январь–июнь 2025; удалено 316 строк-дублей и 4524 заказа
+  30 служебных аккаунтов; отмены в выручку не входят
+
+ДЕНЬГИ (7.3)
+  выручка «Вилки» = 20% от суммы блюд + плата за доставку
+  за полугодие: GMV 31 137 390 ₽, выручка «Вилки» 11 636 428 ₽
+  (доставка — 46,48% выручки); июнь — 3 505 523 ₽
+  Москва — 45,06% выручки; отмены — 6,02% заказов
+
+КЛИЕНТЫ (7.4)
+  M1: январская когорта 49,69%, мартовская 52,86%
+  выручка «Вилки» на клиента за полугодие 1662,35 ₽
+
+ЭКСПЕРИМЕНТ (7.5), 5 мая – 1 июня, control 2264 / test 2269
+  SRM: p = 0,94 — сплит честный
+  конверсия в заказ   49,34% -> 53,72%   p = 0,0031
+  средний чек         1230,15 -> 1278,92 ₽
+  GMV на польз.       1115,50 -> 1336,98 ₽   (+221,47)
+  доставка на польз.   203,31 -> 161,76 ₽    (−41,55)
+  выручка «Вилки»
+    на польз.          426,41 -> 429,15 ₽    (+2,74; p = 0,88)
+  заказы от 1500 ₽    24,79% -> 37,86%
+
+ДАШБОРД (7.6)
+  DataLens по чистой таблице, селектор платформы</code></pre>
+<p><strong>Как проверяется задание.</strong> Проверка ищет в тексте смысловые блоки, которых ждут от такой записки. Зачёт — минимум 7 из 10 и не меньше 160 слов. Дальше откройте эталон и сравните структуру.</p>
+`,
+
+  criteria: [
+    { label: "Решение по бесплатной доставке",
+      any: ["не раскатыв", "не стоит раскат", "виде не стоит", "предлагаю не", "не запускать", "раскатывать не", "не рекоменд"] },
+    { label: "Конверсия эксперимента",
+      any: ["53,72", "49,34", "53,7", "49,3", "4,4 п", "4,38"] },
+    { label: "Выручка «Вилки» на пользователя",
+      any: ["429", "426", "2,74"] },
+    { label: "Значимость",
+      any: ["p =", "p=", "p-value", "неотличим", "не случайн", "0,88", "0,003"] },
+    { label: "Потерянная плата за доставку",
+      any: ["41,55", "41,6", "161,76", "203,31", "42 ₽"] },
+    { label: "GMV отделён от выручки",
+      any: ["gmv", "оборот ресторан", "деньги ресторан"] },
+    { label: "Деньги и клиенты за полугодие",
+      any: ["11,6", "11 636", "3,5 млн", "удержан", "когорт", "m1", "1662"] },
+    { label: "Подготовка данных",
+      any: ["316", "4524", "дубл", "служебн", "тестов аккаунт"] },
+    { label: "Ограничения анализа",
+      any: ["огранич", "четыре недели", "4 недел", "себестоимост", "не учтен", "не учтён", "долгосроч"] },
+    { label: "Следующий шаг",
+      any: ["следующ", "порог", "предлагаю проверить", "новый эксперимент", "повторить", "полцены", "проверить вариант"] }
+  ],
+  minCriteria: 7,
+  minWords: 160,
+
+  hints: [
+    "Сформулируйте одно предложение для Арины: что делать с бесплатной доставкой и почему, в деньгах. Это первый абзац; всё остальное его обосновывает.",
+    "Решающие числа эксперимента — конверсия (выросла, p = 0,0031) и выручка «Вилки» на пользователя (429,15 против 426,41 ₽, p = 0,88). Объяснение между ними — плата за доставку на пользователя упала на 41,55 ₽, а 20% от прироста GMV дали +44,29 ₽.",
+    "Структура: решение; три числа эксперимента; деньги и клиенты за полугодие в двух предложениях; данные одной строкой; ограничения — четыре недели и себестоимость доставки; следующий шаг — другой вариант механики в новом эксперименте; ссылки на ноутбук и дашборд."
+  ],
+
+  reference: `
+<p><strong>Образцовая записка.</strong></p>
+<p><strong>Бесплатную доставку от 1500 ₽ раскатывать в нынешнем виде не стоит.</strong> Она поднимает конверсию и оборот ресторанов, но выручку «Вилки» на пользователя не меняет: всё, что приносят дополнительные заказы, уходит на потерянную плату за доставку.</p>
+<p><em>Эксперимент</em> (5 мая – 1 июня, 2264 участника в control и 2269 в test, сплит честный). Конверсия в заказ выросла с 49,34% до 53,72%, рост не случайный (p = 0,003). GMV на пользователя вырос на 221 ₽, но плата за доставку на пользователя упала на 41,55 ₽. Итог — выручка «Вилки» на пользователя 429,15 ₽ против 426,41 ₽, разница неотличима от нуля (p = 0,88).</p>
+<p><em>Деньги и клиенты.</em> За полугодие выручка «Вилки» — 11,6 млн ₽ при GMV 31,1 млн ₽; почти половина выручки, 46%, — плата за доставку. Москва даёт 45% выручки. В месяц после регистрации заказывает около половины новых клиентов: 49,69% январской когорты и 52,86% мартовской.</p>
+<p><em>Данные.</em> Январь–июнь 2025; удалены 316 строк-дублей и 4524 заказа 30 служебных аккаунтов, отмены в выручку не входят.</p>
+<p><em>Ограничения.</em> Четыре недели не показывают долгий эффект на привычки клиентов. В расчёте нет себестоимости доставки: если курьер стоит дороже 149 ₽, бесплатная доставка убыточнее, чем видно здесь.</p>
+<p><em>Следующий шаг.</em> Предлагаю проверить в новом эксперименте вариант дешевле для «Вилки»: порог 2000 ₽ или доставку за полцены от 1500 ₽ — с той же метрикой решения, выручкой на пользователя.</p>
+<p>Ноутбук: [ссылка]. Дашборд: [ссылка].</p>
+<p><strong>Почему так.</strong> Решение — первым предложением, и оно о деньгах, а не о конверсии. Три числа эксперимента выстроены в цепочку «конверсия растёт → доставка падает → выручка на месте». GMV и выручка разведены. Ограничения названы конкретно, а следующий шаг — проверяемый.</p>
+`,
+
+  drills: [
+    {
+      title: "Первый абзац",
+      level: "easy",
+      answer: "text",
+      body: `<p>Коллега начал записку так:</p>
+<blockquote>«В рамках проекта был проведён анализ эксперимента. Конверсия в test составила 53,72% против 49,34% в control, z = 2,95, p-value = 0,0031, что статистически значимо на уровне 0,05.»</blockquote>
+<p>Перепишите первый абзац так, чтобы Арина поняла, что делать, не дочитывая записку. Два-три предложения.</p>`,
+      solution: `Бесплатную доставку от 1500 ₽ в нынешнем виде
+раскатывать не стоит. Конверсия в заказ выросла
+с 49% до 54%, но выручка «Вилки» на пользователя
+не изменилась: 429 ₽ против 426 ₽, разница
+неотличима от нуля - прирост заказов съела
+потерянная плата за доставку.
+
+Что поменялось:
+- первым стоит решение, а не процедура;
+- конверсия - причина, выручка - вывод;
+- z и уровень значимости ушли в ноутбук.`,
+      note: "Проверка первого абзаца: если заказчик прочтёт только его, примет ли он правильное решение? У коллеги — нет: из его абзаца следует «раскатываем»."
+    },
+    {
+      title: "Что не так с этой запиской",
+      level: "mid",
+      answer: "text",
+      body: `<p>Найдите три ошибки в отрывке из чужой записки:</p>
+<blockquote>«Выручка Вилки за полугодие — 31 млн рублей, из них Москва — около половины. Эксперимент успешен: заказов в test стало больше, средний чек вырос до 1279. Рекомендуем раскатывать.»</blockquote>`,
+      solution: `1. 31 млн - это GMV, оборот ресторанов,
+   а не выручка «Вилки». Выручка - 11,6 млн ₽.
+2. «Заказов стало больше» без знаменателя:
+   группы чуть разного размера, сравнивают
+   на пользователя. И нет значимости.
+3. Решение принято по заказам и чеку, без
+   выручки на пользователя - а она не выросла
+   (429,15 против 426,41 ₽, p = 0,88).
+   Рекомендация противоположна данным.
+Ещё: «около половины» вместо 45%, чек без
+единиц и без сравнения с control (1230,15 ₽).`,
+      note: "Все три ошибки встречаются в настоящих тестовых: GMV под словом «выручка», числа без знаменателя и решение по промежуточной метрике."
+    }
+  ],
+
+  quiz: [
+    {
+      q: "Что должно стоять в первом абзаце записки по эксперименту?",
+      opts: [
+        "Решение и почему — в деньгах",
+        "Описание данных и периода",
+        "z-статистика и p-value",
+        "Благодарность за задание"
+      ],
+      right: 0,
+      why: "Записку читают сверху и часто бросают после первого абзаца. Решение и его цена должны быть там, остальное — обоснование."
+    },
+    {
+      q: "Где в записке место p-value?",
+      opts: [
+        "В заголовке",
+        "В скобках после вывода словами: «рост не случайный (p = 0,003)»",
+        "В отдельном разделе «Статистика»",
+        "Нигде: заказчику оно не нужно"
+      ],
+      right: 1,
+      why: "Заказчику нужен вывод, а проверяющему — видеть, что вывод проверен. Скобки после слов дают оба."
+    },
+    {
+      q: "Какие ограничения стоит назвать в записке по эксперименту «Вилки»?",
+      opts: [
+        "Что анализ делал один человек",
+        "Что данных мало",
+        "Длительность четыре недели и отсутствие себестоимости доставки в расчёте",
+        "Что pandas может ошибаться"
+      ],
+      right: 2,
+      why: "Хорошее ограничение конкретно и меняет вывод при другом ответе: долгий эффект и стоимость курьера могут сдвинуть решение, «данных мало» — нет."
+    },
+    {
+      q: "Что сделать с ноутбуком Colab перед тем, как положить ссылку в портфолио?",
+      opts: [
+        "Удалить весь код, оставить выводы",
+        "Скачать его в .py",
+        "Ничего",
+        "Удалить среду выполнения, «Выполнить все» с загрузкой файла в первой ячейке, проверить, что ячейки проходят, и открыть доступ по ссылке на чтение"
+      ],
+      right: 3,
+      why: "Проверяющий открывает ноутбук и смотрит, выполняется ли он сверху вниз. Ноутбук с ошибкой в середине обесценивает верные числа."
+    }
+  ],
+
+  cards: [
+    { q: "Какая структура у записки по итогам тестового?",
+      a: "Решение первым абзацем, три числа под ним, ответы на остальные вопросы, данные одной строкой, ограничения, следующий шаг, ссылки на ноутбук и дашборд." },
+    { q: "Как писать решающие числа в записке?",
+      a: "Со сравнением и знаменателем: «выручка на пользователя 429,15 ₽ против 426,41 ₽ в control, разница неотличима от нуля (p = 0,88)», а не одно число." },
+    { q: "Чем записка отличается от отчёта о проделанной работе?",
+      a: "Отчёт рассказывает порядок работы, записка — решение и почему. Порядок работы остаётся в ноутбуке." },
+    { q: "Что положить в портфолио по финальному проекту?",
+      a: "Ноутбук Colab с доступом по ссылке, дашборд DataLens, опубликованный по ссылке на учебных данных, записку на страницу и README: задача, вывод с числом, что сделано, инструменты, ссылки." },
+    { q: "Как проверить ноутбук перед публикацией?",
+      a: "Удалить среду выполнения, «Выполнить все» и загрузить vilka.xlsx в первой ячейке (files.upload()): все ячейки проходят без ошибок и печатают те же числа, что в записке." },
+    { q: "Как описать финальный проект в резюме одной строкой?",
+      a: "Результатом с числом и инструментами: «разбор эксперимента с бесплатной доставкой — конверсия +4,4 п. п., выручка на пользователя без изменений, рекомендация не раскатывать; Python, SQL, DataLens»." }
+  ],
+
+  links: [
+    { t: "Обмен блокнотами в Colab", url: "https://research.google.com/colaboratory/faq.html", src: "Google Colab", lang: "EN",
+      d: "Ответы о доступе по ссылке, сохранении и копировании блокнотов." },
+    { t: "Публичный доступ в DataLens", url: "https://yandex.cloud/ru/docs/datalens/concepts/datalens-public", src: "Yandex DataLens", lang: "RU",
+      d: "Как опубликовать дашборд по ссылке и почему делать это можно только с открытыми данными." },
+    { t: "About READMEs", url: "https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes", src: "GitHub Docs", lang: "EN",
+      d: "README проекта в портфолио: что в нём ждут и как он отображается." }
   ]
 };
 
