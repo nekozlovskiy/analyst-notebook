@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/* Проверка схем в теории (window.FIGS, см. инструменты/figs.py):
-   - каждая метка data-fig в теории указывает на схему, каждая схема
+/* Проверка схем в теории и в тексте шагов (window.FIGS, см. инструменты/figs.py):
+   - каждая метка data-fig указывает на схему, каждая схема
      где-то стоит;
    - у схемы role="img", <title> и <desc> — её читает диктор;
    - viewBox не шире 340 — схемы рисуются под телефон;
@@ -18,13 +18,16 @@ for (const f of ["content-core.js"].concat(
 const FIGS = ctx.window.FIGS || {};
 const bad = [], used = {};
 for (const [id, C] of Object.entries(ctx.window.CONTENT)) {
-  for (const m of String(C.theory || "").matchAll(/data-fig="([\w-]+)"/g)) {
+  /* схема стоит в теории или, в модуле 0 без теории, в тексте шага */
+  const text = [C.theory || ""].concat((C.steps || []).map(s => s.body || ""),
+    ((C.practicum || {}).steps || []).map(s => s.body || "")).join("\n");
+  for (const m of text.matchAll(/data-fig="([\w-]+)"/g)) {
     used[m[1]] = true;
     if (!FIGS[m[1]]) bad.push(id + ": метка data-fig=\"" + m[1] + "\", а схемы нет — запустите figs.py");
   }
 }
 for (const [fid, svg] of Object.entries(FIGS)) {
-  if (!used[fid]) bad.push("схема " + fid + " нигде не стоит в теории");
+  if (!used[fid]) bad.push("схема " + fid + " нигде не стоит ни в теории, ни в шагах");
   if (!/role="img"/.test(svg)) bad.push(fid + ": нет role=\"img\"");
   if (!/<title[ >]/.test(svg) || !/<desc[ >]/.test(svg)) bad.push(fid + ": нет <title> или <desc>");
   const vb = svg.match(/viewBox="-?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)"/);
@@ -52,6 +55,6 @@ for (const [id, data] of Object.entries(SBX)) {
 }
 for (const id of Object.keys(S.draw)) if (!SBX[id]) bad.push("Tinker.draw[" + id + "] есть, а данных нет — запустите figs.py");
 console.log("Песочниц: " + Object.keys(SBX).length);
-console.log("Схем: " + Object.keys(FIGS).length + ", меток в теории: " + Object.keys(used).length);
+console.log("Схем: " + Object.keys(FIGS).length + ", меток: " + Object.keys(used).length);
 if (bad.length) { console.log("\nОшибки:\n" + bad.join("\n")); process.exit(1); }
 console.log("Ошибок нет.");

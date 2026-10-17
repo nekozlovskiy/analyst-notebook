@@ -3104,11 +3104,12 @@ const Plots = {
 };
 
 /* ============================================================
-   Схемы в теории
+   Схемы в теории и в шагах
 
    SVG схем лежат в window.FIGS (блок FIGS в content-mN.js, его пишет
-   инструменты/figs.py). В теории на месте схемы — <figure class="fig"
-   data-fig="id"> с подписью; mount вставляет SVG перед подписью.
+   инструменты/figs.py). В теории и в тексте шага на месте схемы —
+   <figure class="fig" data-fig="id"> с подписью; mount вставляет SVG
+   перед подписью.
    Вызывается после разметки терминов: иначе Terms.mark залез бы
    в <text> схемы. Повторный вызов ничего не удваивает. Схемы нет —
    рамка убирается целиком, чтобы ученик не видел пустое место.
@@ -4831,6 +4832,7 @@ const Steps = {
         const fresh = tmp.firstChild;
         li.parentNode.replaceChild(fresh, li);
         Terms.mark($(".st-b .theory", fresh));
+        Figs.mount($(".st-b .theory", fresh));
         bindDone(fresh);
       });
     }
@@ -4841,7 +4843,7 @@ const Steps = {
       for (let n = 0; n < total; n++) html += itemHtml(n);
       justPassed = -1;
       list.innerHTML = html;
-      Array.prototype.forEach.call(list.querySelectorAll(".st-b .theory"), function (n) { Terms.mark(n); });
+      Array.prototype.forEach.call(list.querySelectorAll(".st-b .theory"), function (n) { Terms.mark(n); Figs.mount(n); });
       Array.prototype.forEach.call(list.querySelectorAll(".st.done"), bindDone);
       if (open >= 0) mountOpen();
       focusScrollers(list);

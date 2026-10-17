@@ -2621,7 +2621,308 @@ def check_m6():
     return []
 
 
-MODULES = {"m1": (FIGS_M1, check_m1, SANDBOX_M1), "m2": (FIGS_M2, check_m2, {}),
+# ---------------------------------------------------------------- схемы m0
+# В модуле 0 нет блока теории: схема стоит в конце body шага, Figs.mount
+# вставляет её при отрисовке шага.
+
+def users_head_data(n=5):
+    """Урок 0.1, шаг 1: SELECT * FROM users LIMIT 5 — столбцы, первые
+    строки и сколько строк в таблице всего."""
+    c = db()
+    cur = c.execute(f"SELECT * FROM users LIMIT {n}")
+    cols = [d[0] for d in cur.description]
+    return cols, cur.fetchall(), c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def fig_table_anatomy():
+    cols, rows, total = users_head_data()
+    show = ["user_id", "signup_date", "city"]           # три столбца влезают в телефон, остальное — «…»
+    hidden = [c for c in cols if c not in show]
+    ix = [cols.index(c) for c in show]
+    T, rh, tw = 52, 24, 250
+    svg = Svg("table-anatomy", 292,
+              "Таблица users: строки и столбцы",
+              f"Ответ на SELECT * FROM users LIMIT 5. В таблице {len(cols)} столбцов, на схеме три: "
+              f"{', '.join(show)}; {', '.join(hidden)} скрыты за многоточием. Каждая строка — один "
+              f"пользователь, например строка с user_id {rows[2][0]}: {rows[2][1]}, {rows[2][3]}. "
+              f"Каждый столбец — одно свойство, например city. Всего в таблице {total} строк, "
+              f"LIMIT {len(rows)} показал первые {len(rows)}, строки {len(rows) + 1}–{total} остались в базе.")
+    svg.text(0, 14, f"SELECT * FROM users LIMIT {len(rows)};", "f-hd", 12.5)
+    # столбец city — тонкой рамкой, подпись над таблицей
+    cx = 133
+    svg.rect(cx, T + 1, 100, 22 + rh * len(rows) - 2, "f-raw", 3)
+    svg.text(cx + 4, T - 7, "столбец — одно свойство", "f-sub", 10.5)
+    mids = table(svg, 0, T, tw, "users",
+                 [("user_id", 8, None), ("signup_date", 52, None), ("city", 138, None), ("…", 243, "end")],
+                 [tuple(r[i] for i in ix) + ("…",) for r in rows], rh)
+    # строка третьего пользователя — ручкой: ради неё схема
+    k = 2
+    svg.rect(1, mids[k] - rh / 2 + 1, tw - 2, rh - 2, "f-pen", 3)
+    svg.line(tw, mids[k], tw + 5, mids[k], "f-pen")
+    for i, s in enumerate(["строка —", "один", "пользователь"]):
+        svg.text(tw + 8, mids[k] - 12 + i * 14, s, "f-pen-t", 10.5)
+    # остаток таблицы: в базе есть, в ответ не попал
+    B = T + 22 + rh * len(rows)
+    svg.rect(0, B + 6, tw, 32, "f-dash", 3)
+    svg.text(tw / 2, B + 26, f"строки {len(rows) + 1}–{total} не показаны", "f-sub", 10.5, anchor="middle")
+    svg.note(0, B + 68, [f"в таблице {total} строк,", f"LIMIT {len(rows)} показал первые {len(rows)}"], 15)
+    return svg.render()
+
+
+def city_groups_data(n=5):
+    """Урок 0.1, шаг 7: пример из теории — GROUP BY city с COUNT(*).
+    Первые n пользователей (те же, что на схеме шага 1), их города
+    и счёт по городам: в этих n строках и во всей таблице."""
+    c = db()
+    head = c.execute(f"SELECT user_id, city FROM users ORDER BY user_id LIMIT {n}").fetchall()
+    small = {}
+    for _, city in head:
+        small[city] = small.get(city, 0) + 1
+    full = c.execute("SELECT city, COUNT(*) FROM users GROUP BY city ORDER BY city").fetchall()
+    total = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    return head, sorted(small.items()), full, total
+
+
+def fig_group_collapse():
+    head, small, full, total = city_groups_data()
+    rh, lw, rx, rw = 24, 150, 190, 146             # строка, левая таблица, правая таблица
+    two = next(c for c, k in small if k > 1)        # город, где две строки сжались в одну
+    svg = Svg("group-collapse", 486,
+              "GROUP BY city: строки одного города сжимаются в одну",
+              f"Первые {len(head)} строк users: города "
+              + ", ".join(c for _, c in head) + f". В них {len(small)} разных города, {two} встречается дважды. "
+              f"GROUP BY city собирает строки одного города в группу и оставляет от неё одну строку, "
+              f"COUNT(*) считает строки группы: {two} 2, остальные по 1. По всей таблице, {total} строк, "
+              f"получается {len(full)} строк: " + ", ".join(f"{c} {k}" for c, k in full)
+              + f". Вместе снова {total}.")
+    svg.text(0, 14, "SELECT city, COUNT(*)", "f-hd", 12.5)
+    svg.text(0, 31, "FROM users GROUP BY city;", "f-hd", 12.5)
+    T = 66
+    lm = table(svg, 0, T, lw, f"первые {len(head)} строк",
+               [("user_id", 8, None), ("city", 52, None)],
+               [(str(u), c) for u, c in head], rh)
+    rm = table(svg, rx, T, rw, "строка = город",
+               [("city", 8, None), ("COUNT(*)", rw - 8, "end")],
+               [(c, str(k)) for c, k in small], rh)
+    pos = {c: i for i, (c, _) in enumerate(small)}
+    for (_, c), a in zip(head, lm):                 # каждая строка уходит в строку своего города
+        b = rm[pos[c]]
+        svg.path(f"M{lw} {a:g} C {lw + 22} {a:g}, {rx - 22} {b:g}, {rx} {b:g}", "f-pen" if c == two else "f-soft")
+    k = pos[two]
+    svg.rect(rx + 1, rm[k] - rh / 2 + 1, rw - 2, rh - 2, "f-pen", 3)
+    by = rm[-1] + rh / 2 + 18
+    svg.text(rx, by, f"2 строки «{two}» —", "f-pen-t", 10.5)
+    svg.text(rx, by + 14, "одна строка,", "f-pen-t", 10.5)
+    svg.text(rx, by + 28, "COUNT(*) = 2", "f-pen-t", 10.5)
+    # остаток таблицы: те же города дальше по списку
+    B = lm[-1] + rh / 2
+    svg.rect(0, B + 6, lw, 30, "f-dash", 3)
+    svg.text(lw / 2, B + 25, f"строки {len(head) + 1}–{total}", "f-sub", 10.5, anchor="middle")
+    F = B + 82
+    fw = 220
+    fm = table(svg, 0, F, fw, f"вся таблица: {total} строк",
+               [("city", 8, None), ("COUNT(*)", fw - 8, "end")],
+               [(c, str(n)) for c, n in full], rh)
+    svg.text(fw + 12, fm[-1] - 8, "в сумме", "f-sub", 10.5)
+    svg.text(fw + 12, fm[-1] + 8, str(sum(n for _, n in full)), "f-sub", 10.5)
+    svg.note(0, fm[-1] + rh / 2 + 32, [f"{total} строк сжались в {len(full)},", "по одной на город"], 15)
+    return svg.render()
+
+
+INSIDE_R = [2997.2, 4968.24, 1994.76]          # список r из уроков 0.2, шаги 7–8
+
+
+def inside_out_data():
+    """Урок 0.2, шаг 8: та же вложенность, что в объяснении шага
+    (два вызова внутри, действие между ними, round, print), но разброс
+    max(r) - min(r), а не средний: средний — ответ задания шага.
+    Слои — строка кода после каждого подсчёта и кусок, который считается."""
+    r = INSIDE_R
+    hi, lo = max(r), min(r)
+    diff = hi - lo
+    out = round(diff, 2)
+    rr = f"round({diff!r}, 2)"
+    layers = [
+        ("самые внутренние скобки: max(r) и min(r)",
+         ["print(round(", ("max(r)",), " - ", ("min(r)",), ", 2))"]),
+        ("подставили числа, теперь вычитание",
+         ["print(round(", (f"{hi!r} - {lo!r}",), ", 2))"]),
+        ("round(…, 2) убирает хвост из цифр",
+         ["print(", (rr,), ")"]),
+        ("print — последним: печатает готовое число",
+         [(f"print({out!r})",)]),
+    ]
+    return r, hi, lo, diff, out, layers
+
+
+def fig_inside_out():
+    r, hi, lo, diff, out, layers = inside_out_data()
+    fs, cw = 12, 7.2                     # моноширинный шрифт: ширина знака 0.6 кегля
+    bh, gap, T = 46, 20, 34
+    svg = Svg("inside-out", T + len(layers) * (bh + gap) + 104,
+              "Вложенные функции считаются изнутри наружу",
+              f"Список r = {r}. Строка print(round(max(r) - min(r), 2)) — разброс заказов. "
+              f"Сначала самые внутренние вызовы: max(r) даёт {hi!r}, min(r) даёт {lo!r}. "
+              f"Числа встают на их место, и считается вычитание: почти {out!r}, но с длинным хвостом из цифр. "
+              f"Затем round(…, 2) округляет до {out!r}. Последним print печатает {out!r}.")
+    svg.text(0, 14, "r = [" + ", ".join(repr(v) for v in r) + "]", "f-t", fs)
+
+    def code(x, y, parts):
+        """Строка кода; кортеж в parts — кусок, который считается сейчас:
+        ручкой и с подчёркиванием."""
+        spans, pos, marks = [], 0, []
+        for p in parts:
+            if isinstance(p, tuple):
+                spans.append(f'<tspan class="f-pen-t">{esc(p[0])}</tspan>')
+                marks.append((pos, len(p[0])))
+                pos += len(p[0])
+            else:
+                spans.append(esc(p))
+                pos += len(p)
+        svg.parts.append(f'<text class="f-t" x="{x:g}" y="{y:g}" font-size="{fs:g}" '
+                         f'xml:space="preserve">{"".join(spans)}</text>')
+        for a, n in marks:
+            svg.line(x + a * cw, y + 4, x + (a + n) * cw, y + 4, "f-pen")
+        return pos
+
+    y = T
+    for i, (label, parts) in enumerate(layers):
+        svg.rect(0, y, W - PAD - 4, bh, rx=4)
+        svg.text(8, y + 15, f"{i + 1}. {label}", "f-sub", 10.5)
+        code(8, y + 35, parts)
+        if i < len(layers) - 1:
+            svg.text(20, y + bh + 15, "↓", "f-sub", 12, anchor="middle")
+        y += bh + gap
+    svg.text(0, y + 2, "вывод", "f-hd", 12.5)
+    svg.rect(0, y + 10, 120, 28, "f-box", 4)
+    svg.text(8, y + 29, repr(out), "f-t", fs)
+    svg.note(0, y + 68, ["сначала внутренние скобки,", "print — последним"], 15)
+    return svg.render()
+
+
+LOOP_USER, LOOP_MIN = 13, 3000      # урок 0.5, шаг 4: тот же цикл, другой клиент
+
+
+def loop_trace_data():
+    """Урок 0.5, шаг 4: цикл со счётчиком из объяснения шага (r > 3000,
+    big = big + 1), но по заказам клиента 13, а не 3: ответ задания —
+    счёт для клиента 3. Возвращает список и проходы: r, условие, +1, big."""
+    q = [v for (v,) in db().execute(
+        "SELECT revenue FROM orders WHERE user_id = ? ORDER BY order_id", (LOOP_USER,))]
+    big, rounds = 0, []
+    for r in q:
+        hit = r > LOOP_MIN
+        if hit:
+            big = big + 1
+        rounds.append((r, hit, big))
+    return q, rounds, big
+
+
+def fig_loop_trace():
+    q, rounds, big = loop_trace_data()
+    hits = sum(h for _, h, _ in rounds)
+    rh, tw, T = 26, W - PAD - 2, 48
+    xs = {"круг": 8, "r": 128, "cond": 150, "act": 206, "big": tw - 10}
+    svg = Svg("loop-trace", T + 22 + rh * (len(rounds) + 1) + 128,
+              "Счётчик в цикле: проход за проходом",
+              f"Заказы клиента {LOOP_USER}: q = {q}. До цикла big = 0. "
+              + " ".join(f"Проход {i + 1}: r = {r!r}, r > {LOOP_MIN} — {h}, "
+                         + (f"big становится {b}." if h else f"big остаётся {b}.")
+                         for i, (r, h, b) in enumerate(rounds))
+              + f" Единица прибавилась в {hits} проходах из {len(rounds)}. "
+              f"После цикла print печатает: крупных: {big}.")
+    svg.text(0, 14, "q = [" + ", ".join(repr(v) for v in q) + "]", "f-t", 11.5)
+    svg.text(0, 32, f"клиент {LOOP_USER}, цикл тот же: if r > {LOOP_MIN}: big = big + 1", "f-sub", 10.5)
+    svg.rect(0, T, tw, 22 + rh * (len(rounds) + 1))
+    svg.text(xs["круг"], T + 15, "проход", "f-sub", 10.5)
+    svg.text(xs["r"], T + 15, "r", "f-sub", 10.5, "end")
+    svg.text(xs["cond"], T + 15, f"r > {LOOP_MIN}", "f-sub", 10.5)
+    svg.text(xs["act"], T + 15, "действие", "f-sub", 10.5)
+    svg.text(xs["big"], T + 15, "big после", "f-sub", 10.5, "end")
+    top = T + 22
+    svg.line(0, top, tw, top)
+    svg.text(xs["круг"], top + rh / 2 + 4.5, "до цикла", "f-sub", 10.5)
+    svg.text(xs["act"], top + rh / 2 + 4.5, "big = 0", "f-t", 12)
+    svg.text(xs["big"], top + rh / 2 + 4.5, "0", "f-t", 12.5, "end")
+    for i, (r, h, b) in enumerate(rounds):
+        top = T + 22 + rh * (i + 1)
+        y = top + rh / 2 + 4.5
+        svg.line(0, top, tw, top)
+        if h:
+            svg.rect(2, top + 2, tw - 4, rh - 4, "f-pen", 3)
+        svg.text(xs["круг"], y, str(i + 1), "f-t", 12.5)
+        svg.text(xs["r"], y, repr(r), "f-t", 12.5, "end")
+        svg.text(xs["cond"], y, str(h), "f-pen-t" if h else "f-t", 12.5)
+        svg.text(xs["act"], y, "+1" if h else "без +1", "f-pen-t" if h else "f-sub", 12 if h else 10.5)
+        svg.text(xs["big"], y, str(b), "f-pen-t" if h else "f-t", 12.5, "end")
+    B = T + 22 + rh * (len(rounds) + 1)
+    svg.text(0, B + 24, "после цикла, без отступа: print(\"крупных:\", big)", "f-sub", 10.5)
+    svg.rect(0, B + 32, 130, 28, "f-box", 4)
+    svg.text(8, B + 51, f"крупных: {big}", "f-t", 12)
+    svg.note(0, B + 92, [f"+1 только там, где True:", f"{hits} прохода из {len(rounds)}"], 15)
+    return svg.render()
+
+
+FIGS_M0 = {
+    "table-anatomy": fig_table_anatomy,
+    "group-collapse": fig_group_collapse,
+    "inside-out": fig_inside_out,
+    "loop-trace": fig_loop_trace,
+}
+
+
+def check_m0():
+    """Числа схем m0 — ровно те, что видит ученик в уроке 0.1."""
+    errs = []
+    cols, rows, total = users_head_data()
+    if cols != ["user_id", "signup_date", "channel", "city", "platform"]:
+        errs.append(f"table-anatomy: столбцы users {cols}")
+    if rows != [(1, "2024-06-12", "organic", "Новосибирск", "ios"), (2, "2024-02-05", "social", "Казань", "ios"),
+                (3, "2024-04-18", "organic", "Москва", "ios"), (4, "2024-05-09", "social", "Казань", "ios"),
+                (5, "2024-06-15", "social", "Екатеринбург", "ios")]:
+        errs.append(f"table-anatomy: первые строки users {rows} — сверьте expected шага 1 урока m0l1")
+    if total != 220:
+        errs.append(f"table-anatomy: в users {total} строк вместо 220")
+    head, small, full, total = city_groups_data()
+    if head != [(1, "Новосибирск"), (2, "Казань"), (3, "Москва"), (4, "Казань"), (5, "Екатеринбург")]:
+        errs.append(f"group-collapse: первые строки users {head}")
+    if small != [("Екатеринбург", 1), ("Казань", 2), ("Москва", 1), ("Новосибирск", 1)]:
+        errs.append(f"group-collapse: счёт по первым строкам {small}")
+    if full != [("Екатеринбург", 43), ("Казань", 47), ("Москва", 53), ("Новосибирск", 35),
+                ("Санкт-Петербург", 42)] or total != 220:
+        errs.append(f"group-collapse: GROUP BY city по users {full}, всего {total} — ждали 5 городов на 220")
+    # inside-out: список и печать — из урока 0.2, базы здесь нет
+    m0 = (ROOT / "content-m0.js").read_text(encoding="utf8")
+    lst = "r = [" + ", ".join(repr(v) for v in INSIDE_R) + "]"
+    if m0.count(lst) < 4:                           # шаги 7 и 8: starter и solution
+        errs.append(f"inside-out: в уроке 0.2 нет списка {lst} в шагах 7–8")
+    r, hi, lo, diff, out, layers = inside_out_data()
+    if (hi, lo, repr(diff), out) != (4968.24, 1994.76, "2973.4799999999996", 2973.48):
+        errs.append(f"inside-out: max {hi}, min {lo}, разность {diff!r}, round {out}")
+    if f'expected: {{ stdout: "{len(r)} {sum(r)!r} {hi!r}" }}' not in m0:
+        errs.append("inside-out: expected шага 7 урока 0.2 не совпал с len, sum, max списка r")
+    if f'expected: {{ stdout: "{round(sum(r) / len(r), 2)!r}" }}' not in m0 or out == round(sum(r) / len(r), 2):
+        errs.append("inside-out: схема должна считать не то, что ответ шага 8 (средний)")
+    # loop-trace: заказы клиента 13 из базы, цикл шага 4 урока 0.5
+    q, rounds, big = loop_trace_data()
+    if q != [4147.26, 1915.36, 4849.33, 4340.37]:
+        errs.append(f"loop-trace: заказы клиента {LOOP_USER} {q}")
+    if [(h, b) for _, h, b in rounds] != [(True, 1), (False, 1), (True, 2), (True, 3)] or big != 3:
+        errs.append(f"loop-trace: проходы {rounds}, итог {big} — ждали True/False/True/True и 3")
+    if sum(r > LOOP_MIN for r in q) != big:
+        errs.append("loop-trace: счётчик не совпал с числом заказов дороже порога")
+    q3 = [v for (v,) in db().execute("SELECT revenue FROM orders WHERE user_id = 3 ORDER BY order_id")]
+    ans = sum(r > LOOP_MIN for r in q3)
+    step4 = ("big = 0\\nfor r in q:\\n    if r > %d:\\n        big = big + 1\\nprint(\\\"крупных:\\\", big)" % LOOP_MIN)
+    if f'expected: {{ stdout: "крупных: {ans}" }}' not in m0 or step4 not in m0:
+        errs.append("loop-trace: шаг 4 урока 0.5 — не тот цикл или ответ для клиента 3")
+    if q == q3 or big == ans:
+        errs.append("loop-trace: схема не должна показывать ответ задания (клиент 3)")
+    return errs
+
+
+MODULES = {"m0": (FIGS_M0, check_m0, {}),
+           "m1": (FIGS_M1, check_m1, SANDBOX_M1), "m2": (FIGS_M2, check_m2, {}),
            "m3": (FIGS_M3, check_m3, SANDBOX_M3), "m4": (FIGS_M4, check_m4, {}),
            "m5": (FIGS_M5, check_m5, SANDBOX_M5), "m6": (FIGS_M6, check_m6, {})}
 
