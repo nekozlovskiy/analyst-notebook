@@ -1432,6 +1432,10 @@ button.st-h:hover .st-t { color: var(--ink); }
 .ba-note {
   font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-3);
 }
+/* форма ответа SQL-шага под заданием: окна «ожидаемый результат» у шага нет */
+.theory .st-want {
+  margin-top: -10px; font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-2);
+}
 
 @media (max-width: 720px) {
   .st-b { padding-left: 0; }
@@ -4382,11 +4386,11 @@ Name: revenue, dtype: float64` },
 <p>Результат — снова таблица, только уже. У неё тоже есть <code>head</code>.</p>`,
       ba: {
         before: { columns: ["user_id", "signup_date", "channel", "city", "platform"],
-          rows: [[1, "2024-06-12", "organic", "Новосибирск", "ios"], [2, "2024-02-05", "social", "Казань", "ios"]] },
+          rows: [[1, "2024-06-12", "organic", "Новосибирск", "ios"], [2, "2024-02-05", "social", "Казань", "ios"], ["…", "…", "…", "…", "…"]] },
         after: { columns: ["user_id", "city", "channel"],
-          rows: [[1, "Новосибирск", "organic"], [2, "Казань", "social"]] },
+          rows: [[1, "Новосибирск", "organic"], [2, "Казань", "social"], ["…", "…", "…"]] },
         hl: ["city", "channel"],
-        note: "<code>users[[\"user_id\", \"city\", \"channel\"]]</code>: три столбца в порядке списка, <code>city</code> встал раньше <code>channel</code>."
+        note: "<code>users[[\"user_id\", \"city\", \"channel\"]]</code>: три столбца в порядке списка, <code>city</code> встал раньше <code>channel</code>. В таблицах две строки из 220, а <code>.head(4)</code> в задании оставит четыре."
       },
       task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -5548,10 +5552,10 @@ SELECT LOWER(TRIM(source)) FROM leads;       -- 63 строки</code></pre>
 <p>В <code>leads</code> один источник записан по-разному: <code>' Organic'</code>, <code>'ORGANIC'</code>, <code>'organic'</code>. Для группировки это три разных значения. <code>TRIM</code> снимает пробелы по краям, <code>LOWER</code> опускает регистр латиницы, и вместе — <code>LOWER(TRIM(source))</code>, читается изнутри наружу — они сводят написания к одному.</p>
 <p>Группировать придётся по новому выражению, и тут ловушка: если написать <code>GROUP BY source</code>, SQLite возьмёт сырой столбец <code>source</code> из таблицы, а не выражение с тем же именем из <code>SELECT</code>, и строк останется 11. Поэтому выражение повторяют в <code>GROUP BY</code> целиком или пишут номер столбца в <code>SELECT</code>: <code>GROUP BY 1</code> — «по первому столбцу».</p>`,
         ba: {
-          before: { columns: ["source", "leads_cnt"], rows: [[" Organic", 4], ["ORGANIC", 4], ["organic", 3]] },
-          after: { columns: ["source", "leads_cnt"], rows: [["organic", 11]] },
+          before: { columns: ["source", "leads_cnt"], rows: [[" Organic", 4], ["ORGANIC", 4], ["organic", 3], ["…", "ещё 8 строк"]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["organic", 11], ["…", "ещё 6 строк"]] },
           hl: ["source", "leads_cnt"],
-          note: "Три строки «было» — одна строка «стало»: 4 + 4 + 3 = 11 лидов."
+          note: "Три строки «было» — одна строка «стало»: 4 + 4 + 3 = 11 лидов. Из 11 строк заготовки в ответе останется 7."
         },
         task: "<p><strong>Задание.</strong> Заготовка группирует лиды по сырому <code>source</code> и даёт 11 строк. Сгруппируйте по <code>LOWER(TRIM(source))</code> и назовите столбец <code>source</code>.</p>",
         starter: "SELECT source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY source;",
@@ -5570,10 +5574,10 @@ SELECT LOWER(TRIM(source)) FROM leads;       -- 63 строки</code></pre>
 NULLIF(…, 'n/a')              -- 'n/a' → NULL
 COALESCE(…, 'не указан')      -- NULL → 'не указан'</code></pre>`,
         ba: {
-          before: { columns: ["source", "leads_cnt"], rows: [[null, 6], ["n/a", 3], ["email", 8]] },
-          after: { columns: ["source", "leads_cnt"], rows: [["не указан", 9], ["email", 8]] },
+          before: { columns: ["source", "leads_cnt"], rows: [[null, 6], ["n/a", 3], ["email", 8], ["…", "ещё 4 источника"]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["не указан", 9], ["email", 8], ["…", "ещё 4 источника"]] },
           hl: ["source", "leads_cnt"],
-          note: "6 пропусков и 3 заглушки стали одной строкой из 9 лидов."
+          note: "6 пропусков и 3 заглушки стали одной строкой из 9 лидов. Из 7 строк прошлого шага в ответе останется 6."
         },
         task: "<p><strong>Задание.</strong> Сведите <code>NULL</code> и <code>'n/a'</code> в одну строку <code>не указан</code>, остальное оставьте как в прошлом шаге.</p>",
         starter: "SELECT LOWER(TRIM(source)) AS source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;",
@@ -5604,10 +5608,10 @@ COALESCE(…, 'не указан')      -- NULL → 'не указан'</code></
         body: `
 <p><code>UNION ALL</code> ставит ответ второго запроса под ответом первого: 220 каналов пользователей и 63 источника лидов дают 283 строки. <code>UNION</code> делает то же и убирает повторы — остаётся список разных значений. Столбцы склеиваются по позиции, имя берётся из первого запроса.</p>`,
         ba: {
-          before: { columns: ["channel"], rows: [["organic"], ["organic"], ["partner"], ["не указан"]] },
-          after: { columns: ["channel"], rows: [["organic"], ["partner"], ["не указан"]] },
+          before: { columns: ["channel"], rows: [["organic"], ["organic"], ["partner"], ["не указан"], ["… ещё 279 строк"]] },
+          after: { columns: ["channel"], rows: [["organic"], ["partner"], ["не указан"], ["… ещё 4 канала"]] },
           hl: ["channel"],
-          note: "<code>organic</code> есть и у пользователей, и у лидов — после <code>UNION</code> он один."
+          note: "<code>organic</code> есть и у пользователей, и у лидов — после <code>UNION</code> он один. Из 283 строк в ответе останется 7 разных каналов."
         },
         task: "<p><strong>Задание.</strong> Получите общий список разных каналов: <code>channel</code> из <code>users</code> и нормализованный источник из <code>leads</code>, как в шаге 4. Заготовка даёт 283 строки с повторами.</p>",
         starter: "SELECT channel FROM users\nUNION ALL\nSELECT COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') FROM leads;",
@@ -6081,11 +6085,11 @@ WHERE order_num = 1;</code></pre>
         ba: {
           before: { columns: ["user_id", "order_date", "revenue", "order_num"],
             rows: [[65, "2024-03-27", 2523.12, 1], [65, "2024-04-05", 3444.01, 2], [65, "2024-04-27", 3873.51, 3],
-                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3]] },
+                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3], ["…", "…", "…", "…"]] },
           after: { columns: ["user_id", "order_date", "revenue"],
-            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74]] },
+            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74], ["…", "…", "…"]] },
           hl: [], keep: [0, 3],
-          note: "«Было» — то, что вернул <code>numbered</code>. «Стало» — внешний запрос оставил строки с номером 1."
+          note: "«Было» — то, что вернул <code>numbered</code>, у пользователей 65 и 80. «Стало» — внешний запрос оставил строки с номером 1. В задании к условию на номер добавится условие на сумму."
         },
         task: "<p><strong>Задание.</strong> Первое впечатление о магазине — первый заказ. Найдите пользователей, у которых первый заказ дороже 7 000 ₽: выведите <code>user_id</code>, <code>order_date</code> и <code>revenue</code> этого заказа. Оба условия — номер и сумму — ставьте снаружи, после скобок <code>WITH</code>.</p>",
         starter: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered;",
@@ -7098,10 +7102,10 @@ SELECT ... FROM per_user;</code></pre>
 <p>Запрос читается сверху вниз, как рецепт: отобрали оплаченные — сложили по каждому клиенту — выбрали нужное. Каждый шаг можно проверить отдельно: напишите внизу <code>SELECT * FROM paid</code> и посмотрите, что в нём лежит.</p>`,
         ba: {
           before: { columns: ["user_id", "revenue"],
-            rows: [[3, 1361.84], [3, 9071.54], [3, 3071.02], [3, 1796.6], [65, 2523.12], [65, 3444.01], [65, 3873.51]] },
-          after: { columns: ["user_id", "total"], rows: [[3, 15301], [65, 9840.64]] },
+            rows: [[3, 1361.84], [3, 9071.54], [3, 3071.02], [3, 1796.6], [65, 2523.12], [65, 3444.01], [65, 3873.51], ["…", "…"]] },
+          after: { columns: ["user_id", "total"], rows: [[3, 15301], [65, 9840.64], ["…", "…"]] },
           hl: ["total"],
-          note: "«Было» — <code>paid</code> для двух клиентов. «Стало» — <code>per_user</code>: по строке на клиента."
+          note: "«Было» — <code>paid</code> для двух клиентов. «Стало» — <code>per_user</code>: по строке на клиента. В задании останутся только клиенты, потратившие больше 15 000 ₽."
         },
         task: "<p><strong>Задание.</strong> Добавьте шаг <code>per_user</code> и выведите клиентов, которые потратили больше 15 000 ₽: <code>user_id</code> и <code>total</code> — сумму их оплаченных заказов, 2 знака.</p>",
         starter: "WITH paid AS (\n    SELECT user_id, revenue\n    FROM orders\n    WHERE status = 'paid'\n)\nSELECT user_id, revenue\nFROM paid;",
@@ -8291,8 +8295,8 @@ GROUP BY u.channel;</code></pre>
 <p>Тонкость в том, что сравнивать надо итоги месяцев, а не строки таблицы. Окна выполняются после <code>GROUP BY</code>, поэтому внутри <code>LAG</code> можно поставить сам агрегат: <code>LAG(COUNT(*)) OVER (ORDER BY …)</code>. У первого месяца строки выше нет, и там будет <code>NULL</code> — это честно: сравнивать не с чем.</p>
 <p>Одна деталь SQLite: имя <code>ym</code> из <code>SELECT</code> внутри <code>OVER</code> не видно — база ответит <code>no such column: ym</code>. Поэтому в скобках окна выражение месяца пишут целиком: <code>OVER (ORDER BY strftime('%Y-%m', signup_date))</code>.</p>`,
         ba: {
-          before: { columns: ["ym", "users_cnt"], rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49]] },
-          after: { columns: ["ym", "users_cnt", "prev_cnt", "delta"], rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15]] },
+          before: { columns: ["ym", "users_cnt"], rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49], ["…", "ещё 3 месяца"]] },
+          after: { columns: ["ym", "users_cnt", "prev_cnt", "delta"], rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15], ["…", "ещё 3 месяца", "…", "…"]] },
           hl: ["prev_cnt", "delta"],
           note: "Разница с <code>NULL</code> — тоже <code>NULL</code>: у января прироста нет."
         },
@@ -9749,11 +9753,11 @@ social         54     42      24` },
 <p>У <code>partner</code> получится 0 / 0. В школе это «делить нельзя», а pandas ставит <code>NaN</code> — и он уедет в отчёт. Закрывают его <code>.fillna(0)</code> — «пустое замени нулём».</p>`,
         ba: {
           before: { columns: ["channel", "orders_cnt", "revenue", "aov"],
-            rows: [["email", 28, 122017.95, 4357.78], ["partner", 0, 0.0, "NaN"], ["social", 24, 61776.11, 2574.0]] },
+            rows: [["email", 28, 122017.95, 4357.78], ["…", "…", "…", "…"], ["partner", 0, 0.0, "NaN"], ["…", "…", "…", "…"], ["social", 24, 61776.11, 2574.0]] },
           after: { columns: ["channel", "orders_cnt", "revenue", "aov"],
-            rows: [["email", 28, 122017.95, 4357.78], ["partner", 0, 0.0, 0.0], ["social", 24, 61776.11, 2574.0]] },
+            rows: [["email", 28, 122017.95, 4357.78], ["…", "…", "…", "…"], ["partner", 0, 0.0, 0.0], ["…", "…", "…", "…"], ["social", 24, 61776.11, 2574.0]] },
           hl: ["aov"],
-          note: "«Было» — только деление и <code>round</code>. «Стало» — с <code>.fillna(0)</code> на конце."
+          note: "«Было» — только деление и <code>round</code>. «Стало» — с <code>.fillna(0)</code> на конце. В таблицах три канала из шести, в ответе — все шесть."
         },
         task: `<p><strong>Порядок действий</strong> в <code>(res["revenue"] / res["orders_cnt"]).round(2).fillna(0)</code>:</p>
 <ol class="order">
@@ -9781,10 +9785,10 @@ social              42          24   61776.11  2574.00` },
 <p>Осталось оформить. Каналы сидят в индексе, а в отчёте они нужны обычным столбцом: <code>res.reset_index()</code> делает из индекса столбец <code>channel</code>, а слева появляются номера 0, 1, 2…</p>
 <p>Дальше — знакомая сортировка по выручке. Номера слева после неё перемешаются, и в отчёте они не нужны: <code>print(res.to_string(index=False))</code> печатает таблицу без индекса.</p>`,
         ba: {
-          before: { columns: ["channel (индекс)", "revenue"], rows: [["email", 122017.95], ["organic", 271926.54], ["paid_search", 141330.95]] },
-          after: { columns: ["channel", "revenue"], rows: [["organic", 271926.54], ["paid_search", 141330.95], ["email", 122017.95]] },
+          before: { columns: ["channel (индекс)", "revenue"], rows: [["email", 122017.95], ["organic", 271926.54], ["paid_search", 141330.95], ["…", "ещё 3 канала"]] },
+          after: { columns: ["channel", "revenue"], rows: [["organic", 271926.54], ["paid_search", 141330.95], ["email", 122017.95], ["…", "ещё 3 канала"]] },
           hl: ["channel"],
-          note: "Канал из индекса стал столбцом, строки встали по выручке, номеров слева нет."
+          note: "Канал из индекса стал столбцом, строки встали по выручке, номеров слева нет. В таблицах два столбца и три канала, а печатается весь отчёт: пять столбцов и шесть каналов."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -10321,10 +10325,10 @@ print(leads.isna().sum())`
 <p>У текстового столбца методы работы с текстом вызывают через <code>.str</code>. <code>.str.replace(" ", "", regex=False)</code> в каждой ячейке заменяет пробел на пустоту, то есть убирает его. <code>regex=False</code> значит «искать ровно этот знак, без шаблонов».</p>
 <p>После двух замен получится <code>'22250.28'</code> — всё ещё текст, но уже записанный как число. В число его превращает <code>pd.to_numeric(money, errors="coerce")</code>. Настройка <code>errors="coerce"</code> — страховка: всё, что числом не читается, станет <code>NaN</code>, а код не упадёт.</p>`,
         ba: {
-          before: { columns: ["lead_id", "deal_sum"], rows: [["1001", "'22 250,28'"], ["1002", "NaN"], ["1004", "'54546.00'"]] },
-          after: { columns: ["lead_id", "deal_sum"], rows: [["1001", 22250.28], ["1002", "NaN"], ["1004", 54546.0]] },
+          before: { columns: ["lead_id", "deal_sum"], rows: [["1001", "'22 250,28'"], ["1002", "NaN"], ["…", "…"], ["1004", "'54546.00'"], ["…", "…"]] },
+          after: { columns: ["lead_id", "deal_sum"], rows: [["1001", 22250.28], ["1002", "NaN"], ["…", "…"], ["1004", 54546.0], ["…", "…"]] },
           hl: ["deal_sum"],
-          note: "Текст в кавычках стал числом. Пропуск остался пропуском."
+          note: "Текст в кавычках стал числом. Пропуск остался пропуском. Здесь три строки из пяти, которые печатает задание."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -10551,10 +10555,10 @@ print(rep["leads_cnt"].sum())`
 <p>f-строка — текст с буквой <code>f</code> перед кавычками. Всё, что внутри фигурных скобок, Python заменит значением: <code>f"{src} {r.leads_cnt}"</code>. После двоеточия задают вид числа: <code>{r.share:.1f}</code> — один знак после точки, <code>:.2f</code> — два.</p>
 <p>Одна тонкость. Если в таблице есть хоть один дробный столбец, <code>iterrows</code> отдаёт всю строку дробной, и 15 лидов напечатаются как <code>15.0</code>. Целое возвращает <code>int(…)</code>.</p>`,
         ba: {
-          before: { columns: ["source", "leads_cnt", "share"], rows: [["email", 6, "10.344828"], ["organic", 10, "17.241379"], ["paid_search", 15, "25.862069"]] },
-          after: { columns: ["напечатано"], rows: [["email 6 10.3"], ["organic 10 17.2"], ["paid_search 15 25.9"]] },
+          before: { columns: ["source", "leads_cnt", "share"], rows: [["email", 6, "10.344828"], ["organic", 10, "17.241379"], ["paid_search", 15, "25.862069"], ["… ещё 3 источника", "…", "…"]] },
+          after: { columns: ["напечатано"], rows: [["email 6 10.3"], ["organic 10 17.2"], ["paid_search 15 25.9"], ["… ещё 3 строки"]] },
           hl: ["напечатано"],
-          note: "Каждая строка таблицы стала строкой текста: источник, число лидов, доля в процентах."
+          note: "Каждая строка таблицы стала строкой текста: источник, число лидов, доля в процентах. Источников шесть — и строк в выводе будет шесть."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -11304,9 +11308,9 @@ print(f"доля выбросов {s[mask].sum() / s.sum() * 100:.1f}")`
 <p><code>.round(2)</code> у таблицы округляет все её числа. Там, где среднее и медиана одного порядка, группе можно верить. Там, где среднее больше в разы, внутри сидит выброс — и искать его надо именно в этой группе.</p>`,
         ba: {
           before: { columns: ["source", "deal_sum"], rows: [["paid_search", 52163.0], ["paid_search", 9999000.0], ["social", 26104.11]] },
-          after: { columns: ["source", "cnt", "mean", "median"], rows: [["paid_search", 13, 794529.87, 28899.39], ["social", 9, 28102.0, 26104.11]] },
+          after: { columns: ["source", "cnt", "mean", "median"], rows: [["…", "…", "…", "…"], ["paid_search", 13, 794529.87, 28899.39], ["…", "…", "…", "…"], ["social", 9, 28102.0, 26104.11], ["…", "…", "…", "…"]] },
           hl: ["mean", "median"],
-          note: "У <code>social</code> среднее и медиана рядом. У <code>paid_search</code> среднее больше медианы в 27 раз."
+          note: "У <code>social</code> среднее и медиана рядом. У <code>paid_search</code> среднее больше медианы в 27 раз. Здесь два источника из шести, в ответе — все шесть."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -11418,7 +11422,7 @@ for _, row in paid[mask].sort_values("revenue", ascending=False).iterrows():
     {
       title: "Форма распределения одним взглядом",
       level: "easy",
-      body: `<p>Напечатайте по оплаченным заказам восемь чисел: минимум, p10, p25, медиану, среднее, p75, p90, p99 и максимум. Каждое с двумя знаками.</p>
+      body: `<p>Напечатайте по оплаченным заказам девять чисел: минимум, p10, p25, медиану, среднее, p75, p90, p99 и максимум. Каждое с двумя знаками.</p>
 <p>Посмотрите на разрыв между p99 и максимумом. Что он говорит о форме распределения?</p>`,
       solution: `r = orders.loc[orders["status"] == "paid", "revenue"]
 
@@ -11434,7 +11438,7 @@ for name, v in [
     ("max", r.max()),
 ]:
     print(f"{name} {v:.2f}")`,
-      note: `<p>Медиана 2997, среднее 3457, p99 около 9129, максимум 10177. Среднее правее медианы, а хвост тянется далеко за p90 — классическое правостороннее скошенное распределение. Такой набор из восьми чисел заменяет гистограмму и занимает пять строк кода: очень удобно, когда графики строить негде.</p>`
+      note: `<p>Медиана 2997, среднее 3457, p99 около 9129, максимум 10177. Среднее правее медианы, а хвост тянется далеко за p90 — классическое правостороннее скошенное распределение. Такой набор из девяти чисел заменяет гистограмму и печатается одним циклом: очень удобно, когда графики строить негде.</p>`
     },
     {
       title: "Три метода на одних данных",
@@ -11832,9 +11836,9 @@ print(len(part), round(part.sum(), 2))`
 <p><code>"MS"</code> — month start: шаг в месяц, метка периода — первое число. Строка <code>2024-03-01</code> в ответе — это весь март, а не один день. Другие шаги: <code>"D"</code> — день, <code>"W-MON"</code> — неделя с меткой в понедельник.</p>`,
         ba: {
           before: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-07", 3007.92], ["2024-01-17", 3646.74], ["…", "…"], ["2024-02-03", "…"]] },
-          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-01", 25563.37], ["2024-02-01", 67477.28]] },
+          after: { columns: ["order_date (индекс)", "revenue"], rows: [["2024-01-01", 25563.37], ["2024-02-01", 67477.28], ["… ещё 7 месяцев", "…"]] },
           hl: ["revenue"],
-          note: "Шесть январских заказов свернулись в одну строку с меткой 1 января, семнадцать февральских — в строку 1 февраля."
+          note: "Шесть январских заказов свернулись в одну строку с меткой 1 января, семнадцать февральских — в строку 1 февраля. В ответе все девять месяцев, с января по сентябрь."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -11897,10 +11901,10 @@ print(aug.index.nunique(), len(d), (d == 0).sum())`
 <p>В отчёте по периодам нужны сразу и число заказов, и выручка. После <code>resample</code> это пишут так: <code>.agg(["count", "sum"])</code> — список способов посчитать. Получится таблица с двумя столбцами, названными по способам: <code>count</code> и <code>sum</code>.</p>
 <p>Такие имена в отчёт не годятся. Переименовать все столбцы разом можно, положив в <code>m.columns</code> список новых имён в том же порядке: <code>m.columns = ["orders_cnt", "revenue"]</code>.</p>`,
         ba: {
-          before: { columns: ["order_date (индекс)", "count", "sum"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28]] },
-          after: { columns: ["order_date (индекс)", "orders_cnt", "revenue"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28]] },
+          before: { columns: ["order_date (индекс)", "count", "sum"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28], ["… ещё 7 месяцев", "…", "…"]] },
+          after: { columns: ["order_date (индекс)", "orders_cnt", "revenue"], rows: [["2024-01-01", 6, 25563.37], ["2024-02-01", 17, 67477.28], ["… ещё 7 месяцев", "…", "…"]] },
           hl: ["orders_cnt", "revenue"],
-          note: "Числа те же, столбцы названы по смыслу."
+          note: "Числа те же, столбцы названы по смыслу. В ответе все девять месяцев, с января по сентябрь."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -11936,10 +11940,10 @@ print(m.round(2))`
 <p><code>m["revenue"].rolling(3).mean()</code> — скользящее среднее: для каждой строки берутся она сама и две предыдущие, и по этим трём считается среднее. Окно едет вниз по ряду, отсюда название. Сглаженный ряд показывает направление, а не скачки отдельных месяцев.</p>
 <p>У первых двух строк трёх значений ещё нет, и <code>rolling(3)</code> ставит там <code>NaN</code>. Настройка <code>min_periods=1</code> разрешает считать по тому, что есть: первая строка — по одному значению, вторая — по двум. Ряд получается без дыр, но первые точки посчитаны по неполному окну — в отчёте об этом помнят.</p>`,
         ba: {
-          before: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, "NaN"], ["2024-02-01", 67477.28, "NaN"], ["2024-03-01", 85621.79, 59554.15]] },
-          after: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, 25563.37], ["2024-02-01", 67477.28, 46520.32], ["2024-03-01", 85621.79, 59554.15]] },
+          before: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, "NaN"], ["2024-02-01", 67477.28, "NaN"], ["2024-03-01", 85621.79, 59554.15], ["… ещё 6 месяцев", "…", "…"]] },
+          after: { columns: ["order_date (индекс)", "revenue", "ma3"], rows: [["2024-01-01", 25563.37, 25563.37], ["2024-02-01", 67477.28, 46520.32], ["2024-03-01", 85621.79, 59554.15], ["… ещё 6 месяцев", "…", "…"]] },
           hl: ["ma3"],
-          note: "«Было» — <code>rolling(3)</code>, «стало» — с <code>min_periods=1</code>. Мартовское значение одно и то же: там окно уже полное."
+          note: "«Было» — <code>rolling(3)</code>, «стало» — с <code>min_periods=1</code>. Мартовское значение одно и то же: там окно уже полное. В ответе все девять месяцев."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -12464,9 +12468,9 @@ for label, v in values.items():
 <p>Возьмём регистрации по месяцам. Приёмы из урока 2.4: дата регистрации становится индексом, <code>resample("MS")</code> группирует по месяцам, <code>.count()</code> считает строки в каждом.</p>`,
         ba: {
           before: { columns: ["user_id", "signup_date"], rows: [[1, "2024-06-12"], [2, "2024-02-05"], ["…", "…"]] },
-          after: { columns: ["signup_date (индекс)", "user_id"], rows: [["2024-01-01", 33], ["2024-02-01", 34], ["2024-03-01", 49]] },
+          after: { columns: ["signup_date (индекс)", "user_id"], rows: [["2024-01-01", 33], ["2024-02-01", 34], ["2024-03-01", 49], ["… ещё 3 месяца", "…"]] },
           hl: ["user_id"],
-          note: "«Было» — по строке на пользователя. «Стало» — по строке на месяц: сколько человек зарегистрировалось."
+          note: "«Было» — по строке на пользователя. «Стало» — по строке на месяц: сколько человек зарегистрировалось. В ответе все шесть месяцев."
         },
         task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">
@@ -20273,10 +20277,10 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
 <p>Конверсия шага — доля от предыдущего шага, потери — разница с ним. Значение прошлой строки даёт <code>LAG(users) OVER (ORDER BY step_no)</code>.</p>
 <p>Окна считаются по готовым строкам, поэтому таблицу «шаг — люди» кладут в <code>reached</code>, а <code>LAG</code> пишут во внешнем запросе. У первого шага прошлой строки нет — <code>NULL</code>, и это честно: конверсии «из ничего» не бывает. <code>100.0</code> с точкой — чтобы деление было дробным.</p>`,
         ba: {
-          before: { columns: ["step_no", "users"], rows: [[3, 56], [4, 34]] },
-          after: { columns: ["step_no", "users", "lost", "from_prev"], rows: [[3, 56, 12, 82.4], [4, 34, 22, 60.7]] },
+          before: { columns: ["step_no", "users"], rows: [["…", "…"], [3, 56], [4, 34], ["…", "…"]] },
+          after: { columns: ["step_no", "users", "lost", "from_prev"], rows: [["…", "…", "…", "…"], [3, 56, 12, 82.4], [4, 34, 22, 60.7], ["…", "…", "…", "…"]] },
           hl: ["lost", "from_prev"],
-          note: "Из корзины в оформление доходит 60,7 %, а самый слабый переход на iOS — из оформления в оплату, 55,9 %."
+          note: "Из корзины в оформление доходит 60,7 %, а самый слабый переход на iOS — из оформления в оплату, 55,9 %. В таблицах — шаги 3 и 4 из пяти."
         },
         task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code>, <code>lost</code> — потери относительно прошлого шага и <code>from_prev</code> — конверсию из прошлого шага в процентах с одним знаком.</p>",
         starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
@@ -20290,10 +20294,10 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
 <p>Сквозная конверсия — доля от первого шага. Значение первой строки даёт <code>FIRST_VALUE(users) OVER (ORDER BY step_no)</code>. У первого шага сквозная — ровно 100 %: он сам и есть начало.</p>
 <p>Сквозная равна произведению конверсий шагов: 90,7 % × 82,4 % × 60,7 % × 55,9 % — около 25 %, с точностью до округления. Поэтому улучшение любого шага умножается на все остальные.</p>`,
         ba: {
-          before: { columns: ["step_no", "users"], rows: [[1, 75], [5, 19]] },
-          after: { columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], [5, 19, 25.3]] },
+          before: { columns: ["step_no", "users"], rows: [[1, 75], ["…", "…"], [5, 19]] },
+          after: { columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], ["…", "…", "…"], [5, 19, 25.3]] },
           hl: ["from_top"],
-          note: "До покупки доходит четверть пользователей iOS с событиями."
+          note: "До покупки доходит четверть пользователей iOS с событиями. В таблицах — шаги 1 и 5 из пяти."
         },
         task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code> и <code>from_top</code> — сквозную конверсию от первого шага в процентах с одним знаком.</p>",
         starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
@@ -20857,9 +20861,9 @@ window.CONTENT.m4l3 = {
 <p>Заготовка кладёт «пользователь — неделя» для каждого дня активности в <code>act</code>. Берём недели с нулевой по четвёртую.</p>`,
         ba: {
           before: { columns: ["user_id", "wk"], rows: [[2254, 0], [2254, 0], [2254, 2], [2254, 3]] },
-          after: { columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99]] },
+          after: { columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99], ["…", "…"]] },
           hl: ["users"],
-          note: "Пользователь 2254 посчитается один раз на неделе 0 — хотя заходил дважды."
+          note: "Пользователь 2254 посчитается один раз на неделе 0 — хотя заходил дважды. В «стало» — недели 0–2 из пяти."
         },
         task: "<p><strong>Задание.</strong> Выведите <code>wk</code> и <code>users</code> — сколько пользователей когорты заходили на неделе 0, 1, 2, 3 и 4.</p>",
         starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk\nFROM act\nWHERE wk BETWEEN 0 AND 4\nGROUP BY wk\nORDER BY wk;",
@@ -20873,10 +20877,10 @@ window.CONTENT.m4l3 = {
 <p>Удержание недели — доля когорты, заходившая в эту неделю: люди недели, делённые на размер когорты. Размер берём подзапросом прямо по <code>c</code>: <code>(SELECT COUNT(*) FROM c)</code> — скаляр из урока 1.6.</p>
 <p>У недели 0 удержание 100 % по построению: в день установки заходят все. Поэтому в отчётах её обычно не показывают.</p>`,
         ba: {
-          before: { columns: ["wk", "users"], rows: [[1, 134], [4, 52]] },
-          after: { columns: ["wk", "retention"], rows: [[1, 39.6], [4, 15.4]] },
+          before: { columns: ["wk", "users"], rows: [[1, 134], ["…", "…"], [4, 52]] },
+          after: { columns: ["wk", "retention"], rows: [[1, 39.6], ["…", "…"], [4, 15.4]] },
           hl: ["retention"],
-          note: "Через неделю возвращаются четыре из десяти, через четыре — полтора."
+          note: "Через неделю возвращаются четыре из десяти, через четыре — полтора. В таблицах — недели 1 и 4 из четырёх."
         },
         task: "<p><strong>Задание.</strong> Для недель 1–4 выведите <code>wk</code> и <code>retention</code> — долю когорты в процентах с одним знаком.</p>",
         starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk, COUNT(DISTINCT user_id) AS users\nFROM act\nWHERE wk BETWEEN 1 AND 4\nGROUP BY wk\nORDER BY wk;",
@@ -27097,10 +27101,10 @@ print(f"AUC: простые ранги {auc_simple(p, yb):.4f}, средние {
 <p>На практике модель используют для сортировки: людей с высокой вероятностью берут в работу первыми. Lift группы — во сколько раз доля купивших в ней выше, чем в среднем по базе: <code>conv / yb.mean()</code>.</p>
 <p>Заодно видно калибровку: если модель честна о вероятностях, средний прогноз группы близок к фактической доле. Группы здесь — значения <code>days7</code>; таблицу собирают из массивов, как в уроке 5.2, с двумя средними — факта и прогноза — и размером группы.</p>`,
         ba: {
-          before: { columns: ["days7", "людей", "прогноз"], rows: [[1, 1822, "5.3%"], [7, 319, "73.2%"]] },
-          after: { columns: ["days7", "людей", "прогноз", "факт", "lift"], rows: [[1, 1822, "5.3%", "1.5%", "0.07"], [7, 319, "73.2%", "62.4%", "2.83"]] },
+          before: { columns: ["days7", "людей", "прогноз"], rows: [[1, 1822, "5.3%"], ["…", "…", "…"], [7, 319, "73.2%"]] },
+          after: { columns: ["days7", "людей", "прогноз", "факт", "lift"], rows: [[1, 1822, "5.3%", "1.5%", "0.07"], ["…", "…", "…", "…", "…"], [7, 319, "73.2%", "62.4%", "2.83"]] },
           hl: ["факт", "lift"],
-          note: "Сортирует модель хорошо, а вероятности на краях завышает — 5,3% вместо 1,5% и 73,2% вместо 62,4%, — а на 2–4 днях занижает: 9,6% вместо 18,1%."
+          note: "Сортирует модель хорошо, а вероятности на краях завышает — 5,3% вместо 1,5% и 73,2% вместо 62,4%, — а на 2–4 днях занижает: 9,6% вместо 18,1%. В таблицах — группы 1 и 7 из семи, напечатать нужно все семь."
         },
         task: "<p><strong>Задание.</strong> Сгруппируйте по <code>days7</code> и напечатайте строку на группу: <code>1 1822 прогноз=5.3% факт=1.5% lift=0.07</code>.</p>",
         starter: `def sigmoid(z):
@@ -84433,11 +84437,13 @@ const Check = {
     if (i === a.length && i === b.length) return { ok: true };
     if (i === a.length) {
       const left = b.length - a.length;
-      return { ok: false, line: i, why: "вывод короче эталона: не хватает " + left + " " + plural(left, "строки", "строк", "строк"),
+      return { ok: false, line: i, why: "вывод короче эталона: в нём " + a.length + " " + plural(a.length, "строка", "строки", "строк") +
+                 ", а нужно " + b.length,
                hint: "Следующая строка должна быть такой: " + show(b[i]) + "." };
     }
     if (i === b.length) {
-      return { ok: false, line: i, why: "в выводе " + (a.length - b.length) + " " + plural(a.length - b.length, "лишняя строка", "лишние строки", "лишних строк") + " в конце",
+      return { ok: false, line: i, why: "в выводе " + (a.length - b.length) + " " + plural(a.length - b.length, "лишняя строка", "лишние строки", "лишних строк") +
+                 " в конце: в нём " + a.length + " " + plural(a.length, "строка", "строки", "строк") + ", а нужно " + b.length,
                hint: "Первая лишняя: «" + a[i] + "». Уберите отладочный print или печать целой таблицы." };
     }
     /* те же строки, другой порядок */
@@ -84710,6 +84716,12 @@ const Check = {
       : leftJoin && /\bWHERE\b/i.test(code) ? "Условие на правую таблицу в WHERE превращает LEFT JOIN во внутренний: строки без пары отсекаются. Перенесите его в ON."
       : /\bHAVING\b/i.test(code) ? "HAVING отсекает группы целиком — проверьте его условие: нужно ли оно вообще и тот ли там знак."
       : "Какой-то фильтр отсекает лишнее — проверьте WHERE и HAVING.";
+    /* ответ обрезал LIMIT: строк ровно столько, сколько он разрешил, — WHERE ни при чём */
+    const lim = /\bLIMIT\s+(\d+)/i.exec(code);
+    const limitHint = lim && +lim[1] === got.length && got.length < want.length
+      ? "LIMIT оставил " + got.length + " " + plural(got.length, "строку", "строки", "строк") +
+        ", а нужно " + want.length + ": поправьте число после LIMIT или уберите его, если в задании он не нужен."
+      : "";
 
     /* лишние строки, а нужные все на месте */
     if (extraG.length && !missW.length) {
@@ -84730,9 +84742,9 @@ const Check = {
     /* не хватает строк, лишних нет */
     if (missW.length && !extraG.length) {
       return { ok: false,
-        why: "не хватает " + missW.length + " " + plural(missW.length, "строки", "строк", "строк") +
+        why: "не хватает " + missW.length + " " + plural(missW.length, "строки", "строк", "строк") + " из " + want.length +
              (textKey ? ": нет " + keysShow(missW, want) : ""),
-        hint: joinHint };
+        hint: limitHint || joinHint };
     }
 
     /* строки есть, но значения другие: сопоставляем по первому столбцу */
@@ -84753,7 +84765,7 @@ const Check = {
         return { ok: false, row: extraK[0], marks: { rows: extraK },
           why: "в ответе нет " + plural(missK.length, "строки", "строк", "строк") + " " + keysShow(missK, want) +
                (extraK.length ? ", зато есть лишние: " + keysShow(extraK, got) : ""),
-          hint: joinHint };
+          hint: limitHint || joinHint };
       }
       if (extraK.length) {
         return { ok: false, row: extraK[0], marks: { rows: extraK },
@@ -84789,9 +84801,9 @@ const Check = {
     return { ok: false, row: extraG[0], marks: { rows: extraG },
       why: got.length !== want.length ? "строк " + got.length + ", а должно быть " + want.length
          : "в " + extraG.length + " " + plural(extraG.length, "строке", "строках", "строках") + " из " + got.length + " значения не те",
-      hint: textKey && missW.length
+      hint: limitHint || (textKey && missW.length
         ? "В ответе должны быть " + keysShow(missW, want) + ". Строки, которых нет в эталоне, подсвечены."
-        : "Строки, которых нет в эталоне, подсвечены." };
+        : "Строки, которых нет в эталоне, подсвечены.") };
   },
 
   /* Почему могли разойтись числа в одном столбце — по самим расхождениям. */
@@ -85994,9 +86006,19 @@ const Steps = {
       return saved !== null ? saved : (S.steps[n].starter || "");
     }
     /* объяснение шага, таблицы «было → стало» и задание — один текст:
-       термины в нём подчёркиваются по первому упоминанию */
+       термины в нём подчёркиваются по первому упоминанию. Окна
+       «ожидаемый результат» у шага нет, и без подсказки ученик
+       сверяется со «стало», а она обычно короче ответа. Поэтому под
+       заданием SQL-шага — форма ответа из эталона: сколько строк и
+       какие столбцы. У Python-шага строки вывода — это ещё и заголовок
+       таблицы, их число спорило бы с заданием «первые четыре строки». */
     function textOf(s) {
-      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + "</div>";
+      const e = s.expected || {};
+      const want = e.rows ? '<p class="st-want">В ответе ' + e.rows.length + " " +
+        plural(e.rows.length, "строка", "строки", "строк") + ", " +
+        plural(e.columns.length, "столбец", "столбцы", "столбцы") + ": " +
+        e.columns.map(function (c) { return "<code>" + esc(c) + "</code>"; }).join(", ") + ".</p>" : "";
+      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + want + "</div>";
     }
     /* первая значимая строка запроса — подпись свёрнутого шага */
     function firstLine(src) {
