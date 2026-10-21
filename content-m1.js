@@ -678,10 +678,10 @@ SELECT LOWER(TRIM(source)) FROM leads;       -- 63 строки</code></pre>
 <p>В <code>leads</code> один источник записан по-разному: <code>' Organic'</code>, <code>'ORGANIC'</code>, <code>'organic'</code>. Для группировки это три разных значения. <code>TRIM</code> снимает пробелы по краям, <code>LOWER</code> опускает регистр латиницы, и вместе — <code>LOWER(TRIM(source))</code>, читается изнутри наружу — они сводят написания к одному.</p>
 <p>Группировать придётся по новому выражению, и тут ловушка: если написать <code>GROUP BY source</code>, SQLite возьмёт сырой столбец <code>source</code> из таблицы, а не выражение с тем же именем из <code>SELECT</code>, и строк останется 11. Поэтому выражение повторяют в <code>GROUP BY</code> целиком или пишут номер столбца в <code>SELECT</code>: <code>GROUP BY 1</code> — «по первому столбцу».</p>`,
         ba: {
-          before: { columns: ["source", "leads_cnt"], rows: [[" Organic", 4], ["ORGANIC", 4], ["organic", 3]] },
-          after: { columns: ["source", "leads_cnt"], rows: [["organic", 11]] },
+          before: { columns: ["source", "leads_cnt"], rows: [[" Organic", 4], ["ORGANIC", 4], ["organic", 3], ["…", "ещё 8 строк"]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["organic", 11], ["…", "ещё 6 строк"]] },
           hl: ["source", "leads_cnt"],
-          note: "Три строки «было» — одна строка «стало»: 4 + 4 + 3 = 11 лидов."
+          note: "Три строки «было» — одна строка «стало»: 4 + 4 + 3 = 11 лидов. Из 11 строк заготовки в ответе останется 7."
         },
         task: "<p><strong>Задание.</strong> Заготовка группирует лиды по сырому <code>source</code> и даёт 11 строк. Сгруппируйте по <code>LOWER(TRIM(source))</code> и назовите столбец <code>source</code>.</p>",
         starter: "SELECT source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY source;",
@@ -700,10 +700,10 @@ SELECT LOWER(TRIM(source)) FROM leads;       -- 63 строки</code></pre>
 NULLIF(…, 'n/a')              -- 'n/a' → NULL
 COALESCE(…, 'не указан')      -- NULL → 'не указан'</code></pre>`,
         ba: {
-          before: { columns: ["source", "leads_cnt"], rows: [[null, 6], ["n/a", 3], ["email", 8]] },
-          after: { columns: ["source", "leads_cnt"], rows: [["не указан", 9], ["email", 8]] },
+          before: { columns: ["source", "leads_cnt"], rows: [[null, 6], ["n/a", 3], ["email", 8], ["…", "ещё 4 источника"]] },
+          after: { columns: ["source", "leads_cnt"], rows: [["не указан", 9], ["email", 8], ["…", "ещё 4 источника"]] },
           hl: ["source", "leads_cnt"],
-          note: "6 пропусков и 3 заглушки стали одной строкой из 9 лидов."
+          note: "6 пропусков и 3 заглушки стали одной строкой из 9 лидов. Из 7 строк прошлого шага в ответе останется 6."
         },
         task: "<p><strong>Задание.</strong> Сведите <code>NULL</code> и <code>'n/a'</code> в одну строку <code>не указан</code>, остальное оставьте как в прошлом шаге.</p>",
         starter: "SELECT LOWER(TRIM(source)) AS source, COUNT(*) AS leads_cnt\nFROM leads\nGROUP BY 1;",
@@ -734,10 +734,10 @@ COALESCE(…, 'не указан')      -- NULL → 'не указан'</code></
         body: `
 <p><code>UNION ALL</code> ставит ответ второго запроса под ответом первого: 220 каналов пользователей и 63 источника лидов дают 283 строки. <code>UNION</code> делает то же и убирает повторы — остаётся список разных значений. Столбцы склеиваются по позиции, имя берётся из первого запроса.</p>`,
         ba: {
-          before: { columns: ["channel"], rows: [["organic"], ["organic"], ["partner"], ["не указан"]] },
-          after: { columns: ["channel"], rows: [["organic"], ["partner"], ["не указан"]] },
+          before: { columns: ["channel"], rows: [["organic"], ["organic"], ["partner"], ["не указан"], ["… ещё 279 строк"]] },
+          after: { columns: ["channel"], rows: [["organic"], ["partner"], ["не указан"], ["… ещё 4 канала"]] },
           hl: ["channel"],
-          note: "<code>organic</code> есть и у пользователей, и у лидов — после <code>UNION</code> он один."
+          note: "<code>organic</code> есть и у пользователей, и у лидов — после <code>UNION</code> он один. Из 283 строк в ответе останется 7 разных каналов."
         },
         task: "<p><strong>Задание.</strong> Получите общий список разных каналов: <code>channel</code> из <code>users</code> и нормализованный источник из <code>leads</code>, как в шаге 4. Заготовка даёт 283 строки с повторами.</p>",
         starter: "SELECT channel FROM users\nUNION ALL\nSELECT COALESCE(NULLIF(LOWER(TRIM(source)), 'n/a'), 'не указан') FROM leads;",
@@ -1211,11 +1211,11 @@ WHERE order_num = 1;</code></pre>
         ba: {
           before: { columns: ["user_id", "order_date", "revenue", "order_num"],
             rows: [[65, "2024-03-27", 2523.12, 1], [65, "2024-04-05", 3444.01, 2], [65, "2024-04-27", 3873.51, 3],
-                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3]] },
+                   [80, "2024-03-03", 8173.74, 1], [80, "2024-03-19", 2052.96, 2], [80, "2024-03-29", 5554.07, 3], ["…", "…", "…", "…"]] },
           after: { columns: ["user_id", "order_date", "revenue"],
-            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74]] },
+            rows: [[65, "2024-03-27", 2523.12], [80, "2024-03-03", 8173.74], ["…", "…", "…"]] },
           hl: [], keep: [0, 3],
-          note: "«Было» — то, что вернул <code>numbered</code>. «Стало» — внешний запрос оставил строки с номером 1."
+          note: "«Было» — то, что вернул <code>numbered</code>, у пользователей 65 и 80. «Стало» — внешний запрос оставил строки с номером 1. В задании к условию на номер добавится условие на сумму."
         },
         task: "<p><strong>Задание.</strong> Первое впечатление о магазине — первый заказ. Найдите пользователей, у которых первый заказ дороже 7 000 ₽: выведите <code>user_id</code>, <code>order_date</code> и <code>revenue</code> этого заказа. Оба условия — номер и сумму — ставьте снаружи, после скобок <code>WITH</code>.</p>",
         starter: "WITH numbered AS (\n    SELECT user_id, order_date, revenue,\n           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS order_num\n    FROM orders\n)\nSELECT user_id, order_date, revenue\nFROM numbered;",
@@ -2228,10 +2228,10 @@ SELECT ... FROM per_user;</code></pre>
 <p>Запрос читается сверху вниз, как рецепт: отобрали оплаченные — сложили по каждому клиенту — выбрали нужное. Каждый шаг можно проверить отдельно: напишите внизу <code>SELECT * FROM paid</code> и посмотрите, что в нём лежит.</p>`,
         ba: {
           before: { columns: ["user_id", "revenue"],
-            rows: [[3, 1361.84], [3, 9071.54], [3, 3071.02], [3, 1796.6], [65, 2523.12], [65, 3444.01], [65, 3873.51]] },
-          after: { columns: ["user_id", "total"], rows: [[3, 15301], [65, 9840.64]] },
+            rows: [[3, 1361.84], [3, 9071.54], [3, 3071.02], [3, 1796.6], [65, 2523.12], [65, 3444.01], [65, 3873.51], ["…", "…"]] },
+          after: { columns: ["user_id", "total"], rows: [[3, 15301], [65, 9840.64], ["…", "…"]] },
           hl: ["total"],
-          note: "«Было» — <code>paid</code> для двух клиентов. «Стало» — <code>per_user</code>: по строке на клиента."
+          note: "«Было» — <code>paid</code> для двух клиентов. «Стало» — <code>per_user</code>: по строке на клиента. В задании останутся только клиенты, потратившие больше 15 000 ₽."
         },
         task: "<p><strong>Задание.</strong> Добавьте шаг <code>per_user</code> и выведите клиентов, которые потратили больше 15 000 ₽: <code>user_id</code> и <code>total</code> — сумму их оплаченных заказов, 2 знака.</p>",
         starter: "WITH paid AS (\n    SELECT user_id, revenue\n    FROM orders\n    WHERE status = 'paid'\n)\nSELECT user_id, revenue\nFROM paid;",
@@ -3421,8 +3421,8 @@ GROUP BY u.channel;</code></pre>
 <p>Тонкость в том, что сравнивать надо итоги месяцев, а не строки таблицы. Окна выполняются после <code>GROUP BY</code>, поэтому внутри <code>LAG</code> можно поставить сам агрегат: <code>LAG(COUNT(*)) OVER (ORDER BY …)</code>. У первого месяца строки выше нет, и там будет <code>NULL</code> — это честно: сравнивать не с чем.</p>
 <p>Одна деталь SQLite: имя <code>ym</code> из <code>SELECT</code> внутри <code>OVER</code> не видно — база ответит <code>no such column: ym</code>. Поэтому в скобках окна выражение месяца пишут целиком: <code>OVER (ORDER BY strftime('%Y-%m', signup_date))</code>.</p>`,
         ba: {
-          before: { columns: ["ym", "users_cnt"], rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49]] },
-          after: { columns: ["ym", "users_cnt", "prev_cnt", "delta"], rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15]] },
+          before: { columns: ["ym", "users_cnt"], rows: [["2024-01", 33], ["2024-02", 34], ["2024-03", 49], ["…", "ещё 3 месяца"]] },
+          after: { columns: ["ym", "users_cnt", "prev_cnt", "delta"], rows: [["2024-01", 33, null, null], ["2024-02", 34, 33, 1], ["2024-03", 49, 34, 15], ["…", "ещё 3 месяца", "…", "…"]] },
           hl: ["prev_cnt", "delta"],
           note: "Разница с <code>NULL</code> — тоже <code>NULL</code>: у января прироста нет."
         },

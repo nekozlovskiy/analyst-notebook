@@ -692,10 +692,10 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
 <p>Конверсия шага — доля от предыдущего шага, потери — разница с ним. Значение прошлой строки даёт <code>LAG(users) OVER (ORDER BY step_no)</code>.</p>
 <p>Окна считаются по готовым строкам, поэтому таблицу «шаг — люди» кладут в <code>reached</code>, а <code>LAG</code> пишут во внешнем запросе. У первого шага прошлой строки нет — <code>NULL</code>, и это честно: конверсии «из ничего» не бывает. <code>100.0</code> с точкой — чтобы деление было дробным.</p>`,
         ba: {
-          before: { columns: ["step_no", "users"], rows: [[3, 56], [4, 34]] },
-          after: { columns: ["step_no", "users", "lost", "from_prev"], rows: [[3, 56, 12, 82.4], [4, 34, 22, 60.7]] },
+          before: { columns: ["step_no", "users"], rows: [["…", "…"], [3, 56], [4, 34], ["…", "…"]] },
+          after: { columns: ["step_no", "users", "lost", "from_prev"], rows: [["…", "…", "…", "…"], [3, 56, 12, 82.4], [4, 34, 22, 60.7], ["…", "…", "…", "…"]] },
           hl: ["lost", "from_prev"],
-          note: "Из корзины в оформление доходит 60,7 %, а самый слабый переход на iOS — из оформления в оплату, 55,9 %."
+          note: "Из корзины в оформление доходит 60,7 %, а самый слабый переход на iOS — из оформления в оплату, 55,9 %. В таблицах — шаги 3 и 4 из пяти."
         },
         task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code>, <code>lost</code> — потери относительно прошлого шага и <code>from_prev</code> — конверсию из прошлого шага в процентах с одним знаком.</p>",
         starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
@@ -709,10 +709,10 @@ FIRST_VALUE(users) OVER (ORDER BY step_no)   -- значение первой с
 <p>Сквозная конверсия — доля от первого шага. Значение первой строки даёт <code>FIRST_VALUE(users) OVER (ORDER BY step_no)</code>. У первого шага сквозная — ровно 100 %: он сам и есть начало.</p>
 <p>Сквозная равна произведению конверсий шагов: 90,7 % × 82,4 % × 60,7 % × 55,9 % — около 25 %, с точностью до округления. Поэтому улучшение любого шага умножается на все остальные.</p>`,
         ba: {
-          before: { columns: ["step_no", "users"], rows: [[1, 75], [5, 19]] },
-          after: { columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], [5, 19, 25.3]] },
+          before: { columns: ["step_no", "users"], rows: [[1, 75], ["…", "…"], [5, 19]] },
+          after: { columns: ["step_no", "users", "from_top"], rows: [[1, 75, 100.0], ["…", "…", "…"], [5, 19, 25.3]] },
           hl: ["from_top"],
-          note: "До покупки доходит четверть пользователей iOS с событиями."
+          note: "До покупки доходит четверть пользователей iOS с событиями. В таблицах — шаги 1 и 5 из пяти."
         },
         task: "<p><strong>Задание.</strong> Для воронки iOS выведите <code>step_no</code>, <code>users</code> и <code>from_top</code> — сквозную конверсию от первого шага в процентах с одним знаком.</p>",
         starter: "WITH ios_events AS (\n    SELECT e.* FROM events e\n    JOIN users u ON u.user_id = e.user_id\n    WHERE u.platform = 'ios'\n),\nsteps(step_no, step_name) AS (\n    VALUES (1,'visit'), (2,'view_product'), (3,'add_to_cart'),\n           (4,'checkout'), (5,'purchase')\n),\nreached AS (\n    SELECT s.step_no, s.step_name, COUNT(DISTINCT e.user_id) AS users\n    FROM steps s\n    LEFT JOIN ios_events e ON e.event_name = s.step_name\n    GROUP BY s.step_no, s.step_name\n)\nSELECT step_no, users\nFROM reached\nORDER BY step_no;",
@@ -1276,9 +1276,9 @@ window.CONTENT.m4l3 = {
 <p>Заготовка кладёт «пользователь — неделя» для каждого дня активности в <code>act</code>. Берём недели с нулевой по четвёртую.</p>`,
         ba: {
           before: { columns: ["user_id", "wk"], rows: [[2254, 0], [2254, 0], [2254, 2], [2254, 3]] },
-          after: { columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99]] },
+          after: { columns: ["wk", "users"], rows: [[0, 338], [1, 134], [2, 99], ["…", "…"]] },
           hl: ["users"],
-          note: "Пользователь 2254 посчитается один раз на неделе 0 — хотя заходил дважды."
+          note: "Пользователь 2254 посчитается один раз на неделе 0 — хотя заходил дважды. В «стало» — недели 0–2 из пяти."
         },
         task: "<p><strong>Задание.</strong> Выведите <code>wk</code> и <code>users</code> — сколько пользователей когорты заходили на неделе 0, 1, 2, 3 и 4.</p>",
         starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk\nFROM act\nWHERE wk BETWEEN 0 AND 4\nGROUP BY wk\nORDER BY wk;",
@@ -1292,10 +1292,10 @@ window.CONTENT.m4l3 = {
 <p>Удержание недели — доля когорты, заходившая в эту неделю: люди недели, делённые на размер когорты. Размер берём подзапросом прямо по <code>c</code>: <code>(SELECT COUNT(*) FROM c)</code> — скаляр из урока 1.6.</p>
 <p>У недели 0 удержание 100 % по построению: в день установки заходят все. Поэтому в отчётах её обычно не показывают.</p>`,
         ba: {
-          before: { columns: ["wk", "users"], rows: [[1, 134], [4, 52]] },
-          after: { columns: ["wk", "retention"], rows: [[1, 39.6], [4, 15.4]] },
+          before: { columns: ["wk", "users"], rows: [[1, 134], ["…", "…"], [4, 52]] },
+          after: { columns: ["wk", "retention"], rows: [[1, 39.6], ["…", "…"], [4, 15.4]] },
           hl: ["retention"],
-          note: "Через неделю возвращаются четыре из десяти, через четыре — полтора."
+          note: "Через неделю возвращаются четыре из десяти, через четыре — полтора. В таблицах — недели 1 и 4 из четырёх."
         },
         task: "<p><strong>Задание.</strong> Для недель 1–4 выведите <code>wk</code> и <code>retention</code> — долю когорты в процентах с одним знаком.</p>",
         starter: "WITH c AS (\n    SELECT user_id, signup_date FROM app_users\n    WHERE strftime('%Y-%m', signup_date) = '2024-03' AND platform = 'android'\n),\nact AS (\n    SELECT c.user_id,\n           CAST((julianday(a.activity_date) - julianday(c.signup_date)) / 7 AS INTEGER) AS wk\n    FROM c\n    JOIN app_activity a ON a.user_id = c.user_id\n)\nSELECT wk, COUNT(DISTINCT user_id) AS users\nFROM act\nWHERE wk BETWEEN 1 AND 4\nGROUP BY wk\nORDER BY wk;",

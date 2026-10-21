@@ -460,11 +460,11 @@ Name: revenue, dtype: float64` },
 <p>Результат — снова таблица, только уже. У неё тоже есть <code>head</code>.</p>`,
       ba: {
         before: { columns: ["user_id", "signup_date", "channel", "city", "platform"],
-          rows: [[1, "2024-06-12", "organic", "Новосибирск", "ios"], [2, "2024-02-05", "social", "Казань", "ios"]] },
+          rows: [[1, "2024-06-12", "organic", "Новосибирск", "ios"], [2, "2024-02-05", "social", "Казань", "ios"], ["…", "…", "…", "…", "…"]] },
         after: { columns: ["user_id", "city", "channel"],
-          rows: [[1, "Новосибирск", "organic"], [2, "Казань", "social"]] },
+          rows: [[1, "Новосибирск", "organic"], [2, "Казань", "social"], ["…", "…", "…"]] },
         hl: ["city", "channel"],
-        note: "<code>users[[\"user_id\", \"city\", \"channel\"]]</code>: три столбца в порядке списка, <code>city</code> встал раньше <code>channel</code>."
+        note: "<code>users[[\"user_id\", \"city\", \"channel\"]]</code>: три столбца в порядке списка, <code>city</code> встал раньше <code>channel</code>. В таблицах две строки из 220, а <code>.head(4)</code> в задании оставит четыре."
       },
       task: `<p><strong>Порядок действий.</strong></p>
 <ol class="order">

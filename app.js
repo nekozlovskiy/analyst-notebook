@@ -3203,11 +3203,13 @@ const Check = {
     if (i === a.length && i === b.length) return { ok: true };
     if (i === a.length) {
       const left = b.length - a.length;
-      return { ok: false, line: i, why: "вывод короче эталона: не хватает " + left + " " + plural(left, "строки", "строк", "строк"),
+      return { ok: false, line: i, why: "вывод короче эталона: в нём " + a.length + " " + plural(a.length, "строка", "строки", "строк") +
+                 ", а нужно " + b.length,
                hint: "Следующая строка должна быть такой: " + show(b[i]) + "." };
     }
     if (i === b.length) {
-      return { ok: false, line: i, why: "в выводе " + (a.length - b.length) + " " + plural(a.length - b.length, "лишняя строка", "лишние строки", "лишних строк") + " в конце",
+      return { ok: false, line: i, why: "в выводе " + (a.length - b.length) + " " + plural(a.length - b.length, "лишняя строка", "лишние строки", "лишних строк") +
+                 " в конце: в нём " + a.length + " " + plural(a.length, "строка", "строки", "строк") + ", а нужно " + b.length,
                hint: "Первая лишняя: «" + a[i] + "». Уберите отладочный print или печать целой таблицы." };
     }
     /* те же строки, другой порядок */
@@ -3480,6 +3482,12 @@ const Check = {
       : leftJoin && /\bWHERE\b/i.test(code) ? "Условие на правую таблицу в WHERE превращает LEFT JOIN во внутренний: строки без пары отсекаются. Перенесите его в ON."
       : /\bHAVING\b/i.test(code) ? "HAVING отсекает группы целиком — проверьте его условие: нужно ли оно вообще и тот ли там знак."
       : "Какой-то фильтр отсекает лишнее — проверьте WHERE и HAVING.";
+    /* ответ обрезал LIMIT: строк ровно столько, сколько он разрешил, — WHERE ни при чём */
+    const lim = /\bLIMIT\s+(\d+)/i.exec(code);
+    const limitHint = lim && +lim[1] === got.length && got.length < want.length
+      ? "LIMIT оставил " + got.length + " " + plural(got.length, "строку", "строки", "строк") +
+        ", а нужно " + want.length + ": поправьте число после LIMIT или уберите его, если в задании он не нужен."
+      : "";
 
     /* лишние строки, а нужные все на месте */
     if (extraG.length && !missW.length) {
@@ -3500,9 +3508,9 @@ const Check = {
     /* не хватает строк, лишних нет */
     if (missW.length && !extraG.length) {
       return { ok: false,
-        why: "не хватает " + missW.length + " " + plural(missW.length, "строки", "строк", "строк") +
+        why: "не хватает " + missW.length + " " + plural(missW.length, "строки", "строк", "строк") + " из " + want.length +
              (textKey ? ": нет " + keysShow(missW, want) : ""),
-        hint: joinHint };
+        hint: limitHint || joinHint };
     }
 
     /* строки есть, но значения другие: сопоставляем по первому столбцу */
@@ -3523,7 +3531,7 @@ const Check = {
         return { ok: false, row: extraK[0], marks: { rows: extraK },
           why: "в ответе нет " + plural(missK.length, "строки", "строк", "строк") + " " + keysShow(missK, want) +
                (extraK.length ? ", зато есть лишние: " + keysShow(extraK, got) : ""),
-          hint: joinHint };
+          hint: limitHint || joinHint };
       }
       if (extraK.length) {
         return { ok: false, row: extraK[0], marks: { rows: extraK },
@@ -3559,9 +3567,9 @@ const Check = {
     return { ok: false, row: extraG[0], marks: { rows: extraG },
       why: got.length !== want.length ? "строк " + got.length + ", а должно быть " + want.length
          : "в " + extraG.length + " " + plural(extraG.length, "строке", "строках", "строках") + " из " + got.length + " значения не те",
-      hint: textKey && missW.length
+      hint: limitHint || (textKey && missW.length
         ? "В ответе должны быть " + keysShow(missW, want) + ". Строки, которых нет в эталоне, подсвечены."
-        : "Строки, которых нет в эталоне, подсвечены." };
+        : "Строки, которых нет в эталоне, подсвечены.") };
   },
 
   /* Почему могли разойтись числа в одном столбце — по самим расхождениям. */
@@ -4764,9 +4772,19 @@ const Steps = {
       return saved !== null ? saved : (S.steps[n].starter || "");
     }
     /* объяснение шага, таблицы «было → стало» и задание — один текст:
-       термины в нём подчёркиваются по первому упоминанию */
+       термины в нём подчёркиваются по первому упоминанию. Окна
+       «ожидаемый результат» у шага нет, и без подсказки ученик
+       сверяется со «стало», а она обычно короче ответа. Поэтому под
+       заданием SQL-шага — форма ответа из эталона: сколько строк и
+       какие столбцы. У Python-шага строки вывода — это ещё и заголовок
+       таблицы, их число спорило бы с заданием «первые четыре строки». */
     function textOf(s) {
-      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + "</div>";
+      const e = s.expected || {};
+      const want = e.rows ? '<p class="st-want">В ответе ' + e.rows.length + " " +
+        plural(e.rows.length, "строка", "строки", "строк") + ", " +
+        plural(e.columns.length, "столбец", "столбцы", "столбцы") + ": " +
+        e.columns.map(function (c) { return "<code>" + esc(c) + "</code>"; }).join(", ") + ".</p>" : "";
+      return '<div class="theory">' + s.body + (s.ba ? baHtml(s.ba) : "") + (s.task || "") + want + "</div>";
     }
     /* первая значимая строка запроса — подпись свёрнутого шага */
     function firstLine(src) {
