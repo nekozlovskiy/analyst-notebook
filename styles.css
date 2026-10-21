@@ -1405,6 +1405,10 @@ button.st-h:hover .st-t { color: var(--ink); }
 .ba-note {
   font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-3);
 }
+/* форма ответа SQL-шага под заданием: окна «ожидаемый результат» у шага нет */
+.theory .st-want {
+  margin-top: -10px; font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-2);
+}
 
 @media (max-width: 720px) {
   .st-b { padding-left: 0; }

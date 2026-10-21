@@ -5,7 +5,8 @@
    столбцов, число строк, порядок строк при ordered, числа с допуском
    0.011. Таблицы «было → стало» (ba) сверяются по форме: число
    значений в строке равно числу столбцов, hl — среди столбцов «стало»,
-   keep — номера существующих строк «было».
+   keep — номера существующих строк «было»; «стало» с теми же
+   столбцами, что ответ шага, но короче, — только со строкой «…».
 
    Шаги урока на Python (0.2) — те, у кого expected.stdout: решение
    прогоняется локальным python3 после пролога урока и сверяется по
@@ -197,6 +198,61 @@ function checkBa(n, ba) {
     if (!ba.after || ba.after.columns.indexOf(c) < 0) { console.log(label + "hl «" + c + "» нет среди столбцов «стало»"); bad++; }
   });
 }
+
+/* «Стало» с теми же столбцами, что ответ шага, но короче, ученик
+   принимает за весь ответ: окна «ожидаемый результат» у шага нет, и три
+   строки из шести без пометки читаются как «нужно три строки». Пропуск
+   отмечают строкой, которая начинается с «…» («…», «… ещё 3 месяца»),
+   как в 2.1, шаг 2, и 4.5, шаг 2. Строк в ответе: у SQL — expected.rows,
+   у Python — строки напечатанной таблицы, в которой есть все столбцы
+   «стало» (имя индекса pandas печатает строкой ниже заголовка; приписка
+   «(индекс)» в «стало» не считается), или ряда pandas: имя индекса
+   отдельной строкой, значения ниже, имя ряда — в «Name: …» под ними.
+   Вывод строками текста («email 6 10.3», «lift=0.07») отсюда не узнать —
+   там «…» ставят сами. */
+function answerRows(s) {
+  const a = s.ba.after, e = s.expected;
+  if (e.rows) {
+    const same = a.columns.length === e.columns.length && a.columns.every(function (c, i) {
+      return String(c).toLowerCase() === e.columns[i].toLowerCase();
+    });
+    return same ? e.rows.length : 0;
+  }
+  if (e.stdout === undefined) return 0;
+  const names = a.columns.map(function (c) { return String(c).replace(/\s*\(индекс\)$/, ""); });
+  const ls = normLines(e.stdout).map(function (l) { return l.split(" "); });
+  for (let i = 0; i < ls.length; i++) {
+    /* имя индекса — одно слово под заголовком; одно слово в строке и у
+       таблицы из одного столбца, но там и следующая строка из одного */
+    const nx = ls[i + 1], nn = ls[i + 2];
+    const idx = nx && nx.length === 1 && (names.indexOf(nx[0]) >= 0 || (nn && nn.length > 1)) ? nx : [];
+    /* в заголовке таблицы чисел нет — строка «organic 75, … или 139» не он */
+    if (ls[i].some(function (t) { return /^-?\d[\d.,]*$/.test(t) && names.indexOf(t) < 0; })) continue;
+    if (!names.every(function (c) { return ls[i].indexOf(c) >= 0 || idx.indexOf(c) >= 0; })) continue;
+    let j = i + 1 + idx.length, n = 0;
+    const w = ls[j] ? ls[j].length : 0;
+    while (ls[j] && ls[j].length >= w && !/^(Name:|Freq:|dtype:|Length:|\[)/.test(ls[j][0])) { n++; j++; }
+    return n;
+  }
+  if (names.length === 2) for (let i = 0; i < ls.length; i++) {
+    if (ls[i].length !== 1 || ls[i][0] !== names[0]) continue;
+    let j = i + 1, n = 0;
+    while (ls[j] && !/^(Name:|Freq:|dtype:|Length:)/.test(ls[j][0])) { n++; j++; }
+    if (n && ls[j] && ls[j].join(" ").indexOf("Name: " + names[1]) >= 0) return n;
+  }
+  return 0;
+}
+function checkCut(n, s) {
+  const rows = s.ba.after.rows;
+  const dots = rows.filter(function (r) { return String(r[0]).charAt(0) === "…"; }).length;
+  const want = answerRows(s), have = rows.length - dots;
+  if (want > have && !dots) {
+    console.log("шаг " + (n + 1) + "  ba: «стало» с теми же столбцами, что ответ, но короче — строк в ней " + have + " из " + want +
+      ", и пропуск не отмечен: ученик примет её за весь ответ. Отметьте пропуск строкой «…»; у Python-шага ещё назовите в note" +
+      " число строк ответа (у SQL-шага его пишет курс под заданием)");
+    bad++;
+  }
+}
 function report(n, sql) {
   const label = "шаг " + (n + 1);
   if (isPy && C.steps[n].expected.plot) {
@@ -234,6 +290,7 @@ if (args[1] === "--try") {
       if (s[k] === undefined || s[k] === "") { console.log("шаг " + (n + 1) + "  нет поля " + k); bad++; }
     });
     if (s.ba) checkBa(n, s.ba);
+    if (s.ba && s.ba.after && Array.isArray(s.ba.after.rows) && Array.isArray(s.ba.after.columns) && s.expected) checkCut(n, s);
     report(n, s.solution);
   });
 }
