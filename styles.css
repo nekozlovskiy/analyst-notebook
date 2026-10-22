@@ -1170,7 +1170,7 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .status .s-ico.s-pen { background: none; width: 26px; height: 26px; margin-top: -4px; }
 .status .s-ico.s-pen .pen-tick { width: 26px; height: 26px; }
 [data-theme="dark"] .status .s-ico { color: #0E1218; }
-.status .s-body { color: var(--ink); }
+.status .s-body { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
 .status .s-body b { display: block; margin-bottom: 4px; }
 .status.ok   .s-body b { color: var(--green); }
 .status.bad  .s-body b { color: var(--red); }
@@ -1215,6 +1215,8 @@ figure.plot img { display: block; max-width: 100%; height: auto; margin: 0 auto;
   figure.plot { padding: 4px; }
 }
 .ref-say { margin: 0 0 10px; font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+/* песочница: под ошибкой — что она значит по-русски (Check.sqlErr, pyErr) */
+.err-why { margin: 10px 0 0; font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink-2); }
 .io-body pre mark.diff {
   background: var(--red-soft); color: var(--red); border-bottom: 2px solid var(--red);
   padding: 0 2px; border-radius: 2px;

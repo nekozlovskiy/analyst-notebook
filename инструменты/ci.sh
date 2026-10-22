@@ -116,6 +116,7 @@ step "Файлы xlsx" "xlsx-файлы уроков не совпадают с 
 step "База такси" "data-taxi.js не совпадает с генератором — python3 инструменты/gen_taxi.py" python3 инструменты/gen_taxi.py --check
 step "База «Вилки»" "data-vilka.js не совпадает с генератором — python3 инструменты/gen_vilka.py" python3 инструменты/gen_vilka.py --check
 step "Такси в движке" "data-taxi.js не совпадает с shop.db или Taxi.wants сломан (node инструменты/checktaxi.js)" node инструменты/checktaxi.js
+step "Ошибки по-русски" "подсказка к ошибке SQL или Python, дата без кавычек или распознавание записи в базу разошлись с примерами (node инструменты/checkerrors.js)" node инструменты/checkerrors.js
 step "Пробное собеседование" "решение задачи interview.js не сходится с expected или пул неполный (node инструменты/checkinterview.js)" node инструменты/checkinterview.js
 step "Числовые ответы" "разбор ввода в полях для чисел сломан или эталон поля разошёлся с базой (node инструменты/checknums.js)" node инструменты/checknums.js
 step "Код модуля 7" "эталонный код Colab в content-m7.js не печатает числа полей (python3 инструменты/checkvilka.py)" python3 инструменты/checkvilka.py

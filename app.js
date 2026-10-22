@@ -1799,12 +1799,7 @@ const Mock = {
         const C = window.CONTENT[r.id]; return !!(C && C.quiz && C.quiz[r.n]);
       }) && !!d.code && !!d.ran && !!d.ans && typeof d.text === "string";
   },
-  /* база общая для всего курса: запрос, который меняет данные, испортил
-     бы и остальные задачи, и уроки — такой не выполняем */
-  writes: function (code) {
-    return /\b(insert|update|delete|drop|alter|create|attach|detach|vacuum|pragma)\b/i
-      .test(String(code).replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/'[^']*'/g, "''"));
-  },
+  /* запрос, который меняет данные (Engine.writes), на собеседовании не выполняем */
   WRITES: "Запрос меняет данные — на собеседовании нужны только запросы на чтение (SELECT, WITH). Он не выполнялся.",
   task: function (id) { return window.MOCK.sql.filter(function (t) { return t.id === id; })[0]; },
   kase: function (id) { return window.MOCK.cases.filter(function (c) { return c.id === id; })[0]; },
@@ -1912,7 +1907,7 @@ const Mock = {
           const code = editor ? editor.get() : "", out = $("#mkOut");
           if (!out) return;
           if (!code.trim()) { out.innerHTML = '<div class="empty">Редактор пуст — напишите запрос.</div>'; return; }
-          if (Mock.writes(code)) { out.innerHTML = '<div class="empty">' + Mock.WRITES + "</div>"; return; }
+          if (Engine.writes(code)) { out.innerHTML = '<div class="empty">' + Mock.WRITES + "</div>"; return; }
           d.ran[x.id] = code; Mock.save(d); marks();
           out.innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
           let html;
@@ -1986,7 +1981,7 @@ const Mock = {
     for (let i = 0; i < d.sql.length; i++) {
       const x = Mock.task(d.sql[i]), code = d.ran[x.id];
       let v = { ok: false, why: "нет ответа — запрос не запускался" };
-      if (code && Mock.writes(code)) v = { ok: false, why: Mock.WRITES };
+      if (code && Engine.writes(code)) v = { ok: false, why: Mock.WRITES };
       else if (code) {
         let r;
         try { r = await Run.sql(code); }
@@ -2873,6 +2868,10 @@ function sqlLast(db, code) {
   return last;
 }
 
+/* Заголовок статуса для ошибки SQL: запрос, который остановила проба
+   рекурсии (Engine.loop), не падал — он не запускался */
+function sqlFail(err) { return Engine.HELD.test(err) ? "Запрос не запускался" : "Запрос упал с ошибкой"; }
+
 /* ============================================================
    База «Дельта Такси» (урок 6.4) — в отдельном data-taxi.js, чтобы
    остальные SQL-уроки её не качали. Запрос, в котором есть таблица
@@ -2907,6 +2906,8 @@ const Engine = {
   shopReady: null,
   taxiReady: null,
   taxiDb: null,
+  dirty: false,           /* кто поменял данные или схему базы: "lesson" или "sandbox" */
+  pyDone: {},             /* пакеты Python, которые уже загрузились */
 
   /* code — текст запроса: если в нём есть таблица такси, она один раз
      заливается в ту же базу. Промисы общие — запросы, пришедшие, пока
@@ -2915,16 +2916,128 @@ const Engine = {
     const db = await Engine.shop();
     if (Taxi.wants(code) && Engine.taxiDb !== db) {
       if (!Engine.taxiReady) {
-        Engine.taxiReady = Lazy.taxi().then(function () {
+        const p = Engine.taxiReady = Lazy.taxi().then(function () {
           try { Taxi.fill(db); }
           catch (e) { throw new Error("База такси не залилась: " + e.message); }
           Engine.taxiDb = db;
         }, function () { throw new Error("База такси не загрузилась — похоже, пропал интернет."); });
-        Engine.taxiReady.catch(function () { Engine.taxiReady = null; });
+        p.catch(function () { if (Engine.taxiReady === p) Engine.taxiReady = null; });
       }
-      await Engine.taxiReady;
+      try { await Engine.taxiReady; }
+      catch (e) { if (db === Engine.db) throw e; }
     }
-    return db;
+    /* пока ждали такси, базу могли собрать заново (Engine.reset) — берём новую */
+    return db === Engine.db ? db : Engine.sql(code);
+  },
+
+  /* Запрос меняет данные или схему. Комментарии и текст в кавычках не в
+     счёт: «-- удалить дубли» или city = 'update' — ещё не запись. */
+  writes: function (code) {
+    return /\b(insert|update|delete|drop|alter|create|attach|detach|vacuum|pragma|replace\s+into)\b/i
+      .test(String(code).replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""'));
+  },
+
+  /* Рекурсивный CTE без рабочего условия остановки добавляет строки, пока
+     не кончится память, а sql.js считает в той же вкладке — она зависает.
+     Поэтому до запуска каждый рекурсивный CTE считается пробой с потолком
+     LOOP + 1 строк. Рекурсивным SQLite считает и CTE без слова RECURSIVE:
+     хватает UNION и ссылки на себя. loops — пробы по тексту запроса, по
+     одной на WITH: { sql, ctes: [{ name, col, body, top }] }, col — первый
+     столбец из заголовка CTE, top — тело без комментариев, текста и
+     вложенных скобок. CTE со своим LIMIT ученик ограничил сам — его не
+     пробуем. Проба считает выданные строки: шаг, который за один проход
+     добавляет миллионы строк, повесит и её. */
+  LOOP: 100000,
+  HELD: /^Рекурсивный CTE (.+?), похоже,/,
+  loops: function (code) {
+    const src = String(code || "");
+    /* комментарии и текст в кавычках — пробелы той же длины: позиции
+       совпадают с исходным текстом. В n имена в двойных кавычках целы */
+    const blank = function (names) {
+      return src.replace(/--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:[^']|'')*'?|"[^"]*"?/g, function (s) {
+        if (names && s.charAt(0) === '"') return s;
+        return (/^['"]/.test(s) ? s.charAt(0) : " ") + " ".repeat(s.length - 1);
+      });
+    };
+    const q = blank(false), n = blank(true);
+    const pair = function (i) {
+      for (let d = 0; i < q.length; i++) {
+        if (q.charAt(i) === "(") d++;
+        else if (q.charAt(i) === ")" && --d === 0) return i;
+      }
+      return -1;
+    };
+    /* только верхний уровень: скобки с содержимым — пробелами */
+    const flat = function (s) {
+      for (let t = ""; t !== s; ) { t = s; s = s.replace(/\([^()]*\)/g, function (x) { return " ".repeat(x.length); }); }
+      return s;
+    };
+    const out = [], re = /\bWITH\b(?:\s+RECURSIVE\b)?/gi;
+    let m;
+    while ((m = re.exec(q))) {
+      const ctes = [], cuts = [];
+      let i = re.lastIndex, stop = -1, h, as;
+      while ((h = /^\s*("[^"]*"|[^\s(),;'"]+)\s*/.exec(n.slice(i)))) {
+        let j = i + h[0].length, col = "";
+        if (q.charAt(j) === "(") {                                          /* список столбцов */
+          const e = pair(j);
+          if (e < 0) break;
+          col = n.slice(j + 1, e).split(",")[0].trim();
+          j = e + 1;
+        }
+        if (!(as = /^\s*AS\s*(?:(?:NOT\s+)?MATERIALIZED\s*)?\(/i.exec(q.slice(j)))) break;
+        const open = j + as[0].length - 1, end = pair(open);
+        if (end < 0) break;
+        const top = flat(q.slice(open + 1, end));
+        const w = h[1].replace(/^"(.*)"$/, "$1").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const self = new RegExp("(?:\\bFROM|\\bJOIN|,)\\s*(?:\"" + w + "\"|" + w + "(?![^\\s),;]))", "i");
+        if (/\bUNION\b/i.test(top) && !/\bLIMIT\b/i.test(top) && self.test(n.slice(open + 1, end))) {
+          ctes.push({ name: h[1], col: col, body: src.slice(open + 1, end), top: top });
+          cuts.push(end);
+        }
+        stop = i = end + 1;
+        const c = /^\s*,/.exec(q.slice(i));
+        if (!c) break;
+        i += c[0].length;
+      }
+      if (!ctes.length) continue;
+      let sql = src.slice(m.index, stop);
+      for (let k = cuts.length - 1; k >= 0; k--)
+        sql = sql.slice(0, cuts[k] - m.index) + " LIMIT " + (Engine.LOOP + 1) + sql.slice(cuts[k] - m.index);
+      out.push({ sql: sql + " SELECT " + ctes.map(function (c) { return "(SELECT count(*) FROM " + c.name + ")"; }).join(", "),
+                 ctes: ctes });
+    }
+    return out;
+  },
+  /* потолок пробы для текста: 100 000 */
+  cap: function () { return String(Engine.LOOP).replace(/\B(?=(\d{3})+$)/g, "\u00a0"); },
+  /* Текст ошибки, если рекурсивный CTE на пробе выдал больше LOOP строк,
+     иначе "". count(sql) — первая строка ответа базы массивом. Проба,
+     которая упала, не в счёт: запрос покажет свою ошибку сам. Ошибка
+     идёт в <pre> без переноса — строки в ней короткие, под телефон. */
+  loop: function (count, code) {
+    const L = Engine.loops(code);
+    for (let i = 0; i < L.length; i++) {
+      let n;
+      try { n = count(L[i].sql); } catch (e) { continue; }
+      for (let k = 0; k < n.length; k++)
+        if (n[k] > Engine.LOOP)
+          return "Рекурсивный CTE " + L[i].ctes[k].name + ", похоже,\nне останавливается: пробный расчёт\nдал больше " +
+            Engine.cap() + " строк.";
+    }
+    return "";
+  },
+
+  /* База одна на весь курс, а урок сверяет ответ с эталоном на исходных
+     данных. После запроса, который их поменял, база собирается заново из
+     того же data.js — это доли секунды; такси зальётся при первом запросе. */
+  reset: function () {
+    const old = Engine.db;
+    Engine.db = null; Engine.shopReady = null;
+    Engine.taxiDb = null; Engine.taxiReady = null;
+    Engine.dirty = false;
+    if (old) old.close();
   },
 
   /* подпись, пока ждём ответа на запрос: первый запрос к такси при уже
@@ -2938,8 +3051,8 @@ const Engine = {
   shop: function () {
     if (Engine.db) return Promise.resolve(Engine.db);
     if (!Engine.shopReady) {
-      Engine.shopReady = Engine.shopOpen();
-      Engine.shopReady.catch(function () { Engine.shopReady = null; });
+      const p = Engine.shopReady = Engine.shopOpen();
+      p.catch(function () { if (Engine.shopReady === p) Engine.shopReady = null; });
     }
     return Engine.shopReady;
   },
@@ -2982,12 +3095,17 @@ const Engine = {
     Engine.py = await Engine.pyReady;
     for (const p of (pkgs || [])) {
       if (!Engine.pyPkgs[p]) {
-        Engine.pyPkgs[p] = Engine.py.loadPackage(p);
+        Engine.pyPkgs[p] = Engine.py.loadPackage(p).then(function (x) { Engine.pyDone[p] = true; return x; });
         Engine.pyPkgs[p].catch(function () { delete Engine.pyPkgs[p]; });
       }
       await Engine.pyPkgs[p];
     }
     return Engine.py;
+  },
+  /* готовы ли интерпретатор и пакеты: прогрев урока поднимает Python
+     заранее, и pandas может ещё качаться, когда интерпретатор уже есть */
+  pyHas: function (pkgs) {
+    return !!Engine.py && (pkgs || []).every(function (p) { return Engine.pyDone[p]; });
   }
 };
 
@@ -3133,7 +3251,7 @@ const Check = {
     if (/NameError: name '(true|false|TRUE|FALSE)'/.test(last))
       return "True и False пишут с большой буквы и без кавычек: ascending=False.";
     if ((m = /NameError: name '([^']+)' is not defined/.exec(last)))
-      return "Python не знает имени " + m[1] + ". Переменную создают выше строки, где её берут; проверьте, что она есть и имя написано так же. Если это текст или имя столбца — возьмите его в кавычки.";
+      return "Python не знает имени " + m[1] + ". Переменную создают в этом же коде выше строки, где её берут: каждый запуск начинается с чистого листа, переменные из прошлых запусков не сохраняются. Проверьте и написание имени. Если это текст или имя столбца — возьмите его в кавычки.";
     if (/was never closed|unexpected EOF|'\(' was never closed/.test(last))
       return "Не закрыта скобка. Сосчитайте открывающие и закрывающие скобки в строке — их должно быть поровну.";
     if (/unmatched '[)\]]'|closing parenthesis/.test(last))
@@ -3172,6 +3290,329 @@ const Check = {
     if (/SyntaxError/.test(last))
       return "Python не понял строку. Частые причины: пропущена запятая, кавычка или скобка, либо одно = вместо == в сравнении.";
     return "";
+  },
+  /* Частые ошибки SQL — по-русски, как pyErr для Python. msg — текст
+     ошибки SQLite (с приставкой «SQLite: » или без), code — запрос: по
+     нему различаем случаи, которые база называет одинаково (SUM в WHERE
+     и SUM(COUNT(*)), EXTRACT и лишняя запятая перед FROM). Правила —
+     сверху вниз, срабатывает первое; "" — нет разбора. Сообщения сверены
+     с SQLite 3.45 из sql.js и с SQLite инструментов:
+     node инструменты/checkerrors.js. */
+  sqlErr: function (msg, code) {
+    const s = String(msg).replace(/^\s*SQLite:\s*/, "").trim();
+    /* запрос без комментариев и без текста в кавычках: слова внутри 'строк' — не части запроса */
+    const plain = String(code || "").replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
+    const bare = plain.replace(/'[^']*'/g, "''");
+    const count = function (re) { return (bare.match(re) || []).length; };
+    /* области видимости в позиции pos, от внешней к самой внутренней:
+       подзапрос или CTE в скобках — своя область, скобки функций и
+       списков — та же, что снаружи */
+    const chain = function (pos) {
+      const st = [0];
+      let id = 0;
+      for (let i = 0; i < pos; i++) {
+        const ch = bare.charAt(i);
+        if (ch === "(") st.push(/^\s*(SELECT|WITH)\b/i.test(bare.slice(i + 1, i + 16)) ? ++id : st[st.length - 1]);
+        else if (ch === ")" && st.length > 1) st.pop();
+      }
+      return st.filter(function (v, k) { return k === 0 || v !== st[k - 1]; });
+    };
+    const scope = function (pos) { const c = chain(pos); return c[c.length - 1]; };
+    const ORDER = "Порядок частей запроса: SELECT → FROM → JOIN → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT.";
+    const DATES = "Даты здесь считают функциями strftime и date: месяц — strftime('%Y-%m', order_date), " +
+      "сдвиг — date(order_date, '+7 days'), разница в днях — julianday(b) - julianday(a).";
+    const CUT = "Запрос оборвался: после последнего слова — WHERE, AND, ON, LIMIT или запятой — чего-то не хватает, " +
+      "либо не закрыта скобка или кавычка.";
+    /* функции других баз, которых в SQLite нет, — и чем их заменить здесь */
+    const ALT = [
+      [/^LEFT$/, "начало строки берут через substr: substr(city, 1, 3) — первые три символа"],
+      [/^RIGHT$/, "конец строки берут через substr с минусом: substr(city, -3) — последние три символа"],
+      [/^LEN$/, "длину строки считает length(city)"],
+      [/^(LOCATE|STRPOS)$/, "место подстроки ищет instr(city, 'а'): номер символа или 0, если подстроки нет"],
+      [/^GREATEST$/, "наибольшее из нескольких значений даёт max(a, b): с двумя и больше аргументами это не агрегат"],
+      [/^LEAST$/, "наименьшее из нескольких значений даёт min(a, b): с двумя и больше аргументами это не агрегат"],
+      [/^(ARRAY_AGG|LISTAGG)$/, "значения группы склеивает в одну строку group_concat(platform, ', ')"],
+      [/^COUNTIF$/, "строки по условию считают так: SUM(CASE WHEN условие THEN 1 ELSE 0 END)"],
+      [/^(UNIQ|UNIQEXACT)$/, "уникальные значения считает COUNT(DISTINCT user_id)"]
+    ];
+    let m;
+    /* Run.sql не запустил запрос: рекурсивный CTE на пробе не остановился (Engine.loop) */
+    if ((m = Engine.HELD.exec(s))) {
+      let c = null;
+      Engine.loops(code).forEach(function (p) { p.ctes.forEach(function (x) { if (x.name === m[1]) c = x; }); });
+      /* шаг — часть тела после последнего UNION; в top скобки затёрты, функции дат ищем в самом теле */
+      const top = c ? c.top : "", u = top.search(/\bUNION\b/i), ure = /\bUNION(?:\s+ALL)?\b/gi;
+      let k = 0, r;
+      while ((r = ure.exec(top))) k = r.index + r[0].length;
+      const step = top.slice(k);
+      const cal = !!c && /\b(date|datetime|strftime)\s*\(/i.test(c.body.slice(k).replace(/--[^\n]*/g, " "));
+      const v = c && c.col || (cal ? "d" : "n"), stop = cal ? " < '2024-07-31'" : " < 100";
+      const RUN = "Без остановки такой запрос считал бы, пока не зависнет вкладка, поэтому курс его не запустил. ";
+      /* LIMIT снаружи: простой SELECT он остановил бы, а сортировку, группировку и подсчёт — нет */
+      const OUT = /\bLIMIT\b/i.test(bare) ? " LIMIT снаружи страхует только простой SELECT: для сортировки, группировки " +
+        "или подсчёта базе нужны все строки CTE. Поэтому курс запускает рекурсию, только если CTE останавливается сам." : "";
+      if (c && !/\b(WHERE|ON)\b/i.test(step))
+        return RUN + "В шаге рекурсивного CTE нет WHERE, а без условия остановки он добавляет строки бесконечно. " +
+          "Условие пишут в шаге: … FROM " + c.name + " WHERE " + v + stop + "." +
+          (/\bWHERE\b/i.test(bare) ? " WHERE в стартовой строке или в основном запросе рекурсию не останавливает." : "") + OUT;
+      const d0 = c && u >= 0 ? Check.bareDate(c.body.slice(0, u)) : "", d1 = c ? Check.bareDate(c.body) : "";
+      return RUN + "Рекурсивный CTE добавляет строки, пока условие в WHERE шага истинно, — здесь оно не стало ложным " +
+        "и за " + Engine.cap() + " строк. " +
+        (d0 ? "Календарь начинается с числа, а не с даты: date() читает число как номер дня, и первый день оказывается " +
+              "за тысячи лет до нашей эры — до границы миллионы шагов. " + d0
+         : d1 ? "Похоже, из-за даты: число с текстом даты база сравнивает не по календарю — любое число меньше любого текста " +
+                "и ни одному тексту не равно, поэтому <> с ним истинно всегда. " + d1
+         : /<>|!=/.test(step) ? "Граница проверяется через <>, а шаг её перепрыгнул: значение ни разу не совпало с границей, " +
+                "и условие осталось истинным. Сравнивайте через < или <=: WHERE " + v + stop + "."
+         : "Проверьте, что шаг идёт к границе — " + (cal ? "'+1 day' при " + v + stop + ", а не '-1 day'"
+             : v + " + 1 при " + v + stop + ", а не " + v + " - 1") + ". Если строк и правда нужно больше " + Engine.cap() +
+           ", сузьте диапазон: в браузере курс считает рекурсию только до этого числа.") + OUT;
+    }
+    /* потерянная кавычка сдвигает всё после неё: текст становится запросом,
+       запрос — текстом, и остальные правила гадали бы впустую */
+    if ((plain.replace(/"[^"]*"/g, '""').match(/'/g) || []).length % 2 &&
+        /near "|unrecognized token: "'|incomplete input|no such column|no such table/.test(s))
+      return "Не закрыта одинарная кавычка: их в запросе нечётное число, у какого-то текста потерялась одна. " +
+        "Кавычка нужна и в начале, и в конце: city = 'Москва'.";
+    if (/misuse of (aliased )?window function/.test(s))
+      return "Оконную функцию нельзя ставить в WHERE, GROUP BY и HAVING: она считается после них. Посчитайте её в подзапросе " +
+        "или CTE и фильтруйте снаружи: WITH t AS (SELECT …, ROW_NUMBER() OVER (…) AS rn FROM …) SELECT * FROM t WHERE rn = 1.";
+    if (/aggregate functions are not allowed in the GROUP BY/.test(s))
+      return "В GROUP BY перечисляют столбцы, по которым делят строки на группы. COUNT, SUM и AVG ставят в SELECT или HAVING: " +
+        "они считаются уже внутри групп.";
+    if ((m = /misuse of aggregate(?: function)?:? (\w+)\(\)/.exec(s))) {
+      return /\b(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(bare)
+        ? "Агрегат внутри агрегата, например SUM(COUNT(*)), за один проход не считается. Посчитайте внутренний в подзапросе " +
+          "или CTE, а внешний — поверх него."
+        : m[1] + "() стоит там, где строки ещё не сгруппированы, — обычно в WHERE или ON. Условие на агрегат пишут в HAVING " +
+          "после GROUP BY: HAVING " + m[1] + "(…) > 10.";
+    }
+    if (/should this be a string literal/.test(s))
+      return "Двойные кавычки в SQL — для имён столбцов. Текст берут в одинарные: city = 'Москва'.";
+    if ((m = /no such column: (.+)$/.exec(s))) {
+      const c = m[1].trim();
+      if (/[«»“”„‘’]/.test(c))
+        return "Кавычки «ёлочки» и “лапки” SQL не понимает — так бывает, когда запрос скопирован из документа. " +
+          "Текст берут в обычные одинарные кавычки с клавиатуры: 'Москва'.";
+      if (/^INTERVAL$/i.test(c)) return "INTERVAL в SQLite нет. " + DATES;
+      /* DATEDIFF(day, a, b): часть даты без кавычек база принимает за столбец */
+      const fn = /\b(DATEDIFF|DATEADD|DATEPART|TIMESTAMPDIFF|TIMESTAMPADD)\s*\(/i.exec(bare);
+      if (fn && /^(year|quarter|month|week|day|hour|minute|second|yy|yyyy|mm|dd|wk|hh|mi|ss)$/i.test(c))
+        return "Функции " + fn[1] + " в SQLite нет. " + DATES;
+      const dot = /^([^.\s]+)\.([^.\s]+)$/.exec(c);
+      if (dot)
+        return "У таблицы " + dot[1] + " нет столбца " + dot[2] + ". Проверьте, что псевдоним " + dot[1] +
+          " задан в FROM или JOIN (FROM users u) и что столбец лежит именно в этой таблице.";
+      /* псевдоним столбца (AS r2), а не таблицы (FROM users AS u): из этого же
+         SELECT — или из подзапроса либо CTE, который наружу его не отдал */
+      const name = c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\wа-яё])";
+      const def = new RegExp("\\bAS\\s+[\"`]?" + name, "i").exec(bare);
+      if (def && !new RegExp("\\b(FROM|JOIN)\\s+\\S+\\s+AS\\s+[\"`]?" + name, "i").test(bare)) {
+        const re = new RegExp("(?<![\\wа-яё.])" + name, "gi"), use = [];
+        let u;
+        while ((u = re.exec(bare))) if (!/\bAS\s+["`]?$/i.test(bare.slice(0, u.index))) use.push(u.index);
+        const home = scope(def.index);
+        if (use.length && !use.some(function (i) { return scope(i) === home; }) &&
+            use.every(function (i) { return chain(i).indexOf(home) >= 0; }))
+          return "«" + c + "» — псевдоним внешнего запроса, а обращение к нему стоит внутри подзапроса или CTE. " +
+            "Внутренний запрос считается сам по себе и псевдонимов внешнего SELECT не видит: напишите там вместо " +
+            "псевдонима само выражение — по столбцам таблиц этого подзапроса.";
+        if (use.length && !use.some(function (i) { return scope(i) === home; }))
+          return "«" + c + "» считается внутри подзапроса или CTE и сюда не выдан. Снаружи видны только столбцы, которые " +
+            "подзапрос отдаёт в своём SELECT, и только если он стоит во FROM или JOIN: добавьте " + c + " в его SELECT " +
+            "и подключите его через FROM.";
+        return "«" + c + "» — псевдоним из этого же SELECT, а соседние столбцы его ещё не видят: все столбцы SELECT " +
+          "считаются разом. Повторите выражение целиком или посчитайте его в подзапросе либо CTE и возьмите оттуда готовым.";
+      }
+      if (/[а-яё]/i.test(c))
+        return "Столбца «" + c + "» нет. Если это значение, а не имя столбца, возьмите его в одинарные кавычки: '" + c + "'.";
+      return "Столбца " + c + " нет в таблицах запроса. Сверьте имя со схемой базы; столбец из другой таблицы " +
+        "подключают через JOIN, а значение пишут в одинарных кавычках.";
+    }
+    if ((m = /no such table: (\S+)/.exec(s))) {
+      /* city IN 'Москва', IN [...] и POSITION('а' IN city): после IN база ждёт таблицу */
+      if (/\bIN\s*\[/i.test(bare)) return "Значения после IN берут в круглые скобки, а не в квадратные: city IN ('Москва', 'Казань').";
+      if (/\bIN\s*''/i.test(bare)) return "Значения после IN берут в скобки: city IN ('Москва', 'Казань').";
+      if (/\bPOSITION\s*\(/i.test(bare))
+        return "POSITION(… IN …) в SQLite нет — место подстроки ищет instr(city, 'а'): номер символа или 0, если подстроки нет.";
+      return "Таблицы " + m[1] + " нет в базе. Сверьте имя со схемой — буква в букву." +
+        (/\bWITH\b/i.test(bare) || /;\s*\S/.test(bare) ? " Таблица из WITH видна только внутри своего запроса, до точки с запятой." : "");
+    }
+    if ((m = /ambiguous column name: (\S+)/.exec(s)))
+      return "Столбец " + m[1] + " есть в нескольких таблицах запроса, и база не знает, какой взять. Припишите таблицу " +
+        "или её псевдоним: u." + m[1] + " или o." + m[1] + ".";
+    if ((m = /no such function: (\w+)/.exec(s))) {
+      const f = m[1].toUpperCase();
+      if (/^(DATE_TRUNC|DATE_PART|EXTRACT|DATEDIFF|DATEADD|DATE_ADD|DATE_SUB|DATE_FORMAT|TO_CHAR|TO_DATE|NOW|CURDATE|GETDATE|YEAR|MONTH|DAY|AGE|LAST_DAY|TOSTARTOFMONTH|TOSTARTOFWEEK|TODATE|TOYEAR|TOMONTH)$/.test(f))
+        return "Функции " + m[1] + " в SQLite нет. " + DATES;
+      if (/^(NVL|ISNULL)$/.test(f)) return "Функции " + m[1] + " в SQLite нет — пропуск заменяют так: COALESCE(revenue, 0).";
+      if (f === "IF") return "IF(…) — из MySQL. В SQLite условие пишут через CASE WHEN условие THEN a ELSE b END или iif(условие, a, b).";
+      for (let i = 0; i < ALT.length; i++) if (ALT[i][0].test(f)) return "Функции " + m[1] + " в SQLite нет — " + ALT[i][1] + ".";
+      /* city ('Москва', 'Казань'): без IN имя со скобкой база читает как функцию.
+         В списке SELECT это не IN, а пропущенная запятая — SELECT city (COUNT(*)), —
+         а список чисел там, ROUD(2.567, 2), скорее опечатка в имени функции */
+      const lit = "(?:''|-?\\d+(?:\\.\\d+)?)";
+      const list = new RegExp("\\b" + m[1] + "\\s*\\(\\s*" + lit + "(?:\\s*,\\s*" + lit + ")+\\s*\\)", "i").test(bare);
+      const col = new RegExp("\\b" + m[1] + "\\b(?!\\s*\\()", "i").test(bare);
+      const call = new RegExp("\\b" + m[1] + "\\s*(\\((?:[^()]|\\([^()]*\\))*\\))", "i").exec(plain);
+      const at = new RegExp("\\b" + m[1] + "\\s*\\(", "i").exec(bare);
+      let before = at ? bare.slice(0, at.index) : "";
+      for (let t = ""; t !== before; ) { t = before; before = before.replace(/\([^()]*\)/g, " "); }
+      const kw = before.match(/\b(SELECT|FROM|JOIN|ON|WHERE|AND|OR|NOT|HAVING|WHEN|THEN|ELSE|BY|SET|VALUES)\b/gi);
+      if (kw && kw[kw.length - 1].toUpperCase() === "SELECT") {
+        if (col && !list)
+          return "Функции " + m[1] + " нет, и " + m[1] + " — похоже, столбец: между ним и скобкой пропущена запятая, " +
+            "без неё база читает " + m[1] + "(…) как вызов функции. Столбцы SELECT разделяют запятыми: " + m[1] + ", " +
+            (call ? call[1].slice(1, -1).trim() : "…") + ".";
+      } else if (list || col)
+        return "Функции " + m[1] + " нет, и " + m[1] + " — похоже, столбец: перед списком значений пропущено IN — " +
+          m[1] + " IN " + (call ? call[1] : "(…)") + ".";
+      return "Функции " + m[1] + " в SQLite нет: у каждой базы свой набор функций. Проверьте написание или поищите " +
+        "замену в теории урока.";
+    }
+    if ((m = /wrong number of arguments to function (\w+)\(\)/.exec(s))) {
+      if (/^count$/i.test(m[1]) && /\bCOUNT\s*\(\s*DISTINCT\b[^)]*,/i.test(bare))
+        return "COUNT(DISTINCT …) в SQLite принимает один столбец. Уникальные пары считают через склейку — " +
+          "COUNT(DISTINCT a || '|' || b) — или подзапросом с SELECT DISTINCT a, b.";
+      return "У функции " + m[1] + " другое число аргументов. Сверьте с примером из теории: ROUND(x, 2), " +
+        "strftime('%Y-%m', дата), COALESCE(x, 0).";
+    }
+    if ((m = /sub-select returns (\d+) columns - expected 1/.exec(s)))
+      return "Подзапрос в IN или в сравнении должен вернуть один столбец, а возвращает " + m[1] + ". Оставьте в его SELECT " +
+        "только тот столбец, с которым сравниваете.";
+    if (/row value misused/.test(s))
+      return "Там, где ждут одно значение, стоит несколько — например, подзапрос в сравнении возвращает два столбца. " +
+        "В сравнении подзапрос должен вернуть один: revenue > (SELECT AVG(revenue) FROM orders), а список значений " +
+        "проверяют через IN: city IN ('Москва', 'Казань').";
+    if (/do not have the same number of result columns/.test(s))
+      return "У частей UNION разное число столбцов. В каждом SELECT их должно быть поровну и в том же порядке.";
+    if ((m = /(ORDER|GROUP) BY term out of range - should be between 1 and (\d+)/.exec(s)))
+      return "Число в " + m[1] + " BY — номер столбца в SELECT, а " + (m[2] === "1" ? "столбец там один: подойдёт только 1"
+        : "столбцов всего " + m[2] + ". Укажите номер от 1 до " + m[2]) + " или имя столбца.";
+    if ((m = /table (\S+) already exists/.exec(s)))
+      return "Таблица " + m[1] + " уже есть в базе — возьмите для своей другое имя.";
+    if (/incomplete input/.test(s)) return CUT;
+    if (/unrecognized token: "'/.test(s))
+      return "Не закрыта одинарная кавычка: у текста она нужна и в начале, и в конце — 'Москва'.";
+    if (/unrecognized token: ":"/.test(s))
+      return "Приведение типа через :: — из PostgreSQL. В SQLite пишут CAST(x AS REAL), а дату из текста получают через date(x).";
+    if (/unrecognized token/.test(s))
+      return "В запросе знак, которого SQL не знает. Проверьте кавычки: текст — в обычных одинарных '…', " +
+        "а не в «ёлочках» и не в “лапках”.";
+    if ((m = /near "([^"]*)": syntax error/.exec(s))) {
+      const w = m[1], W = w.toUpperCase();
+      let a;
+      if (count(/\bCASE\b/gi) > count(/\bEND\b/gi)) return "У CASE нет END: CASE WHEN … THEN … ELSE … END.";
+      if (/\bEXTRACT\s*\(/i.test(bare)) return "EXTRACT — из PostgreSQL, в SQLite его нет. " + DATES;
+      if (/\bINTERVAL\b/i.test(bare)) return "INTERVAL в SQLite нет. " + DATES;
+      if (/\bSELECT\s+(DISTINCT\s+)?TOP\s+\d/i.test(bare))
+        return "TOP — из SQL Server. В SQLite число строк ограничивают в конце запроса: … ORDER BY revenue DESC LIMIT 5.";
+      if (/\bOVER\s+(?!\()(PARTITION|ORDER)\b/i.test(bare))
+        return "После OVER скобки обязательны: OVER (PARTITION BY user_id ORDER BY order_date).";
+      if (W === "ORDER" && /\b(FROM|JOIN)\s+order\b(?!\s*BY\b)/i.test(bare))
+        return "order — служебное слово SQL (из ORDER BY), таблицы с таким именем нет. Заказы лежат в таблице orders — " +
+          "с s на конце.";
+      /* служебное слово вместо имени столбца: COUNT(*) AS order */
+      if ((a = /\bAS\s+(ORDER|GROUP|SELECT|FROM|WHERE|LIMIT|JOIN|ON|BY|HAVING|UNION|INDEX|TABLE|CASE|END|AND|OR|NOT|IN|IS|NULL)\b/i.exec(bare)) &&
+          a[1].toUpperCase() === W && !/\bCREATE\s+(TEMP\s+|TEMPORARY\s+)?(TABLE|VIEW)\b/i.test(bare) &&
+          !(W === "SELECT" && /\bWITH\b/i.test(bare)))
+        return "«" + w + "» — служебное слово SQL, именем столбца оно быть не может. Возьмите другое имя, например AS orders_cnt.";
+      if (/\bWITHIN\s+GROUP\b/i.test(bare))
+        return "WITHIN GROUP — из PostgreSQL, в SQLite его нет, как и функции медианы. Медиану собирают руками: " +
+          "пронумеруйте значения через ROW_NUMBER() OVER (ORDER BY revenue) и возьмите середину.";
+      if (/\b(GROUP|ORDER)\b(?!\s*BY\b)/i.test(bare)) return "После GROUP и ORDER нужно слово BY: GROUP BY city, ORDER BY city.";
+      if (W === "ILIKE")
+        return "ILIKE в SQLite нет — есть LIKE. Без учёта регистра он сравнивает только латиницу, поэтому кириллицу " +
+          "пишите в том же регистре, что в данных: 'Москва'.";
+      if (W === "ISNULL") return "ISNULL(x, 0) — из SQL Server. В SQLite пропуск заменяют так: COALESCE(x, 0).";
+      if (W === "SELECT" && /\bIN\s*SELECT\b/i.test(bare)) return "Подзапрос берут в скобки: user_id IN (SELECT user_id FROM orders).";
+      if (W === "SELECT" && /\bWITH\b/i.test(bare)) return "Запрос внутри WITH берут в скобки: WITH t AS (SELECT …) SELECT … FROM t.";
+      if (W === "SELECT")
+        return "Новый SELECT начался, а прошлый запрос не закончен. Два запроса разделяют точкой с запятой, а подзапрос " +
+          "берут в скобки: WHERE user_id IN (SELECT user_id FROM orders).";
+      if (W === "ON" && /\bDISTINCT\s+ON\b/i.test(bare))
+        return "DISTINCT ON — из PostgreSQL. В SQLite первую строку группы берут оконной функцией: ROW_NUMBER() OVER " +
+          "(PARTITION BY … ORDER BY …) в подзапросе и rn = 1 снаружи.";
+      if (/\bUSING\s*(?!\()\w/i.test(bare)) return "После USING имя столбца берут в скобки: JOIN orders USING (user_id).";
+      if (W === "FROM")
+        return "Перед FROM что-то лишнее или незакрытое: чаще всего это запятая после последнего столбца в SELECT " +
+          "или скобка у функции — COUNT(*).";
+      /* часть перед словом не дописана: GROUP BY city, ORDER BY …; AND GROUP BY …;
+         WHERE ORDER BY … — сам порядок частей при этом верный */
+      if (/^(WHERE|JOIN|LEFT|RIGHT|INNER|FULL|CROSS|GROUP|ORDER|HAVING|LIMIT|UNION)$/.test(W)) {
+        const d = new RegExp("(,|\\b(?:AND|OR|NOT|WHERE|ON|BY|HAVING)\\b)\\s*" + W + "\\b", "i").exec(bare);
+        const p = d ? d[1].toUpperCase() : "";
+        if (p === ",")
+          return "Перед " + W + " лишняя запятая: после последнего столбца в SELECT или GROUP BY и после последней " +
+            "таблицы во FROM запятую не ставят.";
+        if (p === "BY") return "После BY не указан столбец: GROUP BY city, ORDER BY revenue DESC.";
+        if (p === "ON") return "После ON нет условия соединения: JOIN orders o ON o.user_id = u.user_id.";
+        if (p === "WHERE" || p === "HAVING")
+          return "После " + p + " нет условия: " + (p === "WHERE" ? "WHERE city = 'Москва'" : "HAVING COUNT(*) > 1") +
+            ". Если фильтр не нужен, уберите " + p + ".";
+        if (p) return "Перед " + W + " не дописано условие: после " + p + " должно идти ещё одно — допишите его или уберите " + p + ".";
+      }
+      if (W === "WHERE" && /\bOVER\s*\((?:[^()]|\([^()]*\))*\bWHERE\b/i.test(bare))
+        return "Внутри OVER (…) условий не пишут — там только PARTITION BY, ORDER BY и рамка ROWS BETWEEN. Строки " +
+          "отбирают в WHERE всего запроса или условием у самой функции: SUM(revenue) FILTER (WHERE status = 'paid') " +
+          "OVER (…) или SUM(CASE WHEN status = 'paid' THEN revenue END) OVER (…).";
+      /* второй WHERE в той же области: у каждого SELECT, включая подзапросы и части UNION, свой.
+         FILTER (WHERE …) у агрегата — не в счёт */
+      if (W === "WHERE") {
+        const n = {}, re = /;|\b(WHERE|SELECT)\b/gi;
+        let st = 0, r;
+        while ((r = re.exec(bare))) {
+          if (r[0] === ";") { st++; continue; }
+          if (/\bFILTER\s*\(\s*$/i.test(bare.slice(0, r.index))) continue;
+          const k = st + ":" + scope(r.index);
+          n[k] = (n[k] || 0) + (r[1].toUpperCase() === "WHERE" ? 1 : -1);
+        }
+        if (Object.keys(n).some(function (k) { return n[k] > 0; }))
+          return "WHERE в запросе один. Второе условие присоединяют к первому через AND или OR: " +
+            "WHERE city = 'Москва' AND platform = 'ios'.";
+      }
+      if (W === "WHERE") return "WHERE стоит сразу после FROM и JOIN. Условие на группы после GROUP BY пишут в HAVING. " + ORDER;
+      if (/^(JOIN|LEFT|RIGHT|INNER|FULL|CROSS)$/.test(W))
+        return "JOIN стоит сразу после FROM, раньше WHERE и GROUP BY: сначала FROM users u JOIN orders o ON …, потом WHERE. " + ORDER;
+      if (W === "GROUP") return "GROUP BY стоит после WHERE, перед HAVING и ORDER BY. " + ORDER;
+      if (W === "ORDER") return "ORDER BY стоит в конце, после него — только LIMIT. " + ORDER;
+      if (W === "HAVING") return "HAVING стоит сразу после GROUP BY. " + ORDER;
+      if (w === ";") return CUT;
+      if (w === "(" && /\)\s*\(\s*(PARTITION|ORDER)\b/i.test(bare))
+        return "Перед скобкой с PARTITION BY или ORDER BY пропущено OVER: ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date).";
+      if (w === "(" && (a = /\b(ROW_NUMBER|RANK|DENSE_RANK|NTILE|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTH_VALUE|PERCENT_RANK|CUME_DIST)\s+OVER\b/i.exec(bare)))
+        return "У " + a[1].toUpperCase() + " нужны скобки, даже пустые: " + a[1].toUpperCase() + "() OVER (…).";
+      /* u.user_id (65, 76): имя с точкой — столбец, функцией оно быть не может */
+      if (w === "(" && (a = /\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(/.exec(bare))) {
+        const list = new RegExp("\\b" + a[1].replace(".", "\\.") + "\\s*(\\([^()]*\\))").exec(plain);
+        return "После " + a[1] + " пропущено IN: " + a[1] + " IN " + (list ? list[1] : "(…)") + ".";
+      }
+      if (w === "(")
+        return "Перед скобкой база ждала другого. Чаще всего пропущена запятая перед функцией (SELECT city, COUNT(*)), " +
+          "слово OVER перед окном или IN перед списком значений.";
+      if (w === ")")
+        return "Лишняя закрывающая скобка или пустое место перед ней — например, запятая после последнего значения: " +
+          "IN (1, 2). Скобок должно быть поровну.";
+      if (w.charAt(0) === "'")
+        return "Перед текстом в кавычках пропущена запятая или знак сравнения: IN ('Москва', 'Казань'), city = 'Москва'.";
+      const op = count(/\(/g), cl = count(/\)/g);
+      return "База не поняла запрос рядом с «" + w + "». Проверьте это место и слово перед ним: опечатки (FORM, WERE), " +
+        "GROUP и ORDER без BY, пропущенные запятая или AND. " +
+        (op !== cl ? "Открывающих скобок " + op + ", закрывающих " + cl + " — их должно быть поровну. " : "") + ORDER;
+    }
+    return "";
+  },
+  /* Дата без кавычек в запросе — не ошибка для базы, а вычитание:
+     2024-05-01 — это 2024 − 5 − 1 = 2018. Сравнение с таким числом
+     пропускает все строки или ни одной. "" — таких дат нет. */
+  bareDate: function (code) {
+    const q = String(code || "").replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/'[^']*'/g, "''");
+    const m = /(^|[^\w'"-])((?:19|20)\d\d)-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?(?![\w'"-])/.exec(q);
+    if (!m) return "";
+    const lit = m[2] + "-" + m[3] + (m[4] ? "-" + m[4] : "");
+    const val = +m[2] - +m[3] - (m[4] ? +m[4] : 0);
+    return "В запросе дата без кавычек: " + lit + " для базы — вычитание, " + lit.replace(/-/g, " − ") + " = " + val +
+      ". Даты пишут в одинарных кавычках: '" + lit + "'.";
   },
   /* Шаг может требовать конструкцию в самом коде, а не только вывод:
      expected.uses = [["регулярка", "что сказать"], …]. Комментарии
@@ -3395,13 +3836,25 @@ const Check = {
     if (a !== "" && b !== "" && !isNaN(na) && !isNaN(nb)) return Math.abs(na - nb) < 0.011;
     return String(a).trim() === String(b).trim();
   },
+  /* Сверка таблицы с эталоном (Check.match) и поправка к подсказке:
+     если столбцы те же, а строки разошлись, и в запросе дата без
+     кавычек — причина почти наверняка в ней, называем её. */
+  sql: function (res, exp, opts) {
+    const r = Check.match(res, exp, opts);
+    const cols = !!res && res.columns.length === exp.columns.length && res.columns.every(function (c, i) {
+      return String(c).toLowerCase().trim() === exp.columns[i].toLowerCase();
+    });
+    const d = !r.ok && cols ? Check.bareDate(opts && opts.code) : "";
+    if (d) r.hint = d;
+    return r;
+  },
   /* Сверка таблицы с эталоном и диагноз: не «не совпало», а что именно
      и почему так бывает. opts: code — запрос ученика (по нему советы про
      JOIN и WHERE), hide — не называть ожидаемые числа (пока эталон
      основной задачи закрыт). Возвращает why — что не так, hint — куда
      смотреть, marks — строки и ячейки таблицы ученика для подсветки
      (индексы в res.values), row — первая из них. */
-  sql: function (res, exp, opts) {
+  match: function (res, exp, opts) {
     opts = opts || {};
     /* советы — по самому запросу, без комментариев: в них тоже бывают слова JOIN и WHERE */
     const hide = !!opts.hide,
@@ -4577,7 +5030,8 @@ function renderSandbox(app) {
   const main = el("main", { class: "wrap lesson-wrap page sandbox" });
   main.innerHTML = pageHead("Песочница",
     "Свободный редактор над обеими базами курса: интернет-магазин «Дельта Маркет» и журнал приложения. " +
-    "Здесь ничего не проверяется и не засчитывается — задавайте данным свои вопросы.",
+    "Здесь ничего не проверяется и не засчитывается — задавайте данным свои вопросы. " +
+    "Запросы, которые меняют данные, действуют только здесь: уроки получат исходную базу.",
     "здесь можно ломать") +
     '<div class="sb-tabs" role="tablist" aria-label="Язык">' +
       '<button type="button" role="tab" data-k="sql">SQL</button>' +
@@ -4640,23 +5094,29 @@ function renderSandbox(app) {
     Sandbox.remember(kind, code);
     drawHist();
     rb.disabled = true;
-    out.innerHTML = '<div class="empty">' + (kind === "python" && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
+    out.innerHTML = '<div class="empty">' + (kind === "python" && !Engine.pyHas(Sandbox.env().packages) ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
       : kind === "sql" ? Engine.wait(code) : "Выполняю…") + "</div>";
+    /* ошибка и под ней — что она значит по-русски, если разбор есть */
+    function fail(err, why) {
+      out.innerHTML = '<pre><span class="err">' + esc(err) + "</span></pre>" + (why ? '<p class="err-why">' + esc(why) + "</p>" : "");
+      $("#sbOutH").textContent = "ошибка";
+    }
     try {
       if (kind === "sql") {
-        const r = await Run.sql(code);
-        if (r.err) { out.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>"; $("#sbOutH").textContent = "ошибка"; }
+        const r = await Run.sql(code, { keep: true });
+        if (r.err) fail(r.err, Check.sqlErr(r.err, code));
         else if (r.res) {
           const n = r.res.values.length;
           out.innerHTML = renderTable(r.res.columns, r.res.values, -1);
           $("#sbOutH").textContent = "результат: " + n + " " + plural(n, "строка", "строки", "строк");
         } else {
-          out.innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
+          out.innerHTML = r.changed !== undefined ? wroteHtml(r, true)
+            : '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
           $("#sbOutH").textContent = "результат";
         }
       } else {
         const r = await Run.python(code, Sandbox.env(), null, { echo: true });
-        if (r.err) { out.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>"; $("#sbOutH").textContent = "ошибка"; }
+        if (r.err) fail(r.err, Check.pyErr(r.err));
         else {
           const text = [r.out, r.echo].filter(function (x) { return x && x.trim(); }).join("\n");
           const tb = r.table ? renderTable(r.table.cols, r.table.rows, -1) +
@@ -4879,30 +5339,6 @@ const Steps = {
           plural(last.values.length, "строка", "строки", "строк") + "</div>";
       }
 
-      /* Шаг с matplotlib идёт через общий Run.python: он снимает фигуры —
-         картинку для вывода и «паспорт» графика для проверки. */
-      async function runPlot(code) {
-        let r;
-        try { r = await Run.python(code, S); }
-        catch (e) {
-          lastOut = null; lastFigs = [];
-          q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
-          status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
-          return false;
-        }
-        if (open !== n || !document.body.contains(li)) return false;
-        if (r.err) {
-          lastOut = null; lastFigs = [];
-          q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
-          status("bad", "Код упал с ошибкой",
-            esc(Check.pyErr(r.err) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
-          return false;
-        }
-        lastOut = r.out; lastFigs = r.figs || [];
-        q(".st-res").innerHTML = (lastOut.trim() ? "<pre>" + esc(lastOut) + "</pre>" : "") + Plots.html(lastFigs) ||
-          '<div class="empty">Код отработал без ошибок, но ничего не нарисовал и не напечатал.</div>';
-        return true;
-      }
       /* Шаг-график сверяется с графиком своего решения: тип, данные,
          подписи — теми же правилами, что основная задача урока 2.5. */
       async function checkPlot() {
@@ -4938,75 +5374,57 @@ const Steps = {
 
       async function runSql(code) {
         if (Engine.wait(code) !== "Выполняю…") q(".st-res").innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
-        try {
-          const db = await Engine.sql(code);
-          if (open !== n || !document.body.contains(li)) return false;
-          try { last = sqlLast(db, code); }
-          catch (e) {
-            last = null;
-            q(".st-res").innerHTML = '<pre><span class="err">' + esc("SQLite: " + e.message) + "</span></pre>";
-            status("bad", "Запрос упал с ошибкой",
-              "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась.");
-            return false;
-          }
-          if (last) showRows(-1);
-          else q(".st-res").innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
-          return true;
-        } catch (e) {
+        let r;
+        try { r = await Run.sql(code); }
+        catch (e) {
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
+        if (open !== n || !document.body.contains(li)) return false;
+        if (r.err) {
+          last = null;
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
+          status("bad", sqlFail(r.err), esc(Check.sqlErr(r.err, code) ||
+            "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась."));
+          return false;
+        }
+        last = r.res;
+        if (last) showRows(-1);
+        else q(".st-res").innerHTML = r.changed !== undefined ? wroteHtml(r, false)
+          : '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
+        return true;
       }
 
       /* Код шага идёт после пролога модуля 2: users, orders и events уже
-         загружены. Каждый запуск — в чистом пространстве имён: иначе
-         переменная из соседнего шага «помогла» бы, а после перезагрузки
-         код сломался бы. Сверяется только напечатанное — stdout. */
+         загружены. Каждый запуск — в чистом пространстве имён (Run.python):
+         иначе переменная из соседнего шага «помогла» бы, а после
+         перезагрузки код сломался бы. Сверяется напечатанное — stdout, а у
+         шага с matplotlib ещё и фигуры: картинка для вывода и «паспорт»
+         графика для проверки. */
       async function runPy(code) {
-        q(".st-res").innerHTML = '<div class="empty">' + (Engine.py ? "Выполняю…"
+        q(".st-res").innerHTML = '<div class="empty">' + (Engine.pyHas(S.packages) ? "Выполняю…"
           : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
-        if (plots) return runPlot(code);
-        let pyi;
-        try {
-          const got = await Promise.all([Engine.python(S.packages || []), Lazy.data()]);
-          pyi = got[0];
-        } catch (e) {
-          lastOut = null;
+        let r;
+        try { r = await Run.python(code, S); }
+        catch (e) {
+          lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
         if (open !== n || !document.body.contains(li)) return false;
-        const ns = pyi.toPy({});
-        (S.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
-        const out = [];
-        pyi.setStdout({ batched: function (s) { out.push(s); } });
-        pyi.setStderr({ batched: function () {} });
-        try {
-          if (S.prelude) await pyi.runPythonAsync(S.prelude, { globals: ns });
-          await pyi.runPythonAsync(code, { globals: ns });
-        } catch (e) {
-          lastOut = null;
-          /* трассировку показываем с кадра кода ученика — внутренние
-             кадры Pyodide новичку ничего не скажут */
-          const all = String(e.message || e).split("\n");
-          let from = -1;
-          all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
-          const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
-            return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
-          }).slice(-8);
-          q(".st-res").innerHTML = '<pre><span class="err">' + esc(lines.join("\n").trim()) + "</span></pre>";
+        if (r.err) {
+          lastOut = null; lastFigs = [];
+          q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
           status("bad", "Код упал с ошибкой",
-            esc(Check.pyErr(lines.join("\n")) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
+            esc(Check.pyErr(r.err) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
           return false;
-        } finally {
-          ns.destroy();
         }
-        lastOut = out.join("\n");
-        q(".st-res").innerHTML = lastOut.trim()
-          ? "<pre>" + esc(lastOut) + "</pre>"
-          : '<div class="empty">Код отработал без ошибок, но ничего не напечатал. Нужен print().</div>';
+        lastOut = r.out; lastFigs = r.figs || [];
+        q(".st-res").innerHTML = (lastOut.trim() ? "<pre>" + esc(lastOut) + "</pre>" : "") + Plots.html(lastFigs) ||
+          '<div class="empty">Код отработал без ошибок, но ничего не ' +
+            (plots ? "нарисовал и не напечатал." : "напечатал. Нужен print().") + "</div>";
         return true;
       }
 
@@ -5183,30 +5601,91 @@ function renderStepsLesson(app, L, C) {
    после первой проверки.
    ============================================================ */
 
-/* Запуск кода без интерфейса — для тренажёра и его эталона. Python
+/* Трассировка Python для новичка: последний блок «Traceback», из кадров —
+   только код ученика (File "<exec>"; у SyntaxError под ним ещё строка кода
+   со стрелкой), потом само сообщение. Кадры Pyodide и библиотек ему
+   ничего не скажут. */
+function pyTrace(msg) {
+  const all = String(msg).replace(/\s+$/, "").split("\n");
+  let from = 0;
+  all.forEach(function (l, i) { if (/^Traceback \(most recent call last\)/.test(l)) from = i; });
+  const lines = all.slice(from);
+  /* сообщение — с первой строки без отступа после последнего кадра */
+  let last = -1;
+  lines.forEach(function (l, i) { if (/^\s+File "/.test(l)) last = i; });
+  let at = lines.length;
+  for (let i = last + 1; i < lines.length; i++) if (!/^\s/.test(lines[i])) { at = i; break; }
+  let keep = true;
+  const head = lines.slice(0, at).filter(function (l) {
+    if (/^\s+File "/.test(l)) keep = l.indexOf('File "<exec>"') >= 0;
+    else if (!/^\s/.test(l)) keep = true;
+    return keep;
+  });
+  return head.concat(lines.slice(at)).join("\n").trim();
+}
+
+/* Что сказать после запроса на запись (Run.sql: changed — сколько строк
+   он поменял, schema — поменял ли таблицы). keep — песочница: там
+   изменения живут, пока ученик в ней. */
+function wroteHtml(r, keep) {
+  const n = r.changed;
+  if (!n && !r.schema) return '<div class="empty">Запрос выполнен, но не поменял ни одной строки: под его условие ничего не подошло.</div>';
+  return '<div class="empty">' + (n ? "Запрос поменял " + n + " " + plural(n, "строку", "строки", "строк") + "."
+                                    : "Запрос поменял таблицы базы.") + " " +
+    (keep ? "Изменения живут, пока вы в песочнице: уроки получат исходную базу."
+          : "Следующий запуск начнётся с исходной базы — урок сверяет ответ на ней.") + "</div>";
+}
+
+/* Запуск кода — урок, шаги, тренажёр, песочница и собеседование. Python
    один на страницу и печатает в общий stdout, поэтому запуски идут
    строго по очереди. */
 const Run = {
   queue: Promise.resolve(),
-  sql: async function (code) {
-    const db = await Engine.sql(code);
+  /* Урок, шаг, тренажёр и собеседование работают на исходной базе: если
+     прошлый запрос её поменял, она собирается заново. opts.keep —
+     песочница: её собственные изменения живут, пока ученик в ней, а
+     запись из урока сбрасывается и для неё. Проверка повторяется после
+     ожидания: пока база грузилась, другой запрос мог её поменять.
+     changed и schema — только у запросов на запись. */
+  sql: async function (code, opts) {
+    const keep = !!(opts && opts.keep);
+    const stale = function () { return Engine.dirty && (!keep || Engine.dirty === "lesson"); };
+    let db;
+    do {
+      if (stale()) Engine.reset();
+      db = await Engine.sql(code);
+    } while (stale());
+    const loop = Engine.loop(function (q) { return db.exec(q)[0].values[0]; }, code);
+    if (loop) return { err: loop };
+    const w = Engine.writes(code);
+    const one = function (q) { return db.exec(q)[0].values[0][0]; };
+    let before = 0, ver = 0;
+    if (w) {
+      before = one("SELECT total_changes()"); ver = one("PRAGMA schema_version");
+      Engine.dirty = keep ? "sandbox" : "lesson";
+    }
     try {
-      return { res: sqlLast(db, code) };
+      const res = sqlLast(db, code);
+      return w ? { res: res, changed: one("SELECT total_changes()") - before, schema: one("PRAGMA schema_version") !== ver }
+               : { res: res };
     } catch (e) { return { err: "SQLite: " + e.message }; }
   },
   /* pre — код, который выполняется до кода ученика молча (его вывод не
      попадает в сверку): решение основной задачи, на функции которого
      опирается задача тренажёра. */
   /* opts.echo — как в Jupyter: значение последней строки
-     (orders.head(), df.describe()) показывается без print */
+     (orders.head(), df.describe()) показывается без print.
+     Все запуски Python идут через эту очередь и каждый — в своём чистом
+     пространстве имён: урок, шаг, тренажёр, песочница. warn — то, что
+     библиотеки написали в stderr (предупреждения pandas): в сверку не идёт. */
   python: function (code, env, pre, opts) {
     const job = Run.queue.then(async function () {
       const pyi = (await Promise.all([Engine.python(env.packages || []), Lazy.data()]))[0];
-      const ns = pyi.toPy({});
+      const ns = pyi.toPy({ __name__: "__main__" });
       (env.data || []).forEach(function (k) { ns.set(k, window.DATA[k]); });
-      const out = [];
+      const out = [], err = [];
       pyi.setStdout({ batched: function (s) { out.push(s); } });
-      pyi.setStderr({ batched: function () {} });
+      pyi.setStderr({ batched: function (s) { err.push(s); } });
       try {
         const plots = Plots.on(env);
         if (plots) await Plots.prepare(pyi);
@@ -5231,16 +5710,10 @@ const Run = {
         }
         /* список линий и подписи от plt.plot / plt.title — не результат, а шум */
         if (/^\[?<matplotlib|^Text\(/.test(echo)) echo = "";
-        return { out: out.join("\n"), echo: echo, table: table, figs: plots ? Plots.collect(pyi) : [] };
+        return { out: out.join("\n"), echo: echo, table: table, figs: plots ? Plots.collect(pyi) : [],
+                 warn: err.join("\n").trim() };
       } catch (e) {
-        /* трассировка — с кадра кода ученика: внутренние кадры Pyodide новичку ничего не скажут */
-        const all = String(e.message || e).split("\n");
-        let from = -1;
-        all.forEach(function (l, i) { if (l.indexOf('File "<exec>"') >= 0) from = i; });
-        const lines = from >= 0 ? all.slice(from) : all.filter(function (l) {
-          return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
-        }).slice(-8);
-        return { err: lines.join("\n").trim() };
+        return { err: pyTrace(e.message || e) };
       } finally { ns.destroy(); }
     });
     Run.queue = job.catch(function () {});
@@ -5539,15 +6012,16 @@ const Drills = {
       if (!code.trim()) { status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос."); return null; }
       const rb = q(".dr-run");
       rb.disabled = true;
-      res.innerHTML = '<div class="empty">' + (py && !Engine.py ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
+      res.innerHTML = '<div class="empty">' + (py && !Engine.pyHas(C.packages) ? "Готовлю Python в браузере — первый раз 15–40 секунд…"
         : !py ? Engine.wait(code) : "Выполняю…") + "</div>";
       try {
         const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
         if (r.err) {
           last = null;
           res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
-          status("bad", py ? "Код упал с ошибкой" : "Запрос упал с ошибкой",
-            "Прочитайте последнюю строку вывода: там сказано, что не понравилось " + (py ? "Python." : "базе."));
+          status("bad", py ? "Код упал с ошибкой" : sqlFail(r.err),
+            esc((py ? Check.pyErr(r.err) : Check.sqlErr(r.err, code)) ||
+              "Прочитайте последнюю строку вывода: там сказано, что не понравилось " + (py ? "Python." : "базе.")));
           return null;
         }
         last = r;
@@ -5558,7 +6032,8 @@ const Drills = {
           res.innerHTML = renderTable(r.res.columns, r.res.values, -1) +
             '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
         } else {
-          res.innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
+          res.innerHTML = r.changed !== undefined ? wroteHtml(r, false)
+            : '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
         }
         return r;
       } catch (e) {
@@ -5905,7 +6380,7 @@ function renderLesson(app, id) {
      Урок он не отмечает: пройденным урок делает основная задача. По
      окончании — ссылка к ней, приёмы практикума там собираются вместе. */
   if (P) {
-    idle(function () { Engine.sql().catch(function () {}); });
+    if (L.kind === "sql") idle(function () { Engine.sql().catch(function () {}); });
     const pfin = $("#practiceFinal");
     Steps.render(L, P, $("#practiceBox"), function (fresh) {
       pfin.className = "status st-final show ok";
@@ -5914,6 +6389,23 @@ function renderLesson(app, id) {
         '<span class="s-body"><b>Практикум пройден</b>' + (P.done || "Все шаги решены.") +
           '<br><a href="#s-task">Перейти к основной задаче</a></span>';
     }, "p");
+  }
+
+  /* ---------- прогрев Python ----------
+     Python с pandas качается 15–40 секунд. Начинаем, когда до карточек,
+     практикума или задачи остаётся экран: к первому «Запустить» он уже
+     готов, а урок, который только читают с телефона, мегабайты не тянет. */
+  if (L.kind === "python" && window.IntersectionObserver) {
+    const pkgs = (C.packages || []).concat(P && P.packages || []);
+    const warm = new IntersectionObserver(function (es) {
+      if (!es.some(function (x) { return x.isIntersecting; })) return;
+      warm.disconnect();
+      Engine.python(pkgs).then(function (pyi) {
+        return pkgs.indexOf("pandas") >= 0 ? pyi.runPythonAsync("import pandas") : null;
+      }).catch(function () {});
+    }, { rootMargin: "0px 0px 100% 0px" });
+    ["#s-cards", "#s-practice", "#s-task"].forEach(function (s) { const n = $(s); if (n) warm.observe(n); });
+    Router.cleanup.push(function () { warm.disconnect(); });
   }
 
   /* ---------- эталон ---------- */
@@ -6046,7 +6538,10 @@ function renderLesson(app, id) {
       if (L.kind === "sql") await runSQL(code);
       else await runPython(code);
     } catch (e) {
-      showError(String(e && e.message ? e.message : e));
+      /* сюда попадает только незагрузившийся движок: ошибки кода разбирают runSQL и runPython */
+      $("#outBox").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
+      setStatus("bad", L.kind === "sql" ? "База не загрузилась" : "Python не загрузился",
+        "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
     } finally {
       const rb = $("#runBtn");
       if (rb) rb.disabled = false;
@@ -6056,19 +6551,14 @@ function renderLesson(app, id) {
 
   async function runSQL(code) {
     loader(true, Engine.wait(code));
-    const db = await Engine.sql(code);
+    const r = await Run.sql(code);
     loader(false);
-    let last;
-    try {
-      last = sqlLast(db, code);
-    } catch (e) {
-      lastSqlResult = null;
-      showError("SQLite: " + e.message);
-      return;
-    }
-    lastSqlResult = last;
+    lastSqlResult = r.err ? null : r.res;
+    if (r.err) { showError(r.err, Check.sqlErr(r.err, code)); return; }
+    const last = r.res;
     if (!last) {
-      $("#outBox").innerHTML = '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
+      $("#outBox").innerHTML = r.changed !== undefined ? wroteHtml(r, false)
+        : '<div class="empty">Запрос выполнен, но таблицы в ответе нет: в нём нет SELECT.</div>';
       return;
     }
     $("#outBox").innerHTML = renderTable(last.columns, last.values, -1) +
@@ -6076,44 +6566,39 @@ function renderLesson(app, id) {
       last.values.length + " " + plural(last.values.length, "строка", "строки", "строк") + "</div>";
   }
 
+  /* Через общую очередь Run.python и с чистого листа, как шаги и
+     тренажёр: переменная из прошлого запуска или соседнего урока не
+     поможет и не помешает — сохранённый код сработает и после перезагрузки.
+     С эталоном сравнивается только stdout; предупреждения библиотек
+     (stderr) показываются мелко под выводом и проверку не ломают. */
   async function runPython(code) {
-    loader(true, Engine.py ? "Выполняю..." : "Первый запуск: качаю Python в браузер, 15-40 секунд...");
-    const py = await Engine.python(C.packages || []);
-    if (C.data && C.data.length) await Lazy.data();
-    (C.data || []).forEach(function (k) { py.globals.set(k, window.DATA[k]); });
-    /* stdout и stderr разделены: с эталоном сравнивается только stdout,
-       предупреждения библиотек не должны ломать проверку */
-    const outBuf = [], errBuf = [];
-    py.setStdout({ batched: function (s) { outBuf.push(s); } });
-    py.setStderr({ batched: function (s) { errBuf.push(s); } });
+    loader(true, Engine.pyHas(C.packages) ? "Выполняю..." : "Первый запуск: качаю Python в браузер, 15-40 секунд...");
+    await Engine.python(C.packages || []);
     loader(true, "Выполняю...");
-    try {
-      if (Plots.on(C)) await Plots.prepare(py);
-      if (C.prelude) await py.runPythonAsync(C.prelude);
-      await py.runPythonAsync(code);
-      lastStdout = outBuf.join("\n");
-      lastFigs = Plots.on(C) ? Plots.collect(py) : [];
-      const warn = errBuf.join("\n").trim();
-      let html = (lastStdout.trim() ? "<pre>" + esc(lastStdout) + "</pre>" : "") + Plots.html(lastFigs);
-      if (!html) html = '<div class="empty">Код отработал без ошибок, но ничего не ' +
-        (Plots.on(C) ? "нарисовал и не напечатал." : "напечатал. Нужен print().") + "</div>";
-      if (warn) {
-        html += '<pre style="margin-top:9px;font-size:11.5px;color:var(--ink-3)">' + esc(warn) + "</pre>";
-      }
-      $("#outBox").innerHTML = html;
-    } catch (e) {
-      lastStdout = "";
-      const lines = String(e.message || e).split("\n").filter(function (l) {
-        return l.indexOf("/lib/python") < 0 && l.indexOf("pyodide") < 0;
-      });
-      showError(lines.slice(-14).join("\n"));
+    const r = await Run.python(code, C);
+    if (r.err) {
+      lastStdout = ""; lastFigs = [];
+      showError(r.err, Check.pyErr(r.err));
+      return;
     }
+    lastStdout = r.out;
+    lastFigs = r.figs || [];
+    let html = (lastStdout.trim() ? "<pre>" + esc(lastStdout) + "</pre>" : "") + Plots.html(lastFigs);
+    if (!html) html = '<div class="empty">Код отработал без ошибок, но ничего не ' +
+      (Plots.on(C) ? "нарисовал и не напечатал." : "напечатал. Нужен print().") + "</div>";
+    if (r.warn) {
+      html += '<pre style="margin-top:9px;font-size:11.5px;color:var(--ink-3)">' + esc(r.warn) + "</pre>";
+    }
+    $("#outBox").innerHTML = html;
   }
 
-  function showError(msg) {
+  /* why — разбор ошибки по-русски (Check.sqlErr, Check.pyErr), если он есть */
+  function showError(msg, why) {
+    const sql = L.kind === "sql";
     $("#outBox").innerHTML = '<pre><span class="err">' + esc(msg) + "</span></pre>";
-    setStatus("bad", "Код упал с ошибкой",
-      "Читайте последнюю строку вывода — там сказано, что именно не понравилось интерпретатору.");
+    setStatus("bad", sql ? sqlFail(msg) : "Код упал с ошибкой",
+      esc(why || (sql ? "Прочитайте сообщение базы в выводе: обычно там сказано, рядом с каким словом она споткнулась."
+                      : "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python.")));
   }
 
   /* ---------- проверка ---------- */
