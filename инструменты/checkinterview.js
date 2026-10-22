@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Пробное собеседование (#mock): пул interview.js.
    SQL — решение каждой задачи выполняется на базе такси и сверяется со
-   своим expected по правилам Check.sql (копия из checksteps.js); id
+   своим expected по правилам Check.match (копия из checksteps.js); id
    уникальны, задач по 4 на уровень, lesson — существующий урок; у кейса
    5–6 пунктов чек-листа; MockCore из app.js выбирает по задаче каждого
    уровня и избегает прошлой попытки.
@@ -36,7 +36,7 @@ function query(sql) {
   const columns = st.columns().map(function (c) { return c.name; });
   return { columns: columns, values: st.all().map(function (r) { return columns.map(function (c) { return r[c]; }); }) };
 }
-/* ---- копия Check.cellEq и Check.sql (как в checksteps.js) ---- */
+/* ---- копия Check.cellEq и Check.match (как в checksteps.js) ---- */
 function cellEq(a, b) {
   if (a === null || a === undefined) a = "";
   if (b === null || b === undefined) b = "";

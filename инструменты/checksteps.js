@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Проверка шагов пошагового урока (0.1) и практикума внутри урока
    (1.3): решение каждого шага прогоняется на учебной базе и сверяется
-   с expected по тем же правилам, что Check.sql в app.js — имена
+   с expected по тем же правилам, что Check.match в app.js — имена
    столбцов, число строк, порядок строк при ordered, числа с допуском
    0.011. Таблицы «было → стало» (ba) сверяются по форме: число
    значений в строке равно числу столбцов, hl — среди столбцов «стало»,
@@ -149,7 +149,7 @@ function query(sql) {
   return { columns: columns, values: values };
 }
 
-/* ---- копия Check.cellEq и Check.sql из app.js ---- */
+/* ---- копия Check.cellEq и Check.match из app.js ---- */
 function cellEq(a, b) {
   if (a === null || a === undefined) a = "";
   if (b === null || b === undefined) b = "";

@@ -31,7 +31,8 @@ model: sonnet
 
 **Проверки в инструментах совпадают с движком**
 - В `инструменты/checksteps.js` лежат копии `Check.normLines`,
-  `Check.python`, `Check.uses`, `Check.cellEq` и `Check.sql`; в
+  `Check.python`, `Check.uses`, `Check.cellEq` и `Check.match` (`Check.sql` —
+  обёртка над ним с подсказкой про дату без кавычек); в
   `.claude/skills/new-practicum/scripts/practicum_check.py` — сверка вывода;
   `инструменты/checkdrills.js` повторяет классификацию `Drills`. Если в
   диффе менялась логика проверки в `app.js`, копия обязана измениться
