@@ -84446,6 +84446,31 @@ const PLOT_PY = [
 /* DataFrame или Series → { cols, rows, n } для renderTable. Индекс, если
    он не просто 0, 1, 2…, становится первым столбцом — как в Jupyter.
    Даты — строками, дробные — до 4 знаков, пропуски — null. */
+/* Защита от вечного цикла. Python считает в той же вкладке, и цикл,
+   который не заканчивается, повесил бы её насовсем. Перед кодом ученика
+   ставится sys.settrace только на его кадры (<exec>): раз в 1024 строки
+   сверяется время, и после Run.PY_LIMIT секунд код прерывается
+   TimeoutError — Check.pyErr объясняет его. Кадры pandas и numpy не
+   трассируются; Python-циклы ученика под трассировкой медленнее в 3–5 раз.
+   Свой файл <guard> — pyTrace его кадр не показывает. */
+const GUARD_PY = `import sys, time
+def _nb_guard(limit):
+    end = time.monotonic() + limit
+    n = 0
+    def local(frame, event, arg):
+        nonlocal n
+        n += 1
+        if n & 1023 == 0 and time.monotonic() > end:
+            sys.settrace(None)
+            raise TimeoutError("код считается дольше " + str(limit) + " секунд — похоже, цикл не заканчивается")
+        return local
+    def glob(frame, event, arg):
+        return local if frame.f_code.co_filename == "<exec>" else None
+    sys.settrace(glob)
+def _nb_off():
+    sys.settrace(None)
+`;
+
 const TABLE_PY = [
   "import json, pandas as pd, numpy as np",
   "def _nb_table(v):",
@@ -84520,13 +84545,30 @@ const Figs = {
 const Check = {
   /* Частые ошибки новичка в Python — по-русски: что сломалось и что
      поправить. Берётся последняя строка трассировки; "" — нет разбора. */
-  pyErr: function (msg) {
+  pyErr: function (msg, code) {
     const last = String(msg).trim().split("\n").pop();
+    /* код ученика без комментариев: по нему различаем случаи с одним сообщением */
+    const src = String(code || "").replace(/#[^\n]*/g, " ");
+    /* имена параметров lambda и def: apply без axis=1 — ошибка, только если атрибут берут у них */
+    const args = [];
+    for (let a, re = /\blambda\s+(\w+)|\bdef\s+\w+\s*\(\s*(\w+)/g; (a = re.exec(src)); ) args.push(a[1] || a[2]);
+    const IMPORTS = { pd: "import pandas as pd", np: "import numpy as np", plt: "import matplotlib.pyplot as plt" };
     let m;
+    if (/^TimeoutError: код считается дольше/.test(last))
+      return "Похоже, цикл не заканчивается: условие while никогда не становится ложным, потому что переменная в нём " +
+        "не меняется, или цикл идёт по огромному диапазону. Python считает в той же вкладке, поэтому курс останавливает " +
+        "такой код. Проверьте, что в while переменная из условия меняется (i = i + 1), а диапазон в for не огромный.";
     if (/NameError: name '(true|false|TRUE|FALSE)'/.test(last))
       return "True и False пишут с большой буквы и без кавычек: ascending=False.";
+    if ((m = /NameError: name '(pd|np|plt)' is not defined/.exec(last)))
+      return m[1] + " — короткое имя библиотеки, его создаёт строка импорта. Добавьте её в начало кода: " + IMPORTS[m[1]] + ".";
     if ((m = /NameError: name '([^']+)' is not defined/.exec(last)))
       return "Python не знает имени " + m[1] + ". Переменную создают в этом же коде выше строки, где её берут: каждый запуск начинается с чистого листа, переменные из прошлых запусков не сохраняются. Проверьте и написание имени. Если это текст или имя столбца — возьмите его в кавычки.";
+    /* у Pyodide сообщение в несколько строк: «The module 'scipy' is included in the Pyodide distribution…» */
+    if ((m = /ModuleNotFoundError: (?:No module named|The module) '([^']+)'/.exec(msg)))
+      return /^seaborn/.test(m[1]) ? "seaborn в курсе нет — графики строят через matplotlib: import matplotlib.pyplot as plt."
+        : /^scipy/.test(m[1]) ? "scipy в браузер курса не загружается. p-value в курсе считают через norm_cdf из пролога уроков статистики, а без него — по формуле: 0.5 * (1 + math.erf(z / math.sqrt(2)))."
+        : "Библиотеки " + m[1] + " в курсе нет: в браузере работают pandas, numpy и matplotlib.";
     if (/was never closed|unexpected EOF|'\(' was never closed/.test(last))
       return "Не закрыта скобка. Сосчитайте открывающие и закрывающие скобки в строке — их должно быть поровну.";
     if (/unmatched '[)\]]'|closing parenthesis/.test(last))
@@ -84543,25 +84585,133 @@ const Check = {
       return "Сработала проверка assert: её условие не выполнилось. Текст после «AssertionError:» — сообщение самой проверки, оно говорит, что не так с данными.";
     if (/IndentationError/.test(last))
       return "Строка начинается с лишних пробелов. В Python отступ в начале строки что-то значит — уберите его.";
+    if (/^FileNotFoundError/.test(last))
+      return "Файлов с диска здесь нет: данные урока уже загружены в таблицы — orders, users, events и другие из «Входных данных». Берите их по имени, без read_csv.";
+    /* фильтр с and, if по столбцу и a < столбец < b: одно значение там, где пришёл целый столбец */
+    /* 100 < столбец < 500: Python делит двойное сравнение на два через and */
+    if (/truth value of a (Series|DataFrame) is ambiguous/.test(last) && /[\w)\]]\s*[<>]=?\s*[A-Za-z_][\w.]*(\[[^\]]*\])?\s*[<>]=?\s*[\w(]/.test(src))
+      return "Двойное сравнение со столбцом, 100 < x < 500, Python делит на два через and, а and работает с одним значением. Запишите условия отдельно: orders[(orders[\"revenue\"] > 100) & (orders[\"revenue\"] < 500)] или orders[orders[\"revenue\"].between(100, 500)].";
+    /* a > 1 & b < 3: & считается раньше сравнения, выходит двойное сравнение a > (1 & b) < 3 */
+    if (/truth value of a (Series|DataFrame) is ambiguous/.test(last) && /[&|]/.test(src) && !/\b(and|or)\b/.test(src))
+      return "Условия, соединённые & или |, берут в скобки: & считается раньше сравнения. Правильно: orders[(orders[\"revenue\"] > 100) & (orders[\"status\"] == \"paid\")].";
+    if (/truth value of a (Series|DataFrame) is ambiguous/.test(last))
+      return /\bif\b|\bwhile\b/.test(src) && !/\b(and|or)\b/.test(src)
+        ? "if ждёт одно значение True или False, а сравнение столбца даёт целый столбец таких значений. Спросите об одном: (orders[\"revenue\"] > 100).any() — есть ли хоть одна строка, .all() — все ли."
+        : "and, or и not работают с одним значением, а сравнение столбца даёт целый столбец True и False. В фильтре таблицы условия соединяют через & и |, каждое в скобках: orders[(orders[\"revenue\"] > 100) & (orders[\"status\"] == \"paid\")].";
+    if (/Cannot perform '(rand|ror|and|or)_'|operation '(rand|ror)_' not supported|unsupported operand type\(s\) for [&|]|ufunc 'bitwise_(and|or)'/.test(last))
+      return "Условия, соединённые & или |, берут в скобки: & считается раньше сравнения. Правильно: orders[(orders[\"revenue\"] > 100) & (orders[\"status\"] == \"paid\")].";
+    /* метод с inplace=True возвращает None, а результат сохранили в переменную */
+    if (/'NoneType' object (has no attribute|is not subscriptable|is not iterable)/.test(last) &&
+        /=\s*[\w.\[\]"']+\.(append|sort|extend|reverse)\(/.test(src))
+      return "append, sort, extend и reverse меняют список на месте и возвращают None, а вы сохранили этот None в переменную. Вызывайте их отдельной строкой, без присваивания: lst.append(x), а не lst = lst.append(x).";
+    if (/'NoneType' object (has no attribute|is not subscriptable|is not iterable)/.test(last))
+      return /inplace\s*=\s*True/.test(src)
+        ? "С inplace=True метод меняет таблицу на месте и возвращает None, а вы сохранили этот None в переменную. Оставьте одно: orders = orders.dropna() или orders.dropna(inplace=True) без присваивания."
+        : "В переменной None — пустое значение. Его возвращает функция без return, а ещё print() и методы с inplace=True. Проверьте, что ваша функция заканчивается строкой return …, а результат метода сохраняйте: таблица = таблица.dropna().";
+    if (/'(method|function|builtin_function_or_method)' object (has no attribute|is not subscriptable)|for [^:]*: '(method|function)'|and '(method|function)'/.test(last))
+      return "Метод взят без скобок: orders[\"revenue\"].mean — это сам метод, а не число. Допишите скобки: orders[\"revenue\"].mean().round(2).";
+    if (/'(DataFrame|Series)' object is not callable/.test(last))
+      return "Столбец берут квадратными скобками, а не круглыми: orders[\"revenue\"]. Круглые скобки — для вызова метода: orders.head().";
+    if (/Can only use \.dt accessor/.test(last))
+      return "В столбце не даты, а текст или числа, а .dt работает только с датами. Сначала переведите столбец: таблица[\"order_date\"] = pd.to_datetime(таблица[\"order_date\"]).";
+    if (/Can only use \.str accessor/.test(last))
+      return "Методы .str работают с текстовым столбцом, а в этом не текст. Проверьте, тот ли столбец взят; если нужен именно текст — .astype(str).str…";
+    if (/IntCastingNaNError|Cannot convert non-finite values|cannot convert float NaN to integer/.test(last))
+      return "В столбце есть пропуски (NaN), а целое число из пропуска не сделать. Если пропуск значит «нет данных», уберите такие строки: .dropna(). .fillna(0).astype(int) ставит на их место ноль, и среднее изменится.";
+    if (/Invalid comparison between dtype=datetime64/.test(last))
+      return "Даты сравнивают с датой, а не с числом. Дату пишут в кавычках, pandas её поймёт: orders[orders[\"order_date\"] >= \"2024-05-01\"].";
+    if (/You are trying to merge on/.test(last))
+      return "Столбцы, по которым соединяете таблицы, разных типов: в одной числа, в другой текст. Приведите их к одному типу перед merge: users[\"user_id\"] = users[\"user_id\"].astype(int).";
+    if (/No common columns to perform merge on/.test(last))
+      return "У таблиц нет общего столбца, по которому их соединить. Укажите его явно: orders.merge(users, on=\"user_id\"), а если имена разные — left_on=\"…\", right_on=\"…\".";
+    /* pandas 2.2: agg function failed, Could not convert …; pandas 3: dtype 'str' does not support operation, Cannot perform reduction */
+    if (/agg function failed|Could not convert .* to numeric|No numeric types to aggregate|dtype 'str' does not support operation|Cannot perform reduction '\w+' with string dtype/.test(last))
+      return "Среднее или сумма посчитаны по столбцу с текстом. Выберите числовой столбец до расчёта: orders.groupby(\"user_id\")[\"revenue\"].mean().";
+    if (/Only valid with DatetimeIndex/.test(last))
+      return "resample группирует по датам из индекса, а в индексе номера строк. Укажите столбец с датами, переведя его сначала в даты: orders[\"order_date\"] = pd.to_datetime(orders[\"order_date\"]), затем orders.resample(\"MS\", on=\"order_date\")[\"revenue\"].sum().";
+    if (/positional indexers? (?:is|are) out-of-bounds|index -?\d+ is out of bounds/.test(last))
+      return "Строки с таким номером нет: в таблице меньше строк. iloc считает с нуля, последняя строка — iloc[-1], число строк — len(таблица).";
+    if (/list index out of range/.test(last))
+      return "В списке нет элемента с таким номером: номера идут с нуля, последний — список[-1], длина — len(список).";
+    if (/Too many indexers/.test(last))
+      return "В .loc два места через запятую: строки и столбцы. Несколько столбцов передают списком: orders.loc[условие, [\"revenue\", \"status\"]].";
+    if ((m = /Length of values \((\d+)\) does not match length of index \((\d+)\)/.exec(last)))
+      return "В новый столбец кладут " + m[1] + " " + (/1$/.test(m[1]) && !/11$/.test(m[1]) ? "значение" : /[234]$/.test(m[1]) && !/1[234]$/.test(m[1]) ? "значения" : "значений") + ", а строк в таблице " + m[2] + ". Столбец считают из других столбцов, orders[\"x\"] = orders[\"revenue\"] * 2, или заполняют одним значением.";
+    if (/concat\(\) takes 1 positional argument|first argument must be an iterable of pandas/.test(last))
+      return "Таблицы для pd.concat передают списком: pd.concat([первая, вторая]).";
+    if (/Index contains duplicate entries, cannot reshape/.test(last))
+      return "pivot не может разложить таблицу: на одно место строки и столбца приходится несколько значений. Их нужно свести агрегатом: orders.pivot_table(index=\"user_id\", columns=\"status\", values=\"revenue\", aggfunc=\"sum\").";
+    if (/x and y must have same first dimension/.test(last))
+      return "Для графика нужно поровну значений по оси x и по оси y. Сверьте длины: len(x) и len(y).";
+    if (/'(int|float)' object is not iterable/.test(last))
+      return "Цикл for и функции вроде sum и max ждут список, столбец или range, а получили одно число: for i in range(5), sum([1, 2]).";
+    if (/invalid literal for int\(\)|could not convert string to float/.test(last))
+      return "Текст не превращается в число: в нём пробел, запятая или буква. Уберите лишнее до перевода: float(\"12,5\".replace(\",\", \".\")), у столбца — .str.replace(\" \", \"\").astype(float).";
+    /* у to_datetime по столбцу после сообщения идут строки-советы pandas — ищем во всём тексте */
+    if (/DateParseError|month must be in 1\.\.12|does(?:n't| not) match format|Unknown datetime string format/.test(msg))
+      return "Текст не читается как дата. Дату пишут как год-месяц-день, \"2024-05-01\", месяц от 1 до 12. Если формат другой, назовите его: pd.to_datetime(x, format=\"%d.%m.%Y\").";
+    if (/'str' object cannot be interpreted as an integer/.test(last))
+      return "Там, где нужно целое число, стоит текст в кавычках. Числа пишут без кавычек: round(x, 2), range(5).";
+    if (/must be called with a collection of some kind/.test(last) && /rename\s*\(/.test(src))
+      return "В rename(columns=…) передают словарь «старое имя: новое»: orders.rename(columns={\"revenue\": \"выручка\"}).";
+    if (/Percentiles must be in the range \[0, 100\]/.test(last))
+      return "np.percentile задают в процентах, от 0 до 100: np.percentile(x, 95).";
+    if (/percentiles should all be in the interval|[Qq]uantiles must be in the range/.test(last))
+      return "Квантиль задают долей от 0 до 1: quantile(0.95), а не quantile(95).";
+    if (/unhashable type: 'list'/.test(last))
+      return "Список стоит там, где нужно одно значение: ключом словаря или лишней парой скобок. Было {[\"revenue\"]: \"sum\"} или orders[[[\"revenue\"]]] — нужно {\"revenue\": \"sum\"} и orders[[\"revenue\"]].";
+    if (/^ZeroDivisionError/.test(last))
+      return "Деление на ноль: знаменатель равен 0. Проверьте, не пустая ли выборка или группа перед делением.";
     if (/KeyError: .*non-monotonic/.test(last))
       return "Даты в индексе стоят не по порядку, а срез от даты до даты работает только на отсортированном ряду. Добавьте .sort_index() после set_index.";
     if (/KeyError: \('/.test(last))
       return "Несколько столбцов берут двойными скобками: таблица[[\"a\", \"b\"]] — внутренние скобки делают из имён список.";
-    if ((m = /KeyError: '?([^']+)'?/.exec(last)))
-      return "Нет столбца " + m[1] + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
-    if (/TypeError: .*'str' and '(int|float)'|TypeError: can only concatenate str/.test(last))
+    /* таблица[["a", "x"]] и drop("x", axis=1): имена списком в кавычках */
+    if ((m = /KeyError: ["']\[(.+)\] not (?:in index|found in axis)["']/.exec(last)))
+      return !/'/.test(m[1]) ? "Нет строк с метками " + m[1] + " в индексе таблицы: .loc ищет по меткам строк, а номер по порядку берут через .iloc."
+        : (/,/.test(m[1]) ? "Нет столбцов " : "Нет столбца ") + m[1].replace(/'/g, "") + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
+    if ((m = /KeyError: "None of \[Index\(\[(.+?)\].*are in the \[columns\]/.exec(last)))
+      return (/,/.test(m[1]) ? "Нет столбцов " : "Нет столбца ") + m[1].replace(/'/g, "") + ". Сверьте имена со схемой: буквы, регистр, кавычки.";
+    if ((m = /KeyError: "None of \[Index\(\[(.+?)\]/.exec(last)))
+      return "Ни одного из значений " + m[1].replace(/'/g, "") + " нет в индексе таблицы: .loc ищет по меткам строк. Столбцы берут так: таблица[[\"a\", \"b\"]].";
+    if ((m = /KeyError: '?([^']+)'?/.exec(last))) {
+      /* словарь — имя, которому присвоили {…} или dict(…), и ключ читают у него: d["ключ"] или d[k].
+         \x7b — фигурная скобка: try-pyerr.js ищет конец функции по парным скобкам */
+      const key = m[1], quoted = /^\d+$/.test(key) ? key : "\"" + key + "\"";
+      const lit = "\\[\\s*['\"]?" + key.replace(/[.*+?^$()|[\]\\]/g, "\\$&") + "['\"]?\\s*\\]";
+      const dicts = [];
+      for (let a, re = /\b(\w+)\s*=\s*(\x7b|dict\()/g; (a = re.exec(src)); ) dicts.push(a[1]);
+      const inDict = dicts.some(function (d) { return new RegExp("\\b" + d + lit).test(src); }) ||
+        !new RegExp(lit).test(src) && dicts.some(function (d) { return new RegExp("\\b" + d + "\\[\\s*[A-Za-z_]").test(src); });
+      return inDict
+        ? "В словаре нет ключа " + key + ". Ключ сначала добавляют — d[" + quoted + "] = 0 — или читают с запасным значением: d.get(" + quoted + ", 0)."
+        : "Нет столбца " + key + ". Сверьте имя со схемой: буквы, регистр, кавычки.";
+    }
+    if (/TypeError: .*'str' and '(int|float)'|TypeError: can only concatenate str|did not contain a loop with signature/.test(last))
       return "Текст и число смешаны в одном расчёте. Числа пишут без кавычек, а в print их перечисляют через запятую.";
     if (/AttributeError: 'str' object has no attribute/.test(last))
       return "Метод вызван у текста, а не у таблицы или столбца. Частая причина — один знак = вместо == в сравнении: тогда в переменную попадает сам текст.";
     if (/expected type bool/.test(last))
       return "True и False пишут без кавычек: ascending=False, а не ascending=\"False\".";
+    /* apply без axis=1 отдаёт функции столбцы, а не строки */
+    if ((m = /'(DataFrame|Series)' object has no attribute '(append|iteritems|ix)'/.exec(last)))
+      return m[2] === "append" ? "В pandas 2 у таблицы и столбца нет append: строки добавляют через pd.concat([первая, вторая])."
+        : m[2] === "ix" ? "В pandas 2 нет .ix: по меткам строк берут .loc, по номерам — .iloc."
+        : "В pandas 2 нет iteritems — он называется items: for имя, столбец in таблица.items().";
+    if (/has no attribute '(avg|average)'|'avg' is not a valid function/.test(last))
+      return "Среднее в pandas — mean: .mean() или .agg(\"mean\"), а avg — слово из SQL.";
+    if ((m = /AttributeError: 'Series' object has no attribute '(\w+)'/.exec(last)) && /\.apply\s*\(/.test(src) &&
+        !/axis\s*=\s*1/.test(src) && args.some(function (a) { return new RegExp("\\b" + a + "\\." + m[1] + "\\b").test(src); }))
+      return "apply без axis=1 отдаёт функции столбцы, а не строки, поэтому r.revenue не находится. Для расчёта по строкам — .apply(функция, axis=1), а проще столбцами: orders[\"revenue\"] * 2.";
     if ((m = /AttributeError: .* has no attribute '([^']+)'/.exec(last))) {
       const alt = /Did you mean: '([^']+)'/.exec(last);
-      return "Нет метода " + m[1] + "." + (alt ? " Возможно, нужен " + alt[1] + "." :
+      return "Нет метода или столбца " + m[1] + "." + (alt ? " Возможно, нужен " + alt[1] + "." :
         " Проверьте, как он пишется, и что перед точкой стоит таблица или столбец.");
     }
     if (/duplicate edges|Bin edges must be unique/.test(last))
       return "pd.qcut не может разрезать столбец на равные части: в нём много одинаковых значений, и границы групп совпали. Режут ранги вместо значений: pd.qcut(x.rank(method=\"first\"), 5, labels=[1, 2, 3, 4, 5]).";
+    if ((m = /missing \d+ required positional arguments?: (.+)$/.exec(last)))
+      return "Функции не хватает аргумента " + m[1].replace(/'/g, "") + ": в вызове меньше значений, чем она ждёт. Сверьте вызов с её строкой def.";
     if (/SyntaxError/.test(last))
       return "Python не понял строку. Частые причины: пропущена запятая, кавычка или скобка, либо одно = вместо == в сравнении.";
     return "";
@@ -86322,6 +86472,7 @@ function renderSandbox(app) {
       '<ol id="sbHist"></ol></section>';
   app.appendChild(main);
 
+  let mounts = 0;
   function codeKey() { return "sandbox:" + kind; }
 
   function mount() {
@@ -86338,10 +86489,12 @@ function renderSandbox(app) {
       '<button class="linkbtn" id="sbClear" type="button">очистить</button></div>' +
       '<textarea id="sbEditor"></textarea></div>';
     editor = null;
+    /* редактор прошлого языка может домонтироваться позже — его не берём */
+    const my = ++mounts;
     const saved = Store.get("code", codeKey(), null);
     mountEditor($("#sbEditor"), kind, saved !== null ? saved : Sandbox.starts[kind][0].c,
       function (v) { Store.set("code", codeKey(), v); }, function () { run(); },
-      function () {}).then(function (ed) { editor = ed; });
+      function () {}).then(function (ed) { if (my === mounts) editor = ed; });
     $("#sbClear").addEventListener("click", function () {
       const cur = editor ? editor.get() : "";
       Sandbox.remember(kind, cur);
@@ -86391,7 +86544,7 @@ function renderSandbox(app) {
         }
       } else {
         const r = await Run.python(code, Sandbox.env(), null, { echo: true });
-        if (r.err) fail(r.err, Check.pyErr(r.err));
+        if (r.err) fail(r.err, Check.pyErr(r.err, code));
         else {
           const text = [r.out, r.echo].filter(function (x) { return x && x.trim(); }).join("\n");
           const tb = r.table ? renderTable(r.table.cols, r.table.rows, -1) +
@@ -86693,7 +86846,7 @@ const Steps = {
           lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
           status("bad", "Код упал с ошибкой",
-            esc(Check.pyErr(r.err) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
+            esc(Check.pyErr(r.err, code) || "Прочитайте последнюю строку вывода: там сказано, что не понравилось Python."));
           return false;
         }
         lastOut = r.out; lastFigs = r.figs || [];
@@ -86916,6 +87069,8 @@ function wroteHtml(r, keep) {
    строго по очереди. */
 const Run = {
   queue: Promise.resolve(),
+  guard: null,          /* { pyi, on, off } — функции GUARD_PY в этом Pyodide */
+  PY_LIMIT: 60,         /* секунд на код ученика, см. GUARD_PY: тренажёр 5.5 №5 считается 8 с на ноутбуке — запас в 7 раз на медленный телефон */
   /* Урок, шаг, тренажёр и собеседование работают на исходной базе: если
      прошлый запрос её поменял, она собирается заново. opts.keep —
      песочница: её собственные изменения живут, пока ученик в ней, а
@@ -86970,7 +87125,16 @@ const Run = {
           out.length = 0;
           if (plots) pyi.runPython("import _nb_plots; _nb_plots.reset()");
         }
-        const val = await pyi.runPythonAsync(code, { globals: ns });
+        if (!Run.guard || Run.guard.pyi !== pyi) {
+          const g = pyi.toPy({});
+          pyi.runPython(GUARD_PY, { globals: g, filename: "<guard>" });
+          Run.guard = { pyi: pyi, on: g.get("_nb_guard"), off: g.get("_nb_off") };
+          g.destroy();
+        }
+        let val;
+        Run.guard.on(Run.PY_LIMIT);
+        try { val = await pyi.runPythonAsync(code, { globals: ns }); }
+        finally { Run.guard.off(); }
         let echo = "", table = null;
         if (val !== undefined && val !== null) {
           if (opts && opts.echo && (val.type === "DataFrame" || val.type === "Series")) {
@@ -87295,7 +87459,7 @@ const Drills = {
           last = null;
           res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
           status("bad", py ? "Код упал с ошибкой" : sqlFail(r.err),
-            esc((py ? Check.pyErr(r.err) : Check.sqlErr(r.err, code)) ||
+            esc((py ? Check.pyErr(r.err, code) : Check.sqlErr(r.err, code)) ||
               "Прочитайте последнюю строку вывода: там сказано, что не понравилось " + (py ? "Python." : "базе.")));
           return null;
         }
@@ -87853,7 +88017,7 @@ function renderLesson(app, id) {
     const r = await Run.python(code, C);
     if (r.err) {
       lastStdout = ""; lastFigs = [];
-      showError(r.err, Check.pyErr(r.err));
+      showError(r.err, Check.pyErr(r.err, code));
       return;
     }
     lastStdout = r.out;
