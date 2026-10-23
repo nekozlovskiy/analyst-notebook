@@ -17,7 +17,7 @@ const { spawnSync } = require("child_process");
 
 const base = path.resolve(__dirname, "../../../..");
 const src = fs.readFileSync(path.join(base, "app.js"), "utf8");
-const start = src.indexOf("pyErr: function (msg) {");
+const start = src.search(/pyErr: function \(msg(, code)?\) \{/);
 if (start < 0) { console.error("в app.js не найден Check.pyErr"); process.exit(2); }
 /* тело функции — до парной закрывающей скобки */
 let i = src.indexOf("{", start), depth = 0, end = -1;
@@ -48,6 +48,7 @@ if (ci !== -1) {
 } else {
   msg = args.join(" ");
 }
-const hint = pyErr(msg);
+/* код ученика — второй аргумент: по нему различаются случаи с одним сообщением (inplace=True, apply без axis=1) */
+const hint = pyErr(msg, ci !== -1 ? args[ci + 1] : "");
 console.log(hint ? "подсказка: " + hint : "подсказки нет — ученик увидит общий текст «Прочитайте последнюю строку вывода…»");
 process.exit(hint ? 0 : 1);
