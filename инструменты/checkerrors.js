@@ -2,8 +2,9 @@
 /* Ошибки по-русски — правила из app.js на примерах: Check.sqlErr (что
    значит ошибка SQLite), Check.bareDate (дата без кавычек), Engine.loop
    (рекурсивный CTE, который не останавливается, — проба), pyTrace
-   (короткая трассировка Python) и Check.pyErr на ней, Engine.writes
-   (запрос меняет базу — уроки получат её заново).
+   (короткая трассировка Python) и Check.pyErr на ней, Check.pyErr на
+   корпусе ошибок новичка из Pyodide (PYERR) и на сообщениях pandas 3
+   (PY3), Engine.writes (запрос меняет базу — уроки получат её заново).
 
    SQL. Каждый запрос из SQL выполняется на инструменты/shop.db
    (node:sqlite, только чтение) и должен упасть, а подсказка на его
@@ -468,6 +469,261 @@ const LOOPS = [
    "FROM \"my cal\" WHERE d < 100"]
 ];
 
+/* [код ученика, короткая трассировка Pyodide 0.26.4 (pandas 2.2.0, как в
+   браузере), слова подсказки Check.pyErr]. Трассировки сняты на данных
+   урока с прологом SH.pyPrelude; TimeoutError — от защиты GUARD_PY */
+const PYERR = [
+  ["print(orders[orders.revenue > 100 and orders.status == 'paid'])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+   "and, or и not работают с одним значением, а сравнение столбц"],
+  ["print(orders[orders.revenue > 100 & orders.status == 'paid'])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Cannot perform 'rand_' with a dtyped [object] array and scalar of type [bool]",
+   "Условия, соединённые & или |, берут в скобки"],
+  ["orders = orders.dropna(inplace=True)\nprint(orders.head())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nAttributeError: 'NoneType' object has no attribute 'head'",
+   "С inplace=True метод меняет таблицу на месте и возвращает No"],
+  ["orders.loc[0, 'revenue'] = None\nprint(orders['revenue'].astype(int))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\npandas.errors.IntCastingNaNError: Cannot convert non-finite values (NA or inf) to integer",
+   "В столбце есть пропуски (NaN), а целое число из пропуска не "],
+  ["print(orders[orders.order_date > 2024])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Invalid comparison between dtype=datetime64[ns] and int",
+   "Даты сравнивают с датой, а не с числом"],
+  ["users['user_id'] = users['user_id'].astype(str)\nprint(orders.merge(users, on='user_id'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nValueError: You are trying to merge on int64 and object columns for key 'user_id'. If you wish to proceed you should use pd.concat",
+   "Столбцы, по которым соединяете таблицы, разных типов"],
+  ["print(orders.merge(events[['event_name']]))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\npandas.errors.MergeError: No common columns to perform merge on. Merge options: left_on=None, right_on=None, left_index=False, right_index=False",
+   "У таблиц нет общего столбца, по которому их соединить"],
+  ["plt.plot([1, 2, 3])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nNameError: name 'plt' is not defined",
+   "plt"],
+  ["import seaborn as sns",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nModuleNotFoundError: No module named 'seaborn'",
+   "seaborn в курсе нет"],
+  ["print(orders.groupby('user_id').mean())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: agg function failed [how->mean,dtype->object]",
+   "Среднее или сумма посчитаны по столбцу с текстом"],
+  ["orders['order_date'] = orders['order_date'].astype(str)\nprint(orders['order_date'].dt.month)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nAttributeError: Can only use .dt accessor with datetimelike values",
+   "В столбце не даты, а текст или числа, а"],
+  ["print(orders['revenue'].str.upper())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nAttributeError: Can only use .str accessor with string values!. Did you mean: 'std'?",
+   "Методы"],
+  ["print(orders.iloc[100000])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nIndexError: single positional indexer is out-of-bounds",
+   "Строки с таким номером нет"],
+  ["print(orders.sort_values('revenue', ascending='False'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: For argument \"ascending\" expected type bool, received type str.",
+   "True и False пишут без кавычек"],
+  ["print(orders[['revenue', 'city']])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: \"['city'] not in index\"",
+   "Нет столбца city"],
+  ["print(orders('revenue'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: 'DataFrame' object is not callable",
+   "Столбец берут квадратными скобками, а не круглыми"],
+  ["print(int('1 200'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: invalid literal for int() with base 10: '1 200'",
+   "Текст не превращается в число"],
+  ["print(float('12,5'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: could not convert string to float: '12,5'",
+   "Текст не превращается в число"],
+  ["orders['x'] = [1, 2, 3]",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: Length of values (3) does not match length of index (215)",
+   "В новый столбец кладут 3 значения, а строк в таблице 215"],
+  ["print(pd.concat(orders, users))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: concat() takes 1 positional argument but 2 were given",
+   "Таблицы для pd"],
+  ["print(orders.pivot(index='user_id', columns='status', values='revenue'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: Index contains duplicate entries, cannot reshape",
+   "pivot не может разложить таблицу"],
+  ["for x in 5:\n    print(x)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: 'int' object is not iterable",
+   "Цикл for и функции вроде sum и max ждут список, столбец или "],
+  ["d = {}\nd['a'] += 1",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nKeyError: 'a'",
+   "В словаре нет ключа a"],
+  ["lst = [1, 2]\nprint(lst[5])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nIndexError: list index out of range",
+   "В списке нет элемента с таким номером"],
+  ["print(orders.groupby('status')['revenue'].agg('avg'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nAttributeError: 'SeriesGroupBy' object has no attribute 'avg'. Did you mean: 'agg'?",
+   "Среднее в pandas"],
+  ["print(orders.loc[orders.revenue > 100, 'revenue', 'status'])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\npandas.errors.IndexingError: Too many indexers",
+   "В"],
+  ["print(orders.query(\"revenue > 100 and status = 'paid'\"))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nSyntaxError: Python keyword not valid identifier in numexpr query",
+   "Python не понял строку"],
+  ["print(orders.apply(lambda r: r.revenue * 2))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\n  File \"<exec>\", line 1, in <lambda>\nAttributeError: 'Series' object has no attribute 'revenue'",
+   "apply без axis=1 отдаёт функции столбцы, а не строки, поэтом"],
+  ["df = pd.read_csv('orders.csv')",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nFileNotFoundError: [Errno 44] No such file or directory: 'orders.csv'",
+   "Файлов с диска здесь нет"],
+  ["top = orders.sort_values('revenue', inplace=True)\nprint(top['revenue'])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nTypeError: 'NoneType' object is not subscriptable",
+   "С inplace=True метод меняет таблицу на месте и возвращает No"],
+  ["print(orders.groupby(['user_id']).agg({['revenue']: 'sum'}))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: unhashable type: 'list'",
+   "Список стоит там, где нужно одно значение"],
+  ["print(pd.to_datetime('2024-13-01'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\npandas._libs.tslibs.parsing.DateParseError: month must be in 1..12: 2024-13-01, at position 0",
+   "Текст не читается как дата"],
+  ["print(orders.revenue.mean.round(2))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nAttributeError: 'function' object has no attribute 'round'",
+   "Метод взят без скобок"],
+  ["if orders.revenue > 100:\n    print('много')",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+   "if ждёт одно значение True или False, а сравнение столбца да"],
+  ["print(orders.revenu.sum())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nAttributeError: 'DataFrame' object has no attribute 'revenu'. Did you mean: 'revenue'?",
+   "Нет метода или столбца revenu"],
+  ["print(orders['revenue'] + ' руб.')",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nnumpy.core._exceptions._UFuncNoLoopError: ufunc 'add' did not contain a loop with signature matching types (dtype('float64'), dtype('<U5')) -> None",
+   "Текст и число смешаны в одном расчёте"],
+  ["print(np.mean(orders['status']))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Could not convert string 'paidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidrefundedpaidpaidpaidpaidpaidrefundedpendingpaidpaidpendingpaidpaidpaidpaidrefundedrefundedpaidpaidpaidpaidrefundedpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidrefundedpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpendingpaidpaidpaidpaidpendingpaidrefundedpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpendingpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpendingpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpendingpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpendingpaidrefundedpaidpendingpaidpaidpaidpaidpaidpaidpaidrefundedpendingrefundedpaidpaidpaidpaidpaidpaidpendingrefundedpaidpendingpaidrefundedpaidpaidpaidpaidrefundedpaidpaidpendingpaidpaidpaidpaidpaidpaidpaidpaidpaidpaidpaid' to numeric",
+   "Среднее или сумма посчитаны по столбцу с текстом"],
+  ["print(orders.merge(users, on='id'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: 'id'",
+   "Нет столбца id"],
+  ["print(orders.resample('M').revenue.sum())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Only valid with DatetimeIndex, TimedeltaIndex or PeriodIndex, but got an instance of 'RangeIndex'",
+   "resample группирует по датам из индекса, а в индексе номера "],
+  ["x = 5\nprint(f'x = {x')",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2\n    print(f'x = {x')\n                  ^\nSyntaxError: f-string: expecting '}'",
+   "Python не понял строку"],
+  ["if True:\nprint(1)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2\n    print(1)\n    ^^^^^\nIndentationError: expected an indented block after 'if' statement on line 1",
+   "После строки с двоеточием (def, for, if) следующая строка до"],
+  ["print(round(orders.revenue.mean(), '2'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: 'str' object cannot be interpreted as an integer",
+   "Там, где нужно целое число, стоит текст"],
+  ["print(orders.value_counts('nope'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: 'nope'",
+   "Нет столбца nope"],
+  ["print(orders.rename(columns='revenue'))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Index(...) must be called with a collection of some kind, 'revenue' was passed",
+   "В rename(columns=…) передают словарь «старое имя"],
+  ["print(orders.drop('nope', axis=1))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: \"['nope'] not found in axis\"",
+   "Нет столбца nope"],
+  ["print(orders['revenue'].quantile(95))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: percentiles should all be in the interval [0, 1]",
+   "Квантиль задают долей от 0 до 1"],
+  ["print(orders[100 < orders.revenue < 500])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+   "Двойное сравнение со столбцом, 100 < x < 500, Python делит н"],
+  ["print(orders[orders.revenue > 100 & orders.revenue < 500])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: Cannot perform 'rand_' with a dtyped [float64] array and scalar of type [bool]",
+   "Условия, соединённые & или |, берут в скобки"],
+  ["i = 0\nwhile i < 3:\n    print(i)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nTimeoutError: код считается дольше 3 секунд — похоже, цикл не заканчивается",
+   "Похоже, цикл не заканчивается"],
+  ["from scipy import stats",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nModuleNotFoundError: No module named 'scipy'\nThe module 'scipy' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"scipy\") in Python, or\n  await pyodide.loadPackage(\"scipy\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.",
+   "scipy в браузер курса не загружается"],
+  ["n = 0\nprint(10 / n)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nZeroDivisionError: division by zero",
+   "Деление на ноль"],
+  ["def share(a, b):\n    return a / b\nprint(share(5))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 3, in <module>\nTypeError: share() missing 1 required positional argument: 'b'",
+   "Функции не хватает аргумента"],
+  ["counts = {'paid': 1}\nprint(counts['refunded'])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nKeyError: 'refunded'",
+   "В словаре нет ключа refunded"],
+  ["import matplotlib\nmatplotlib.use('Agg')\nimport matplotlib.pyplot as plt\nplt.plot([1, 2, 3], [1, 2])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 4, in <module>\nValueError: x and y must have same first dimension, but have shapes (3,) and (2,)",
+   "Для графика нужно поровну значений по оси x и по оси y"],
+  ["del np\nprint(np.mean([1, 2]))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nNameError: name 'np' is not defined",
+   "np"],
+  ["del pd\nprint(pd.DataFrame())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nNameError: name 'pd' is not defined",
+   "pd"],
+  ["print(pd.to_datetime(pd.Series(['2024-01-01', '2024-13-45'])))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: time data \"2024-13-45\" doesn't match format \"%Y-%m-%d\", at position 1. You might want to try:\n    - passing `format` if your strings have a consistent format;\n    - passing `format='ISO8601'` if your strings are all ISO8601 but not necessarily in exactly the same format;\n    - passing `format='mixed'`, and the format will be inferred for each element individually. You might want to use `dayfirst` alongside this.",
+   "Текст не читается как дата"],
+  ["print(orders.iloc[[100000]])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nIndexError: positional indexers are out-of-bounds",
+   "Строки с таким номером нет"],
+  ["x = orders['revenue'].apply(lambda v: v * 2)\nprint(orders['status'].valuecounts())",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 2, in <module>\nAttributeError: 'Series' object has no attribute 'valuecounts'. Did you mean: 'value_counts'?",
+   "Нет метода или столбца valuecounts"],
+  ["counts = {}\nfor word in ['a', 'b']:\n    counts[word] += 1",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 3, in <module>\nKeyError: 'a'",
+   "В словаре нет ключа a"],
+  ["lst = [1, 2]\nlst = lst.append(3)\nprint(lst[0])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 3, in <module>\nTypeError: 'NoneType' object is not subscriptable",
+   "append, sort, extend и reverse меняют список на месте"],
+  ["print(orders[['revenu', 'stat']])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: \"None of [Index(['revenu', 'stat'], dtype='object')] are in the [columns]\"",
+   "Нет столбцов revenu, stat"],
+  ["print(orders.loc[['x']])",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nKeyError: \"None of [Index(['x'], dtype='object')] are in the [index]\"",
+   "Ни одного из значений x нет в индексе таблицы"],
+  ["print(2 / orders.revenue.mean)",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: unsupported operand type(s) for /: 'int' and 'method'",
+   "Метод взят без скобок"],
+  ["print(np.percentile(orders.revenue, 150))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nValueError: Percentiles must be in the range [0, 100]",
+   "np"],
+  ["print(sum(5))",
+   "Traceback (most recent call last):\n  File \"<exec>\", line 1, in <module>\nTypeError: 'int' object is not iterable",
+   "Цикл for и функции вроде sum и max ждут список, столбец или "],
+  ["print(orders[orders.revenue > 100 & orders.revenue < 500])",
+   "Traceback (most recent call last):\n  File \"/lib/python3.12/site-packages/pandas/core/ops/array_ops.py\", line 362, in na_logical_op\n    result = op(x, y)\n             ^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/roperator.py\", line 54, in rand_\n    return operator.and_(right, left)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: ufunc 'bitwise_and' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/lib/python3.12/site-packages/pandas/core/ops/array_ops.py\", line 376, in na_logical_op\n    result = libops.scalar_binop(x, y, op)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"ops.pyx\", line 180, in pandas._libs.ops.scalar_binop\nValueError: Buffer dtype mismatch, expected 'Python object' but got 'double'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/ops/common.py\", line 76, in new_method\n    return method(self, other)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/arraylike.py\", line 74, in __rand__\n    return self._logical_method(other, roperator.rand_)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/series.py\", line 6110, in _logical_method\n    res_values = ops.logical_op(lvalues, rvalues, op)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/ops/array_ops.py\", line 454, in logical_op\n    res_values = na_logical_op(lvalues, rvalues, op)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/ops/array_ops.py\", line 385, in na_logical_op\n    raise TypeError(\nTypeError: Cannot perform 'rand_' with a dtyped [float64] array and scalar of type [bool]\n",
+   "Условия, соединённые & или |, берут в скобки: & считается ра"],
+  ["print(orders[orders.user_id > 10 & orders.user_id < 50])",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/generic.py\", line 1576, in __nonzero__\n    raise ValueError(\nValueError: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().\n",
+   "Условия, соединённые & или |, берут в скобки: & считается ра"],
+  ["def top(t):\n    t.sort_values('revenue')\nprint(top(orders).head())",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 3, in <module>\nAttributeError: 'NoneType' object has no attribute 'head'\n",
+   "В переменной None — пустое значение. Его возвращает функция "],
+  ["for i in range('5'):\n    print(i)",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\nTypeError: 'str' object cannot be interpreted as an integer\n",
+   "Там, где нужно целое число, стоит текст в кавычках. Числа пи"],
+  ["counts = {}\nprint(orders['revnue'].sum())",
+   "Traceback (most recent call last):\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 3802, in get_loc\n    return self._engine.get_loc(casted_key)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"index.pyx\", line 153, in pandas._libs.index.IndexEngine.get_loc\n  File \"index.pyx\", line 182, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7081, in pandas._libs.hashtable.PyObjectHashTable.get_item\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7089, in pandas._libs.hashtable.PyObjectHashTable.get_item\nKeyError: 'revnue'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 2, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/frame.py\", line 4090, in __getitem__\n    indexer = self.columns.get_loc(key)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 3809, in get_loc\n    raise KeyError(key) from err\nKeyError: 'revnue'\n",
+   "Нет столбца revnue. Сверьте имя со схемой: буквы, регистр, к"],
+  ["d = {1: 'a'}\nprint(d[5])",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 2, in <module>\nKeyError: 5\n",
+   "В словаре нет ключа 5. Ключ сначала добавляют — d[5] = 0 — и"],
+  ["counts = {}\nfor s in orders['status']:\n    counts[s] += 1",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 3, in <module>\nKeyError: 'paid'\n",
+   "В словаре нет ключа paid. Ключ сначала добавляют — d[\"paid\"]"],
+  ["t = orders.head(2)\nt = t.append(orders.tail(2))\nprint(t)",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 2, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/generic.py\", line 6293, in __getattr__\n    return object.__getattribute__(self, name)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'DataFrame' object has no attribute 'append'. Did you mean: '_append'?\n",
+   "В pandas 2 у таблицы и столбца нет append: строки добавляют "],
+  ["print(orders.ix[0])",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/generic.py\", line 6293, in __getattr__\n    return object.__getattribute__(self, name)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'DataFrame' object has no attribute 'ix'\n",
+   "В pandas 2 нет .ix: по меткам строк берут .loc, по номерам —"],
+  ["print(orders.loc[[0, 99999]])",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/indexing.py\", line 1192, in __getitem__\n    return self._getitem_axis(maybe_callable, axis=axis)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexing.py\", line 1421, in _getitem_axis\n    return self._getitem_iterable(key, axis=axis)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexing.py\", line 1361, in _getitem_iterable\n    keyarr, indexer = self._get_listlike_indexer(key, axis)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexing.py\", line 1559, in _get_listlike_indexer\n    keyarr, indexer = ax._get_indexer_strict(key, axis_name)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6199, in _get_indexer_strict\n    self._raise_if_missing(keyarr, indexer, axis_name)\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6251, in _raise_if_missing\n    raise KeyError(f\"{not_found} not in index\")\nKeyError: '[99999] not in index'\n",
+   "Нет строк с метками 99999 в индексе таблицы: .loc ищет по ме"],
+  ["def share(a, b):\n    return a / b\nprint(share(5))",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 3, in <module>\nTypeError: share() missing 1 required positional argument: 'b'\n",
+   "Функции не хватает аргумента b: в вызове меньше значений, че"],
+  ["print(orders[['revenue', 'revnue']])",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/frame.py\", line 4096, in __getitem__\n    indexer = self.columns._get_indexer_strict(key, \"columns\")[1]\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6199, in _get_indexer_strict\n    self._raise_if_missing(keyarr, indexer, axis_name)\n  File \"/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6251, in _raise_if_missing\n    raise KeyError(f\"{not_found} not in index\")\nKeyError: \"['revnue'] not in index\"\n",
+   "Нет столбца revnue. Сверьте имя со схемой: буквы, регистр, к"],
+  ["for name, col in orders.iteritems():\n    print(name)",
+   "Traceback (most recent call last):\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 597, in eval_code_async\n    await CodeRunner(\n  File \"/lib/python312.zip/_pyodide/_base.py\", line 411, in run_async\n    coroutine = eval(self.code, globals, locals)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<exec>\", line 1, in <module>\n  File \"/lib/python3.12/site-packages/pandas/core/generic.py\", line 6293, in __getattr__\n    return object.__getattribute__(self, name)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'DataFrame' object has no attribute 'iteritems'. Did you mean: 'isetitem'?\n",
+   "В pandas 2 нет iteritems — он называется items: for имя, сто"]
+];
+
+/* [код, последняя строка pandas 3, слова подсказки]: сообщения, которые в
+   pandas 3 другие, — подсказка должна остаться той же */
+const PY3 = [
+  ["print(orders[orders.revenue > 100 & orders.status == 'paid'])",
+   "TypeError: operation 'rand_' not supported for dtype 'str' with object of type <class 'int'>",
+   "Условия, соединённые & или |, берут в скобки"],
+  ["print(orders.groupby('user_id').mean())",
+   "TypeError: dtype 'str' does not support operation 'mean'", "Среднее или сумма посчитаны по столбцу с текстом"],
+  ["print(np.mean(orders['status']))",
+   "TypeError: Cannot perform reduction 'mean' with string dtype", "Среднее или сумма посчитаны по столбцу с текстом"]
+];
+
 /* [запрос, меняет ли он базу] */
 const WRITES = [
   ["DELETE FROM users", true],
@@ -523,7 +779,7 @@ for (const [q, want] of DATES) {
 for (const t of TRACES) {
   const got = pyTrace(t.trace.join("\n") + "\n");
   if (got !== t.want) bad.push("Трассировка " + show(t.code) + "\n  получилось:\n" + got + "\n  нужно:\n" + t.want);
-  const h = Check.pyErr(got);
+  const h = Check.pyErr(got, t.code);
   if (h.indexOf(t.hint) < 0) bad.push("Check.pyErr на трассировке " + show(t.code) + ": " + (h || "(нет)") + "\n  нужны слова: " + t.hint);
 }
 
@@ -561,6 +817,17 @@ const capText = "больше " + Engine.cap().split(String.fromCharCode(160)).j
 if (course.window.CONTENT.m1l4.theory.indexOf(capText) < 0)
   bad.push("Теория m1l4 не называет потолок пробы рекурсии «" + capText + "» (Engine.LOOP)");
 
+for (const [code, trace, want] of PYERR) {
+  const h = Check.pyErr(trace, code);
+  if (h.indexOf(want) < 0) bad.push("Check.pyErr на " + show(code) + "\n  ошибка: " + trace.split("\n").pop() +
+    "\n  подсказка: " + (h || "(нет)") + "\n  нужны слова: " + want);
+}
+for (const [code, last, want] of PY3) {
+  const h = Check.pyErr(last, code);
+  if (h.indexOf(want) < 0) bad.push("Check.pyErr (pandas 3) на " + show(code) + "\n  ошибка: " + last +
+    "\n  подсказка: " + (h || "(нет)") + "\n  нужны слова: " + want);
+}
+
 for (const [q, want] of WRITES) {
   if (Engine.writes(q) !== want) bad.push("Engine.writes(" + show(q) + ") = " + Engine.writes(q) + ", нужно " + want);
 }
@@ -573,4 +840,5 @@ console.log("Ошибки по-русски: SQL — " + SQL.length + " запр
   ", сообщения браузера (SQLite 3.45.2) — " + SQL.length + ", других версий — " + MSG.length +
   "; даты без кавычек — " + DATES.length + "; рекурсия без остановки — " + LOOPS.length +
   " (запросов курса с WITH — " + mine.length + ")" +
-  "; трассировки Python — " + TRACES.length + "; запись в базу — " + WRITES.length + ".");
+  "; трассировки Python — " + TRACES.length + ", ошибки Python — " + PYERR.length + " (pandas 3 — " + PY3.length + ")" +
+  "; запись в базу — " + WRITES.length + ".");
