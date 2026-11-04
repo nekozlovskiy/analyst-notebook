@@ -106,13 +106,13 @@ else {
   state = {};
   v = Skills.level(sk("sql-join"));
   eq("пусто: ступень", v.stage, 0);
-  eq("пусто: числа", [v.lessons, v.drills, v.quiz], [[0, 1], [0, 5], [0, 6]]);
+  eq("пусто: числа", [v.lessons, v.drills, v.quiz], [[0, 1], [0, 6], [0, 6]]);
   eq("пусто: дальше", v.next, { text: "Пройти урок 1.2", href: "#m1l1" });
 
   state = { done: { m1l1: 1 } };
   v = Skills.level(sk("sql-join"));
   eq("урок пройден: ступень", v.stage, 1);
-  eq("урок пройден: дальше", v.next, { text: "Тренажёр урока 1.2: решено 0 из 5", href: "#m1l1" });
+  eq("урок пройден: дальше", v.next, { text: "Тренажёр урока 1.2: решено 0 из 6", href: "#m1l1" });
 
   /* половина тренажёра на 10 задачах: 4 — мало, 5 — достаточно */
   state = { done: { m2l2: 1, m2l3: 1 }, drills: marks("m2l2", 4) };

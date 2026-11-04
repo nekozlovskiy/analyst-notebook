@@ -34,7 +34,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {}, mock: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {}, mock: {}, conflicts: {}, codeReview: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -74,12 +74,156 @@ const Store = (function () {
   })();
 
   let timer = null;
-  function notify() { listeners.forEach(function (f) { f(); }); }
+  let changes = Object.create(null);
+  let backup = Object.create(null);
+  const PREFIX = "da.pending.v1.";
+  const tabKey = PREFIX + Date.now() + "-" + Math.random().toString(36).slice(2);
+  let locks = typeof navigator !== "undefined" && navigator.locks;
+  let revision = 0;
+  const clone = function (v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); };
+  let initial = clone(state);
+  const same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b); };
+  function notify(why) { listeners.forEach(function (f) { f(why); }); }
+
+  function latest() {
+    const raw = localStorage.getItem(KEY);
+    return raw ? Object.assign(blank(), JSON.parse(raw)) : clone(initial);
+  }
+
+  /* Журнал каждой вкладки пишется под своим ключом до ожидания блокировки.
+     Закрытие вкладки не отменяет правку: следующая загрузка восстановит её.
+     Без Web Locks журналы остаются запасным источником при гонке записей. */
+  function journal() {
+    if (mode !== "local") return;
+    try {
+      localStorage.setItem(tabKey, JSON.stringify({ reset: state._reset, rev: revision, changes: locks ? changes : backup }));
+    } catch (e) { mode = "memory"; dirty = true; notify(); }
+  }
+
+  function collect(next) {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || key.indexOf(PREFIX) !== 0) continue;
+      const raw = localStorage.getItem(key);
+      try { entries.push({ key: key, raw: raw, data: JSON.parse(raw) }); } catch (e) {}
+    }
+    next._applied = next._applied || {}; next._writers = next._writers || {};
+    let changed = false;
+    entries.forEach(function (entry) {
+      const d = entry.data, applied = next._applied[entry.key] || 0;
+      if (!d || d.reset !== next._reset || d.rev <= applied) return;
+      Object.keys(d.changes || {}).forEach(function (k) {
+        const p = d.changes[k], b = p.bucket;
+        if (p.rev <= applied) return;
+        if (!next[b]) next[b] = {};
+        const cur = next[b][p.id];
+        if ((b === "code" || b === "notes") && next._writers[k] !== entry.key &&
+            !same(cur, p.before) && !same(cur, p.value)) {
+          const id = entry.key + ":" + p.rev;
+          next.conflicts[id] = { bucket: b, id: p.id, mine: p.value, other: cur === undefined ? "" : cur };
+        }
+        if (p.remove) delete next[b][p.id];
+        else if (["done", "attempts", "time", "days", "steps", "drills", "mtest"].indexOf(b) >= 0 &&
+                 typeof p.value === "number" && typeof cur === "number") next[b][p.id] = Math.max(cur, p.value);
+        else next[b][p.id] = p.value;
+        if (b === "code" || b === "notes") next._writers[k] = entry.key;
+      });
+      next._applied[entry.key] = d.rev; changed = true;
+    });
+    return { next: next, entries: entries, changed: changed };
+  }
+
+  function locked(f) {
+    if (!locks) return f();
+    return locks.request(KEY, f).catch(function () {
+      locks = null;
+      Object.keys(changes).forEach(function (k) { backup[k] = clone(changes[k]); });
+      if (mode === "local" && Object.keys(changes).length) journal();
+      return f();
+    });
+  }
+  function save() { return locked(flush); }
+
+  /* Записываем только поля, изменённые этой вкладкой. Код и заметки в
+     открытом редакторе не подменяем чужим текстом: его исходная версия
+     нужна для обнаружения конфликта при следующей правке. */
+  function receive(next) {
+    Object.keys(changes).forEach(function (k) {
+      if (changes[k].rev <= ((next._applied || {})[tabKey] || 0)) delete changes[k];
+    });
+    state = Object.assign({}, next, { code: state.code, notes: state.notes });
+    Object.keys(changes).forEach(function (k) {
+      const p = changes[k];
+      if (!state[p.bucket]) state[p.bucket] = {};
+      if (p.remove) delete state[p.bucket][p.id]; else state[p.bucket][p.id] = p.value;
+    });
+  }
+
+  function put(bucket, id, val, remove) {
+    if (!state[bucket]) state[bucket] = {};
+    const key = JSON.stringify([bucket, id]);
+    if (!changes[key]) changes[key] = { bucket: bucket, id: id, before: clone(state[bucket][id]) };
+    changes[key].value = clone(val);
+    changes[key].remove = !!remove;
+    changes[key].rev = ++revision;
+    if (!locks) backup[key] = clone(changes[key]);
+    if (remove) delete state[bucket][id]; else state[bucket][id] = val;
+    if (mode === "memory") { dirty = true; notify(); }
+    else { journal(); clearTimeout(timer); timer = setTimeout(save, 220); }
+  }
+
+  function snapshot() {
+    if (mode !== "local") return state;
+    try {
+      return collect(latest()).next;
+    } catch (e) { return state; }
+  }
 
   function flush() {
+    clearTimeout(timer);
     if (mode !== "local") return;
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch (e) { mode = "memory"; dirty = true; notify(); }
+    let next, conflict = false;
+    try {
+      next = latest();
+      /* Сброс в другой вкладке отменяет и отложенные записи старого курса. */
+      if (next._reset !== state._reset) {
+        changes = Object.create(null); backup = Object.create(null);
+        localStorage.removeItem(tabKey); state = next; notify("reset"); return;
+      }
+      const before = Object.keys(next.conflicts).length, merged = collect(next);
+      conflict = Object.keys(next.conflicts).length > before;
+      if (merged.changed) localStorage.setItem(KEY, JSON.stringify(next));
+      if (locks) merged.entries.forEach(function (e) {
+        if (localStorage.getItem(e.key) === e.raw) localStorage.removeItem(e.key);
+      });
+      receive(next);
+      if (conflict) notify("conflict");
+    } catch (e) {
+      if (next) receive(next);
+      mode = "memory"; dirty = true; notify();
+    }
+  }
+
+  window.addEventListener("storage", function (e) {
+    if (mode !== "local" || (e.key !== KEY && e.key !== null)) return;
+    try {
+      /* Подтверждением служит только запись в KEY. Сбор журналов здесь
+         ещё не сохранён и не вправе очищать местные changes. */
+      const next = e.newValue ? latest() : blank();
+      if (next._reset !== state._reset || !e.newValue) {
+        if (!e.newValue) initial = blank();
+        clearTimeout(timer); changes = Object.create(null); backup = Object.create(null); state = next; notify("reset");
+      } else {
+        const hasConflict = Object.keys(next.conflicts).some(function (k) { return !state.conflicts[k]; });
+        const textChanged = !same(next.code, state.code) || !same(next.notes, state.notes);
+        receive(next); notify(hasConflict ? "conflict" : textChanged ? "remote" : "sync");
+      }
+    } catch (err) { /* временная недоступность не отменяет местную работу */ }
+  });
+
+  if (mode === "local") {
+    try { state = collect(latest()).next; timer = setTimeout(save, 0); } catch (e) {}
   }
 
   return {
@@ -88,20 +232,29 @@ const Store = (function () {
     markSaved: function () { dirty = false; notify(); },
     onChange: function (f) { listeners.push(f); },
 
-    all: function () { return state; },
+    all: snapshot,
     get: function (bucket, id, dflt) {
       const b = state[bucket];
       return b && b[id] !== undefined ? b[id] : dflt;
     },
-    set: function (bucket, id, val) {
-      if (!state[bucket]) state[bucket] = {};
-      state[bucket][id] = val;
-      if (mode === "memory") { dirty = true; notify(); }
-      else { clearTimeout(timer); timer = setTimeout(flush, 220); }
-    },
+    set: put,
     replace: function (next) {
-      state = Object.assign(blank(), next || {});
-      if (mode === "memory") { dirty = false; notify(); } else flush();
+      return locked(function () {
+        clearTimeout(timer); changes = Object.create(null); backup = Object.create(null);
+        state = Object.assign(blank(), next || {});
+        state._reset = Date.now() + "-" + Math.random().toString(36).slice(2);
+        if (mode === "memory") { dirty = false; notify(); }
+        else {
+          try { localStorage.setItem(KEY, JSON.stringify(state)); localStorage.removeItem(tabKey); }
+          catch (e) { mode = "memory"; dirty = true; notify(); }
+        }
+      });
+    },
+    resolve: function (id, which) {
+      const next = snapshot(), c = next.conflicts[id];
+      if (!c || (which !== "mine" && which !== "other")) return;
+      state[c.bucket][c.id] = next[c.bucket][c.id];
+      put(c.bucket, c.id, c[which]); put("conflicts", id, undefined, true);
     },
 
     /* Перенос прогресса не должен ничего отменять: пройденное
@@ -111,33 +264,35 @@ const Store = (function () {
     merge: function (next) {
       const res = { added: 0, changed: 0 };
       if (!next || typeof next !== "object") return res;
+      if (mode === "local") { try { receive(latest()); } catch (e) {} }
+      const current = snapshot();
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
       ["done", "attempts", "time", "days", "steps", "drills", "mtest"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id], val = src[id];
+          const cur = current[b][id], val = src[id];
           const better = cur === undefined ||
             (typeof val === "number" && (typeof cur !== "number" || val > cur));
           if (!better) return;
           if (b === "done" && val && !cur) res.added++;
-          state[b][id] = val;
+          put(b, id, val);
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review", "prep", "plan", "entry", "mock"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep", "plan", "entry", "mock", "conflicts", "codeReview"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id], val = src[id];
+          const cur = current[b][id], val = src[id];
           const empty = function (v) { return v === undefined || v === null || v === ""; };
-          if (empty(cur) && !empty(val)) { state[b][id] = val; res.changed++; }
+          if (empty(cur) && !empty(val)) { put(b, id, val); res.changed++; }
         });
       });
-      if (res.changed) { if (mode === "memory") { dirty = true; notify(); } else flush(); }
+      if (res.changed) { if (mode === "memory") { dirty = true; notify(); } else save(); }
       return res;
     },
-    flush: flush
+    flush: save
   };
 })();
 
@@ -322,7 +477,8 @@ const Theme = {
    ============================================================ */
 
 const Progress = {
-  save: function () {
+  save: async function () {
+    await Store.flush();
     const blob = new Blob([JSON.stringify(Store.all(), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -368,9 +524,9 @@ const Progress = {
     inp.click();
   },
 
-  reset: function () {
+  reset: async function () {
     if (!confirm("Начать курс заново? Прогресс, весь написанный код и заметки будут удалены.")) return;
-    Store.replace(null);
+    await Store.replace(null);
     Router.go("#");
     Router.render(true);
   },
@@ -378,6 +534,7 @@ const Progress = {
   openMenu: function () {
     const done = Course.doneCount(Course.flat), skills = Skills.list();
     const risky = Store.mode() === "memory";
+    const conflicts = Object.keys(Store.all().conflicts || {}).length;
     modal("Прогресс",
       '<div class="theory" style="font-size:14px">' +
         (risky
@@ -394,6 +551,8 @@ const Progress = {
           /* в шапке шестой ссылке нет места — к карте навыков ведёт счётчик */
           "Навыки собеседования: изучено " + skills.filter(Skills.learned).length + " из " + skills.length +
           ' — <a href="#skills">карта навыков</a>.</p>' +
+        (conflicts ? '<p>Есть разные версии ответов из вкладок: ' + conflicts +
+          '. <button class="linkbtn" id="pgConflicts" type="button">Сравнить версии</button>.</p>' : "") +
         (Offline.ready()
           ? "<p>Курс уже открывается без интернета: страница и прочитанные уроки лежат " +
             "в браузере. Кнопка ниже докачает остальное — это около трёх мегабайт, " +
@@ -417,14 +576,39 @@ const Progress = {
     $("#pgReset").addEventListener("click", Progress.reset);
     $("#pgSave").addEventListener("click", Progress.save);
     $("#pgLoad").addEventListener("click", Progress.load);
+    const versions = $("#pgConflicts");
+    if (versions) versions.addEventListener("click", Progress.openConflicts);
     const keep = $("#pgKeep");
     if (keep) keep.addEventListener("click", function () { Offline.keep(keep, $("#pgKeepMsg")); });
   },
 
-  toast: function (text) {
+  openConflicts: function () {
+    const all = Store.all().conflicts || {}, keys = Object.keys(all);
+    if (!keys.length) { modal.close(); Router.render(true); return; }
+    const key = keys[0], c = all[key], l = Course.byId(c.id.split(":")[0]);
+    modal("Две версии ответа",
+      '<p>Этот ответ меняли в двух вкладках. Обе версии сохранены. Выберите, какую оставить в уроке.</p>' +
+      '<p>' + esc(l ? "Урок " + l.num + ": " + l.title : c.id) +
+        (c.bucket === "notes" ? " — заметка" : " — ответ") + ".</p>" +
+      '<p><b>Версия 1</b></p><pre>' + esc(c.mine || "(пусто)") + '</pre>' +
+      '<button class="btn" id="cfMine" type="button">Оставить версию 1</button>' +
+      '<p style="margin-top:20px"><b>Версия 2</b></p><pre>' + esc(c.other || "(пусто)") + '</pre>' +
+      '<button class="btn" id="cfOther" type="button">Оставить версию 2</button>' +
+      '<p style="margin-top:20px">Осталось сравнений: ' + keys.length +
+        '. Можно закрыть окно и вернуться к ним через «Прогресс».</p>');
+    async function choose(which) { Store.resolve(key, which); await Store.flush(); Progress.openConflicts(); }
+    $("#cfMine").addEventListener("click", function () { choose("mine"); });
+    $("#cfOther").addEventListener("click", function () { choose("other"); });
+  },
+
+  toast: function (text, action) {
     let t = $("#toast");
-    if (!t) { t = el("div", { class: "toast", id: "toast" }); document.body.appendChild(t); }
+    if (!t) { t = el("div", { class: "toast", id: "toast", role: "status" }); document.body.appendChild(t); }
     t.textContent = text;
+    if (action) {
+      const b = el("button", { type: "button", class: "linkbtn" }, "Сравнить версии");
+      b.addEventListener("click", Progress.openConflicts); t.appendChild(document.createTextNode(" ")); t.appendChild(b);
+    }
     t.classList.add("show");
     clearTimeout(Progress._t);
     Progress._t = setTimeout(function () { t.classList.remove("show"); }, 5200);
@@ -463,7 +647,7 @@ function acceptDroppedProgress() {
 /* если сохранять некуда — предупреждаем перед закрытием вкладки */
 window.addEventListener("beforeunload", function (e) {
   Store.flush();
-  if (Store.mode() === "memory" && Store.isDirty() && Course.doneCount(Course.flat) > 0) {
+  if (Store.mode() === "memory" && Store.isDirty()) {
     e.preventDefault();
     e.returnValue = "";
     return "";
@@ -668,9 +852,13 @@ function refreshBar() {
   if (pb) pb.textContent = Course.doneCount(Course.flat) + " из " + Course.flat.length;
 }
 
-Store.onChange(function () {
+Store.onChange(function (why) {
   const b = $("#progBtn");
   if (b) b.classList.toggle("unsaved", Store.mode() === "memory" && Store.isDirty());
+  if (why === "conflict") Progress.toast("Ответ меняли в двух вкладках. Обе версии сохранены в «Прогрессе».", true);
+  if (why === "remote") Progress.toast("Другая вкладка сохранила ответы. Чтобы увидеть их здесь, обновите страницу.");
+  if (why === "reset") Router.render(true);
+  if (why === "sync" || why === "remote") refreshBar();
 });
 
 /* ============================================================
@@ -820,6 +1008,59 @@ const Stats = {
   }
 };
 
+/* Позиция в уроке хранится отдельно от отметок о прохождении:
+   раздел и номер уже существующего шага/задачи, без изменения их ключей. */
+const Place = {
+  names: { "s-theory": "Теория", "s-cards": "Карточки", "s-practice": "Практикум",
+    "s-steps": "Шаги", "s-task": "Основная задача", "s-drills": "Тренажёр",
+    "s-quiz": "Самопроверка", "s-links": "Что почитать", "s-notes": "Заметки", "s-after": "Как дальше" },
+  get: function (id) {
+    const p = Store.get("seen", id, null);
+    if (!p || typeof p.section !== "string" || !Object.prototype.hasOwnProperty.call(Place.names, p.section)) return null;
+    const out = { section: p.section };
+    const kind = p.kind === "drill" && p.section === "s-drills" ? "drill"
+      : p.kind === "step" && (p.section === "s-steps" || p.section === "s-practice") ? "step" : null;
+    if (kind && Number.isInteger(p.index) && Number.isInteger(p.total) && p.index >= 0 && p.index < p.total) {
+      out.kind = kind; out.index = p.index; out.total = p.total;
+    }
+    return out;
+  },
+  remember: function (id, section, kind, index, total) {
+    if (!Object.prototype.hasOwnProperty.call(Place.names, section)) return;
+    const p = { section: section };
+    if (kind && Number.isInteger(index) && Number.isInteger(total) && index >= 0 && index < total) {
+      p.kind = kind; p.index = index; p.total = total;
+    }
+    if (JSON.stringify(Store.get("seen", id, null)) !== JSON.stringify(p)) Store.set("seen", id, p);
+    if (Store.get("seen", "last", null) !== id) Store.set("seen", "last", id);
+  },
+  href: function (id) {
+    const p = Place.get(id);
+    return "#" + id + (p ? "/" + p.section + (p.kind ? "/" + p.kind + "-" + (p.index + 1) : "") : "");
+  },
+  label: function (id) {
+    const p = Place.get(id);
+    return p ? Place.names[p.section] + (p.kind ? " — " + (p.kind === "step" ? "шаг " : "задача ") +
+      (p.index + 1) + " из " + p.total : "") : "";
+  },
+  section: function (id, section) {
+    const root = document.getElementById(section);
+    if (!root) return;
+    const p = Place.get(id);
+    if (section === "s-practice" || section === "s-steps") {
+      const peek = p && p.kind === "step" && root.querySelector('.st.peek[data-n="' + p.index + '"]');
+      const active = peek || root.querySelector(".st.open");
+      if (active) { Place.remember(id, section, "step", +active.dataset.n, root.querySelectorAll(".st").length); return; }
+    }
+    if (section === "s-drills") {
+      const last = p && p.kind === "drill" && root.querySelector('.drill[open][data-i="' + p.index + '"]');
+      const active = last || root.querySelector(".drill[open]");
+      if (active) { Place.remember(id, section, "drill", +active.dataset.i, root.querySelectorAll(".drill").length); return; }
+    }
+    Place.remember(id, section);
+  }
+};
+
 /* ============================================================
    План на день
 
@@ -835,7 +1076,7 @@ const Stats = {
 
 const Plan = {
   DAILY: [30, 60, 120],
-  MINS: 90,               /* урок без своей оценки */
+  MINS: 90,               /* запасная оценка для будущего урока без mins */
   REVIEW_SEC: 30,         /* на вопрос или карточку повторения */
   REVIEW_DAY: 5,          /* в среднем минут в день на повторение — для прогноза */
 
@@ -993,7 +1234,7 @@ const Plan = {
         (p.n >= 3
           ? "Оценка по вашему темпу: " + p.n + " " + plural(p.n, "пройденный урок занял", "пройденных урока заняли", "пройденных уроков заняли") +
             " " + Plan.dur(Math.round(p.spent)) + " при оценке " + Plan.dur(Math.round(p.est)) + "."
-          : "Урок — около " + Plan.MINS + " минут, в модуле 0 меньше. После трёх пройденных уроков оценка подстроится под ваш темп.") +
+          : "Длительность взята из плана каждого урока. После трёх пройденных уроков оценка подстроится под ваш темп.") +
         " Из минут в день ≈ " + Plan.REVIEW_DAY + " уходит на повторение. " + paceNote + "</p>";
     }
     node.innerHTML =
@@ -1085,6 +1326,36 @@ const Flash = {
    «урок:cномер» — карточка; miss — сколько раз ошибся или не вспомнил.
    ============================================================ */
 
+const Confidence = {
+  normalize: function (value) { return value === 'high' || value === 'low' ? value : null; },
+  number: function (value) { return Number.isInteger(value) && value > 0 ? value : 0; },
+  misses: function (r) { return r ? Math.min(Confidence.number(r.highMiss), Confidence.number(r.miss)) : 0; },
+  filter: function (items) { return items.filter(function (x) { return x.kind === 'quiz' && Confidence.misses(x.r) > 0; }); },
+  badge: function (r) {
+    const n = Confidence.misses(r);
+    return n ? '<span class="confidence-badge">Ранее ошибок с уверенностью: ' + n + ' из ' + r.miss + '</span>' : '';
+  },
+  html: function () {
+    return '<div class="quiz-confidence" role="group" aria-label="Уверенность перед ответом, необязательно">' +
+      '<span>Насколько уверены? <span class="confidence-optional">Можно не выбирать.</span></span>' +
+      '<div class="confidence-options"><button class="btn" type="button" data-confidence="high" aria-pressed="false">Уверен</button>' +
+      '<button class="btn" type="button" data-confidence="low" aria-pressed="false">Сомневаюсь</button></div></div>';
+  },
+  mount: function (root) {
+    const box = root.querySelector('.quiz-confidence');
+    let value = null, locked = false;
+    const buttons = box ? Array.prototype.slice.call(box.querySelectorAll('[data-confidence]')) : [];
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (locked) return;
+        value = value === b.dataset.confidence ? null : b.dataset.confidence;
+        buttons.forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.confidence === value ? 'true' : 'false'); });
+      });
+    });
+    return { value: function () { return value; }, lock: function () { locked = true; buttons.forEach(function (b) { b.disabled = true; }); } };
+  }
+};
+
 const Review = {
   STEPS: [1, 3, 7, 21],
   LIMIT: 20,              /* больше за раз — уже не пять минут, а урок */
@@ -1094,20 +1365,26 @@ const Review = {
     return m ? { key: k, id: m[1], kind: m[2] ? "card" : "quiz", n: +m[3] } : null;
   },
 
-  /* ref — номер вопроса или "c" + номер карточки. false — запись
-     пропущена: повторный проход в уроке не должен сбивать расписание. */
-  record: function (id, ref, ok, fromLesson) {
+  /* ref — номер вопроса или "c" + номер карточки. false — расписание
+     не менялось. Повторный ответ на вопрос в уроке обновляет статистику,
+     но сохраняет due/step/done. Карточки повторно в уроке не записываются. */
+  record: function (id, ref, ok, fromLesson, confidence) {
     const k = id + ":" + ref;
     const cur = Store.get("review", k, null);
-    if (fromLesson && cur) return false;
+    const quiz = /^\d+$/.test(String(ref)), level = Confidence.normalize(confidence);
+    const miss = Confidence.number(cur && cur.miss) + (ok ? 0 : 1);
+    const extra = quiz ? { confidence: level, highMiss: Confidence.misses(cur) + (!ok && level === 'high' ? 1 : 0) } : {};
+    if (fromLesson && cur) {
+      if (quiz) Store.set('review', k, Object.assign({}, cur, { miss: miss }, extra));
+      return false;
+    }
     const step = cur ? cur.step : -1;
-    const miss = ((cur && cur.miss) || 0) + (ok ? 0 : 1);
     if (ok && step + 1 >= Review.STEPS.length) {
-      Store.set("review", k, { step: step, done: true, miss: miss });
+      Store.set("review", k, Object.assign({ step: step, done: true, miss: miss }, extra));
       return true;
     }
     const next = ok ? step + 1 : 0;
-    Store.set("review", k, { step: next, due: addDays(isoDay(), Review.STEPS[next]), miss: miss });
+    Store.set("review", k, Object.assign({ step: next, due: addDays(isoDay(), Review.STEPS[next]), miss: miss }, extra));
     return true;
   },
 
@@ -1125,6 +1402,7 @@ const Review = {
     const t = isoDay();
     return Review.items().filter(function (x) { return x.r.due <= t; });
   },
+  queue: function (highOnly) { return highOnly ? Confidence.filter(Review.due()) : Review.due(); },
   nextDate: function () {
     const t = isoDay();
     return Review.items().map(function (x) { return x.r.due; })
@@ -1149,7 +1427,9 @@ const Review = {
   /* Блок на главной. Пока в очереди ничего нет, его нет вовсе. */
   section: function () {
     const due = Review.due(), next = Review.nextDate();
-    if (!due.length && !next) return null;
+    const high = Confidence.filter(due).length;
+    const code = CodeReview.list(), codeDue = CodeReview.due();
+    if (!due.length && !next && !code.length) return null;
     const n = Math.min(due.length, Review.LIMIT);
     const node = el("section", { class: "review has-margin" });
     node.innerHTML =
@@ -1162,16 +1442,21 @@ const Review = {
               ? "Накопилось " + Review.say(due) + ", сегодня возьмём " + n + ". "
               : "Сегодня " + Review.say(due) + " из пройденных уроков. ") +
             "Минут пять — и материал останется с вами надолго.</p>" +
-          '<button class="btn primary" id="rvStart" type="button">Начать повторение</button>'
-        : '<p class="review-later">Всё повторено. Следующие вопросы вернутся ' + Review.when(next) + ".</p>") +
+          '<div class="rv-start-actions"><button class="btn primary" id="rvStart" type="button">Начать повторение</button>' +
+          (high ? '<button class="btn" id="rvHigh" type="button">Только ошибки с уверенностью: ' + high + ' из ' + due.length + ' заданий на сегодня</button>' : '') + '</div>'
+        : next ? '<p class="review-later">Вопросы повторены. Следующие вернутся ' + Review.when(next) + ".</p>" : "") +
+      (code.length ? '<p class="review-intro">Ошибки в коде: на сегодня ' + codeDue.length + " из " + code.length + " " +
+        plural(code.length, "темы", "тем", "тем") + '. <a href="#mistakes">Открыть короткую практику</a>.</p>' : "") +
       "</div>";
     const start = $("#rvStart", node);
     if (start) start.addEventListener("click", function () { Review.run($(".review-body", node)); });
+    const highStart = $("#rvHigh", node);
+    if (highStart) highStart.addEventListener('click', function () { Review.run($('.review-body', node), true); });
     return node;
   },
 
-  run: function (box) {
-    const list = Review.due();
+  run: function (box, highOnly) {
+    const list = Review.queue(highOnly);
     const order = shuffled(list.length).slice(0, Review.LIMIT).map(function (i) { return list[i]; });
     const mods = {};
     order.forEach(function (x) { mods[Course.byId(x.id).module.id] = true; });
@@ -1187,15 +1472,16 @@ const Review = {
     }, function () {
       box.innerHTML = '<p class="review-intro">Вопросы не загрузились — похоже, пропал интернет.</p>' +
         '<button class="btn" id="rvRetry" type="button">Попробовать ещё раз</button>';
-      $("#rvRetry", box).addEventListener("click", function () { Review.run(box); });
+      $("#rvRetry", box).addEventListener("click", function () { Review.run(box, highOnly); });
     });
   },
 
   step: function (box, order, i, right) {
     if (i >= order.length) {
-      const next = Review.nextDate();
+      const next = Review.nextDate(), left = Review.due().length;
       box.innerHTML = '<p class="review-intro">Готово: верно ' + right + " из " + order.length + ". " +
-        (next ? "Следующие вопросы вернутся " + Review.when(next) + "." : "Все вопросы выучены.") + "</p>" +
+        (left ? "На сегодня осталось ещё " + left + " " + plural(left, "задание", "задания", "заданий") + ". Закройте этот проход, чтобы вернуться к общей очереди."
+          : next ? "Следующие вопросы вернутся " + Review.when(next) + "." : "Все вопросы выучены.") + "</p>" +
         '<button class="btn" id="rvClose" type="button">Закрыть</button>';
       $("#rvClose", box).addEventListener("click", function () { Router.render(true); });
       return;
@@ -1226,7 +1512,7 @@ const Review = {
 
     const q = C.quiz[x.n];
     let h = '<div class="rv-meta">Вопрос ' + (i + 1) + from + "</div>" +
-      '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
+      Confidence.badge(x.r) + '<div class="q"><div class="q-t"><span>' + q.q + '</span></div>' + Confidence.html() + '<div class="q-opts">';
     shuffled(q.opts.length).forEach(function (orig, pos) {
       h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
         '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
@@ -1234,12 +1520,14 @@ const Review = {
     h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" + nextHtml;
     box.innerHTML = h;
 
+    const confidence = Confidence.mount(box);
     const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
     opts.forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (btn.disabled) return;
         const picked = +btn.dataset.i, ok = picked === q.right;
-        Review.record(x.id, x.n, ok, false);
+        Review.record(x.id, x.n, ok, false, confidence.value());
+        confidence.lock();
         opts.forEach(function (b) {
           b.disabled = true;
           const oi = +b.dataset.i;
@@ -1656,6 +1944,7 @@ const Pages = {
     if (id === "my-notes") return renderMyNotes;
     if (id === "cheats" || /^cheat-[a-z]+$/.test(id)) return renderCheats;
     if (id === "mistakes") return renderMistakes;
+    if (/^code-practice\/[\w-]+$/.test(id)) return renderCodePractice;
     if (id === "skills") return renderSkills;
     if (id === "sandbox") return renderSandbox;
     if (id === "entry-test") return renderEntryTest;
@@ -2190,6 +2479,109 @@ function renderCheats(app, id) {
    (поле miss в корзине review). Группы — уроки, сначала те, где ошибок
    больше; в группе — сначала самые частые. Отсюда ведёт ссылка назад
    к теории: ошибка чаще всего значит, что тему надо перечитать. */
+const CodeReview = {
+  epoch: function () { return Store.all()._reset; },
+  current: function (epoch, node) { return CodeReview.epoch() === epoch && (!node || document.body.contains(node)); },
+  topics: [
+    { id: "sql-schema", lang: "sql", title: "Таблицы и столбцы SQL", theory: "#m0l1/s-steps/step-2" },
+    { id: "sql-aggregate", lang: "sql", title: "Агрегаты и HAVING", theory: "#m1l3/s-theory" },
+    { id: "py-name", lang: "python", title: "Переменные Python", theory: "#m0l2/s-steps/step-4" },
+    { id: "py-column", lang: "python", title: "Имена столбцов pandas", theory: "#m0l3/s-steps/step-3" },
+    { id: "py-condition", lang: "python", title: "Условия над столбцом", theory: "#m0l4/s-steps/step-2" }
+  ],
+  topic: function (id) { return CodeReview.topics.filter(function (t) { return t.id === id; })[0] || null; },
+  identify: function (lang, msg, code) {
+    const why = lang === "sql" ? Check.sqlErr(msg, code) : lang === "python" ? Check.pyErr(msg, code) : "";
+    if (!why) return null;
+    if (lang === "sql") {
+      const plain = code.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ").replace(/'(?:''|[^'])*'/g, "''");
+      if (/no such table:/i.test(msg) || (/no such column:/i.test(msg) && /^(Столбца|У таблицы) /.test(why))) return "sql-schema";
+      if (/misuse of aggregate/i.test(msg) && /\bWHERE\s+(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(plain)) return "sql-aggregate";
+    } else {
+      if (/NameError:/.test(msg) && /^Python не знает имени /.test(why)) return "py-name";
+      if (/KeyError:/.test(msg) && /^(Столбца|Нет столбца|Нет столбцов) /.test(why) && !/\.(loc|iloc|at|iat)\s*\[/.test(code)) return "py-column";
+      if (/truth value of a (Series|DataFrame) is ambiguous/.test(msg)) return "py-condition";
+    }
+    return null;
+  },
+  valid: function (r) { return r && Number.isInteger(r.count) && r.count > 0 && Number.isInteger(r.round) && r.round > 0 &&
+    typeof r.done === "boolean" && (r.done || typeof r.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.due)); },
+  record: function (lang, msg, code, source) {
+    if (!source || !Course.byId(source.lesson)) return null;
+    if (Object.prototype.hasOwnProperty.call(source, 'reset') && !CodeReview.current(source.reset)) return null;
+    if (typeof source.starter === "string" && String(code).trim() === source.starter.trim()) return null;
+    const id = CodeReview.identify(lang, String(msg), String(code));
+    if (!id) return null;
+    const all = Store.all().codeReview || {}, old = CodeReview.valid(all[id]) ? all[id] : {};
+    Store.set("codeReview", id, { count: (old.count || 0) + 1, first: old.first || Date.now(), last: Date.now(),
+      lesson: source.lesson, section: source.section, kind: source.kind, index: source.index,
+      step: -1, due: isoDay(), done: false, round: (old.round || 0) + 1 });
+    return id;
+  },
+  list: function () {
+    const all = Store.all().codeReview || {};
+    return CodeReview.topics.filter(function (t) { return CodeReview.valid(all[t.id]); }).map(function (t) {
+      return { topic: t, r: all[t.id] };
+    }).sort(function (a, b) { return (a.r.done ? 1 : 0) - (b.r.done ? 1 : 0) || b.r.count - a.r.count; });
+  },
+  due: function () { return CodeReview.list().filter(function (x) { return !x.r.done && x.r.due <= isoDay(); }); },
+  complete: function (id, round) {
+    const r = (Store.all().codeReview || {})[id];
+    if (!CodeReview.topic(id) || !CodeReview.valid(r) || r.round !== round || r.done || r.due > isoDay()) return null;
+    const step = Number.isInteger(r.step) && r.step >= -1 && r.step < Review.STEPS.length ? r.step + 1 : 0;
+    const done = step >= Review.STEPS.length;
+    const next = Object.assign({}, r, { step: step, done: done, due: done ? null : addDays(isoDay(), Review.STEPS[step]), round: round + 1 });
+    Store.set("codeReview", id, next); return next;
+  },
+  origin: function (r) {
+    const l = Course.byId(r.lesson);
+    if (!l) return "";
+    const section = typeof r.section === "string" && Object.prototype.hasOwnProperty.call(Place.names, r.section) ? r.section : "s-task";
+    const part = Number.isInteger(r.index) && r.index >= 0 && (r.kind === "step" || r.kind === "drill")
+      ? "/" + r.kind + "-" + (r.index + 1) : "";
+    return '<a href="#' + l.id + "/" + section + part + '">Вернуться к месту ошибки</a>';
+  },
+  theoryLink: function (t) {
+    return /\/s-steps\//.test(t.theory)
+      ? '<button class="linkbtn" type="button" data-code-theory="' + t.id + '">Перечитать объяснение</button>'
+      : '<a href="' + t.theory + '">Перечитать объяснение</a>';
+  },
+  bind: function (root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-code-theory]"), function (b) {
+      b.addEventListener("click", function () {
+        const t = CodeReview.topic(b.dataset.codeTheory), m = t && /^#(m\d+l\d+)\/s-steps\/step-(\d+)$/.exec(t.theory);
+        if (!m) return;
+        const l = Course.byId(m[1]), title = "Объяснение: " + t.title, token = {};
+        CodeReview.explaining = token;
+        modal(title, '<p>Открываю объяснение…</p>');
+        Lazy.content(l.module.id).then(function () {
+          if (CodeReview.explaining !== token || !$("#modalBg.show") || $("#modalT").textContent !== title) return;
+          const s = window.CONTENT[l.id].steps[+m[2] - 1];
+          modal(title, '<div class="theory">' + s.body + '</div>');
+          Terms.mark($("#modalB"));
+        }).catch(function () {
+          if (CodeReview.explaining === token && $("#modalBg.show") && $("#modalT").textContent === title)
+            modal(title, '<p>Объяснение не загрузилось. Проверьте соединение и откройте его ещё раз.</p>');
+        });
+      });
+    });
+  },
+  panel: function () {
+    const items = CodeReview.list();
+    if (!items.length) return "";
+    return '<section class="block mx-group" id="mxCode"><div class="block-h"><h2>Ошибки в коде</h2></div>' +
+      '<p class="block-intro">Распознанные ошибки запуска из уроков. После верной практики тема вернётся через 1, 3, 7 и 21 день.</p>' +
+      '<ol class="mx-list">' + items.map(function (x) {
+        const r = x.r, t = x.topic;
+        const when = r.done ? "закреплено" : r.due <= isoDay() ? "практика на сегодня" : "повторить " + Review.when(r.due);
+        return '<li class="mx-item"><div class="mx-meta">' + (t.lang === "sql" ? "SQL" : "Python") + " · " +
+          r.count + " " + plural(r.count, "запуск с ошибкой", "запуска с ошибкой", "запусков с ошибкой") + " · " + when + '</div>' +
+          '<div class="mx-q">' + t.title + '</div><p class="mx-go"><a href="#code-practice/' + t.id + '">Короткая практика</a> · ' +
+          CodeReview.theoryLink(t) + '</p>' + CodeReview.origin(r) + "</li>";
+      }).join("") + "</ol></section>";
+  }
+};
+
 function renderMistakes(app) {
   const again = takeRetry("mistakes");
   document.title = "Мои ошибки — Тетрадь аналитика";
@@ -2200,17 +2592,20 @@ function renderMistakes(app) {
     if (x) { x.r = all[k]; x.lesson = Course.byId(x.id); }
     return x;
   }).filter(function (x) { return x && x.lesson && x.r && x.r.miss > 0; });
+  const codeItems = CodeReview.list();
 
   const main = el("main", { class: "wrap lesson-wrap page" });
   main.innerHTML = pageHead("Мои ошибки",
-    items.length
+    items.length || codeItems.length
       ? "Вопросы и карточки, на которых вы ошибались, — по урокам, сначала самые трудные. " +
-        "Там, где ошибок много, быстрее перечитать теорию, чем ждать повторения."
+        "Ошибки запуска кода собраны по темам: у каждой есть объяснение и короткая практика."
       : "Здесь соберутся вопросы самопроверки и карточки, на которых вы ошиблись или " +
-        "не вспомнили ответ. Пока таких нет.",
+        "не вспомнили ответ, и распознанные ошибки кода из уроков. Пока таких нет.",
     "ошибка — это адрес, куда вернуться") +
+    CodeReview.panel() +
     '<div id="mxBody">' + (items.length ? '<p class="page-wait">Собираю вопросы из уроков…</p>' : "") + "</div>";
   app.appendChild(main);
+  CodeReview.bind(main);
   if (!items.length) {
     const r = Stats.resume();
     $("#mxBody").innerHTML = '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m0l1") + '">' +
@@ -2229,39 +2624,53 @@ function renderMistakes(app) {
       const list = C && (x.kind === "card" ? C.cards : C.quiz);
       return list && list[x.n];
     });
-    const byLesson = {};
-    live.forEach(function (x) { (byLesson[x.id] = byLesson[x.id] || []).push(x); });
-    const miss = function (xs) { return xs.reduce(function (s, x) { return s + x.r.miss; }, 0); };
-    const groups = Course.flat.filter(function (l) { return byLesson[l.id]; })
-      .map(function (l) { return { lesson: l, xs: byLesson[l.id] }; })
-      .sort(function (a, b) { return miss(b.xs) - miss(a.xs); });   /* sort устойчив: при равенстве — порядок курса */
-    const total = miss(live);
-
-    let h = '<p class="prep-sum">' + total + " " + plural(total, "ошибка", "ошибки", "ошибок") + " в " +
-      live.length + " " + plural(live.length, "вопросе", "вопросах", "вопросах") + " и карточках из " +
-      groups.length + " " + plural(groups.length, "урока", "уроков", "уроков") + ".</p>";
-    groups.forEach(function (g) {
-      const L = g.lesson, C = window.CONTENT[L.id], m = miss(g.xs);
-      g.xs.sort(function (a, b) { return b.r.miss - a.r.miss; });
-      h += '<section class="block mx-group"><div class="block-h"><h2>' + L.num + " " + esc(L.title) +
-          '<span class="prep-n">' + m + "</span></h2></div>" +
-        '<p class="mx-go"><a href="#' + L.id + '">Перечитать теорию урока ' + L.num + "</a></p>" +
-        '<ol class="mx-list">' + g.xs.map(function (x) {
-          const card = x.kind === "card";
-          const it = card ? C.cards[x.n] : C.quiz[x.n];
-          const state = x.r.done ? "выучено"
-            : x.r.due <= isoDay() ? "в повторении сегодня" : "вернётся " + Review.when(x.r.due);
-          return '<li class="mx-item"><div class="mx-meta"><span class="mx-n">' +
-              x.r.miss + " " + plural(x.r.miss, "ошибка", "ошибки", "ошибок") + "</span>" +
-              (card ? "карточка" : "вопрос") + " · " + state + "</div>" +
-            '<div class="mx-q">' + it.q + "</div>" +
-            '<details class="mx-a"><summary>Правильный ответ</summary><div>' +
-              (card ? it.a : "<p><b>" + it.opts[it.right] + "</b></p><p>" + it.why + "</p>") +
-            "</div></details></li>";
-        }).join("") + "</ol></section>";
+    const high = Confidence.filter(live).length;
+    box.innerHTML = '<div class="mx-filters" role="group" aria-label="Фильтр вопросов и карточек с ошибками">' +
+      '<button class="btn" type="button" data-mx-filter="all" aria-pressed="true">Все вопросы и карточки</button>' +
+      '<button class="btn" type="button" data-mx-filter="high" aria-pressed="false">С уверенностью: ' + high + ' из ' + live.length + '</button></div>' +
+      '<div id="mxList"></div>';
+    function draw(highOnly) {
+      const selected = highOnly ? Confidence.filter(live) : live, byLesson = {};
+      selected.forEach(function (x) { (byLesson[x.id] = byLesson[x.id] || []).push(x); });
+      const miss = function (xs) { return xs.reduce(function (s, x) { return s + x.r.miss; }, 0); };
+      const groups = Course.flat.filter(function (l) { return byLesson[l.id]; })
+        .map(function (l) { return { lesson: l, xs: byLesson[l.id] }; })
+        .sort(function (a, b) { return miss(b.xs) - miss(a.xs); });
+      const total = miss(selected);
+      const questions = selected.filter(function (x) { return x.kind === 'quiz'; }).length, cards = selected.length - questions;
+      const where = (questions ? questions + ' ' + plural(questions, 'вопросе', 'вопросах', 'вопросах') : '') +
+        (questions && cards ? ' и ' : '') + (cards ? cards + ' ' + plural(cards, 'карточке', 'карточках', 'карточках') : '');
+      let h = selected.length ? '<p class="prep-sum">' + total + ' ' + plural(total, 'ошибка', 'ошибки', 'ошибок') + ' в ' +
+        where + ' из ' +
+        groups.length + ' ' + plural(groups.length, 'урока', 'уроков', 'уроков') + '.</p>'
+        : '<p class="page-empty">' + (highOnly ? 'Пока нет ошибок с отмеченной высокой уверенностью. Её можно выбрать перед ответом в самопроверке урока или в повторении.' : 'Вопросов и карточек с ошибками пока нет.') + '</p>';
+      groups.forEach(function (g) {
+        const L = g.lesson, C = window.CONTENT[L.id], m = miss(g.xs);
+        g.xs.sort(function (a, b) { return b.r.miss - a.r.miss; });
+        h += '<section class="block mx-group"><div class="block-h"><h2>' + L.num + ' ' + esc(L.title) +
+          '<span class="prep-n">' + m + '</span></h2></div>' +
+          '<p class="mx-go"><a href="#' + L.id + '">Перечитать теорию урока ' + L.num + '</a></p>' +
+          '<ol class="mx-list">' + g.xs.map(function (x) {
+            const card = x.kind === 'card', it = card ? C.cards[x.n] : C.quiz[x.n];
+            const state = x.r.done ? 'лестница повторения пройдена'
+              : x.r.due <= isoDay() ? 'в повторении сегодня' : 'вернётся ' + Review.when(x.r.due);
+            return '<li class="mx-item"><div class="mx-meta"><span class="mx-n">' +
+              x.r.miss + ' ' + plural(x.r.miss, 'ошибка', 'ошибки', 'ошибок') + '</span>' +
+              (card ? 'карточка' : 'вопрос') + ' · ' + state + '</div>' +
+              (card ? '' : Confidence.badge(x.r)) + '<div class="mx-q">' + it.q + '</div>' +
+              '<details class="mx-a"><summary>Правильный ответ</summary><div>' +
+              (card ? it.a : '<p><b>' + it.opts[it.right] + '</b></p><p>' + it.why + '</p>') + '</div></details></li>';
+          }).join('') + '</ol></section>';
+      });
+      const list = $('#mxList', box); list.innerHTML = h; Terms.mark(list);
+      Array.prototype.forEach.call(box.querySelectorAll('[data-mx-filter]'), function (b) {
+        b.setAttribute('aria-pressed', (b.dataset.mxFilter === 'high') === highOnly ? 'true' : 'false');
+      });
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('[data-mx-filter]'), function (b) {
+      b.addEventListener('click', function () { draw(b.dataset.mxFilter === 'high'); });
     });
-    box.innerHTML = h;
-    Terms.mark(box);
+    draw(false);
     if (again) focusHere(box.firstElementChild);
   }).catch(function (e) {
     /* и сбой загрузки, и ошибка при отрисовке — иначе страница навсегда «собирает» */
@@ -2272,6 +2681,95 @@ function renderMistakes(app) {
       'пропавший интернет. <button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
     $("#mxRetry").addEventListener("click", function () { retried = "mistakes"; Router.render(true); });
     if (again) focusHere($("#mxRetry"));
+  });
+}
+
+function renderCodePractice(app, id) {
+  const topic = CodeReview.topic(id.split("/")[1]);
+  document.title = "Практика по ошибкам — Тетрадь аналитика";
+  mountHeader("<b>Практика по ошибкам</b>");
+  const main = el("main", { class: "wrap lesson-wrap page" }); app.appendChild(main);
+  if (!topic) {
+    main.innerHTML = pageHead("Тема не найдена", "Откройте практику со страницы «Мои ошибки».") + '<p><a href="#mistakes">Мои ошибки</a></p>';
+    return;
+  }
+  const p = window.SH.codePractice[topic.id], py = topic.lang === "python";
+  const r = (Store.all().codeReview || {})[topic.id];
+  const round = CodeReview.valid(r) ? r.round : 0;
+  const early = CodeReview.valid(r) && !r.done && r.due > isoDay();
+  const key = "code-practice:" + topic.id + ":" + round + (early ? ":extra" : "");
+  const schema = py ? p.env.data.length ? window.SH.pySchema : "" : window.SH.sqlSchema;
+  main.innerHTML = pageHead(topic.title, "Исправьте короткий пример. Эта практика не меняет отметки о прохождении уроков.") +
+    '<div class="theory">' + p.body + '</div>' +
+    (schema ? '<details class="st-schema"><summary>Схема данных</summary><div class="theory">' + schema + '</div></details>' : "") +
+    '<div class="editor-shell"><div class="editor-h"><span>' + (py ? "практика.py" : "практика.sql") + '</span></div>' +
+      '<textarea id="crEditor" aria-label="Ваш код для практики"></textarea></div>' +
+    '<div class="actions cr-actions"><button class="btn primary" id="crRun" type="button">Запустить</button>' +
+      '<button class="btn check" id="crCheck" type="button">Проверить</button>' +
+      '<button class="btn" id="crHint" type="button" aria-expanded="false" aria-controls="crHintText">Подсказка</button>' +
+      '<button class="btn" id="crSolution" type="button" disabled>Показать решение</button></div>' +
+    '<p class="callout" id="crHintText" hidden>' + esc(p.hint) + '</p>' +
+    '<div class="status" id="crStatus" role="status"></div>' +
+    '<div class="io-box"><div class="io-h">Ваш вывод</div><div class="io-body" id="crOut" role="region" aria-label="Вывод практики" tabindex="0">' +
+      '<div class="empty">Исправьте код и нажмите «Запустить».</div></div></div>' +
+    '<p class="mx-go"><a href="#mistakes">К моим ошибкам</a> · ' + CodeReview.theoryLink(topic) + '</p>';
+  CodeReview.bind(main);
+  CodeKit.lesson({ kind: topic.lang }, { schema: schema });
+  let editor = null, busy = false, passed = false;
+  const saved = Store.get("code", key, null);
+  mountEditor($("#crEditor", main), topic.lang, saved === null ? p.starter : saved,
+    function (v) { Store.set("code", key, v); }, function () { run(false); }, function () {}).then(function (ed) { editor = ed; });
+  function status(kind, title, text) {
+    const box = $("#crStatus", main);
+    box.className = "status show " + kind;
+    box.innerHTML = '<span class="s-body"><b>' + esc(title) + '</b>' + (text ? '<br>' + esc(text) : "") + '</span>';
+  }
+  async function run(checking) {
+    if (busy) return;
+    const epoch = CodeReview.epoch();
+    const code = editor ? editor.get() : $("#crEditor", main).value;
+    if (!code.trim()) { status("warn", "Редактор пуст", "Напишите код или начните с заготовки."); return; }
+    busy = true;
+    $("#crRun", main).disabled = true; $("#crCheck", main).disabled = true;
+    const out = $("#crOut", main);
+    out.innerHTML = '<div class="empty">' + (py && !Engine.pyHas(p.env.packages) ? "Готовлю Python в браузере…" : "Выполняю…") + '</div>';
+    try {
+      const result = py ? await Run.python(code, p.env) : await Run.sql(code);
+      if (!CodeReview.current(epoch, main)) return;
+      $("#crSolution", main).disabled = false;
+      if (result.err) {
+        out.innerHTML = '<pre class="err">' + esc(result.err) + '</pre>';
+        status("bad", "Код остановился с ошибкой", (py ? Check.pyErr(result.err, code) : Check.sqlErr(result.err, code)) || "Прочитайте сообщение в выводе и исправьте код.");
+        return;
+      }
+      out.innerHTML = py ? '<pre>' + esc(result.out) + '</pre>' : result.res
+        ? renderTable(result.res.columns, result.res.values, -1) : '<div class="empty">Запрос не вернул таблицу.</div>';
+      if (!checking) { $("#crStatus", main).className = "status"; return; }
+      const judged = py ? Check.python(result.out, p.expected.stdout) : result.res
+        ? Check.sql(result.res, p.expected, { code: code, hide: true }) : { ok: false, why: "Нужен запрос SELECT с результатом." };
+      const use = py && judged.ok ? Check.uses(code, p.expected.uses) : "";
+      if (!judged.ok || use) { status("bad", "Пока не совпало", use || judged.why); return; }
+      const next = passed ? null : CodeReview.complete(topic.id, round);
+      if (next) passed = true;
+      const current = (Store.all().codeReview || {})[topic.id];
+      status("ok", "Сошлось", next ? next.done ? "Тема закреплена. Новая ошибка вернёт её в практику."
+        : "Следующее повторение — " + Review.when(next.due) + "."
+        : current && !current.done && current.due > isoDay() ? "Это дополнительная тренировка. Расписание не изменилось: повторение — " + Review.when(current.due) + "."
+        : "Можно вернуться к своим ошибкам или перечитать объяснение.");
+    } catch (e) {
+      if (document.body.contains(main)) status("warn", "Не получилось запустить", "Проверьте соединение и попробуйте ещё раз.");
+    } finally {
+      busy = false;
+      if (document.body.contains(main)) { $("#crRun", main).disabled = false; $("#crCheck", main).disabled = false; }
+    }
+  }
+  $("#crRun", main).addEventListener("click", function () { run(false); });
+  $("#crCheck", main).addEventListener("click", function () { run(true); });
+  $("#crHint", main).addEventListener("click", function () {
+    const text = $("#crHintText", main); text.hidden = !text.hidden; this.setAttribute("aria-expanded", String(!text.hidden));
+  });
+  $("#crSolution", main).addEventListener("click", function () {
+    modal("Решение практики", '<pre>' + esc(p.solution) + '</pre>');
   });
 }
 
@@ -2648,13 +3146,14 @@ function renderHome(app) {
   /* Вернувшемуся человеку первым делом нужно «где я остановился»,
      а не описание курса, — поэтому карточка стоит сразу под заголовком. */
   const resume = Stats.resume();
+  const resumePlace = resume && Place.get(resume.lesson.id);
   const resumeHtml = resume
-    ? '<a class="resume" href="#' + resume.lesson.id + '">' +
+    ? '<a class="resume" href="' + Place.href(resume.lesson.id) + '">' +
         '<span class="resume-txt">' +
           '<span class="resume-k">' + (resume.entry ? "Начать отсюда — по входному тесту"
-                                       : resume.fresh ? "Следующий урок" : "Вы остановились здесь") + "</span>" +
+                                       : resumePlace || !resume.fresh ? "Вы остановились здесь" : "Следующий урок") + "</span>" +
           '<span class="resume-t">' + resume.lesson.num + " " + esc(resume.lesson.title) + "</span>" +
-          '<span class="resume-d">' + esc(resume.lesson.desc) + "</span>" +
+          '<span class="resume-d">' + esc(Place.label(resume.lesson.id) || resume.lesson.desc) + "</span>" +
         "</span>" +
         '<span class="resume-go">' + (resume.entry ? "Начать" : "Продолжить") + "</span>" +
       "</a>"
@@ -3061,26 +3560,36 @@ const Engine = {
     /* база и движок качаются одновременно */
     await Promise.all([Lazy.data(), loadScript(CDN.sqlBase + "sql-wasm.js")]);
     const SQL = await window.initSqlJs({ locateFile: function (f) { return CDN.sqlBase + f; } });
+    Engine.sqlModule = SQL;
+    Engine.db = Engine.createShop();
+    return Engine.db;
+  },
+
+  /* Независимая исходная база для урока или дополнительной проверки.
+     Варианты данных не касаются общей базы и песочницы. */
+  createShop: function () {
+    const SQL = Engine.sqlModule;
     const db = new SQL.Database();
-    db.run(window.DATA.shopSQL);
-    /* Журнал мобильного приложения лежит в data.js одним CSV: так он
-       не дублируется между SQL- и Python-уроками и числа сходятся. */
-    fillFromCsv(db, window.DATA.appUsersCSV,
-      "INSERT INTO app_users VALUES (?,?,?,?,?)",
-      function (c) { return [+c[0], c[1], c[2], c[3], c[4]]; });
-    fillFromCsv(db, window.DATA.appActivityCSV,
-      "INSERT INTO app_activity VALUES (?,?)",
-      function (c) { return [+c[0], c[1]]; });
-    fillFromCsv(db, window.DATA.appOrdersCSV,
-      "INSERT INTO app_orders VALUES (?,?,?)",
-      function (c) { return [+c[0], c[1], +c[2]]; });
-    /* Выгрузка лидов из CRM (урок 1.3, в pandas — 2.2) грязная нарочно:
-       пустая ячейка — NULL, остальное как в выгрузке */
-    fillFromCsv(db, window.DATA.leadsCSV,
-      "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
-      function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
-    Engine.db = db;
-    return db;
+    try {
+      db.run(window.DATA.shopSQL);
+      /* Журнал мобильного приложения лежит в data.js одним CSV: так он
+         не дублируется между SQL- и Python-уроками и числа сходятся. */
+      fillFromCsv(db, window.DATA.appUsersCSV,
+        "INSERT INTO app_users VALUES (?,?,?,?,?)",
+        function (c) { return [+c[0], c[1], c[2], c[3], c[4]]; });
+      fillFromCsv(db, window.DATA.appActivityCSV,
+        "INSERT INTO app_activity VALUES (?,?)",
+        function (c) { return [+c[0], c[1]]; });
+      fillFromCsv(db, window.DATA.appOrdersCSV,
+        "INSERT INTO app_orders VALUES (?,?,?)",
+        function (c) { return [+c[0], c[1], +c[2]]; });
+      /* Выгрузка лидов из CRM (урок 1.3, в pandas — 2.2) грязная нарочно:
+         пустая ячейка — NULL, остальное как в выгрузке */
+      fillFromCsv(db, window.DATA.leadsCSV,
+        "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
+        function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
+      return db;
+    } catch (e) { db.close(); throw e; }
   },
 
   python: async function (pkgs) {
@@ -4314,6 +4823,161 @@ function renderTable(cols, rows, badRow, mask) {
   return h;
 }
 
+/* Самопроверка письменного вывода: пометки ученика ссылаются только
+   на существующие фрагменты его ответа и не влияют на Check.text. */
+const Rubric = {
+  capture: function (answer, start, end) {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > answer.length || end <= start) return null;
+    const raw = answer.slice(start, end), quote = raw.trim();
+    if (!quote) return null;
+    const at = start + raw.length - raw.trimStart().length;
+    return { quote: quote, start: at, end: at + quote.length };
+  },
+
+  locate: function (answer, record) {
+    if (!record || typeof record.quote !== "string" || !record.quote.trim()) return null;
+    const quote = record.quote;
+    if (Number.isInteger(record.start) && Number.isInteger(record.end) && record.start >= 0 &&
+        record.end - record.start === quote.length && answer.slice(record.start, record.end) === quote) return record;
+    const at = answer.indexOf(quote);
+    return at >= 0 && at === answer.lastIndexOf(quote) ? { quote: quote, start: at, end: at + quote.length } : null;
+  },
+
+  summary: function (answer, items, records) {
+    let linked = 0, stale = 0;
+    items.forEach(function (item) {
+      const r = (records || {})[item.id];
+      if (!r || typeof r.quote !== "string" || !r.quote.trim()) return;
+      if (Rubric.locate(answer, r)) linked++; else stale++;
+    });
+    return { linked: linked, stale: stale, total: items.length };
+  },
+
+  html: function (items) {
+    return '<details class="answer-rubric" id="answerRubric"><summary>Самопроверка вывода <span class="rubric-count"></span></summary>' +
+      '<p>Перед сравнением с эталоном выделите фразу в своём ответе и свяжите её с подходящим пунктом. Можно вернуться к ответу и дописать недостающее.</p>' +
+      '<p class="rubric-help">Это ваши пометки, а не оценка правильности. Они не ставят зачёт задания; для него есть кнопка «Проверить».</p>' +
+      '<ol class="rubric-items">' + items.map(function (item) {
+        return '<li class="rubric-item"><h4>' + esc(item.title) + '</h4><p class="rubric-hint">' + esc(item.hint) + '</p>' +
+          '<p class="rubric-state"></p><blockquote class="rubric-quote" hidden></blockquote>' +
+          '<div class="rubric-actions"><button class="btn rubric-bind" type="button">Связать выделенное</button>' +
+          '<button class="linkbtn rubric-show" type="button" disabled>Найти в ответе</button>' +
+          '<button class="linkbtn rubric-clear" type="button" disabled>Убрать пометку</button></div></li>';
+      }).join('') + '</ol><p class="rubric-message" role="status" aria-live="polite"></p></details>';
+  },
+
+  mount: function (box, answer, items, lesson) {
+    if (!box || !answer || !items) return;
+    const records = {}, rows = box.querySelectorAll('.rubric-item'), message = box.querySelector('.rubric-message');
+    const key = function (item) { return lesson + ':rubric:' + item.id; };
+    items.forEach(function (item) { records[item.id] = Store.get('seen', key(item), null); });
+    function paint() {
+      const sum = Rubric.summary(answer.value, items, records);
+      box.querySelector('.rubric-count').textContent = '— связано ' + sum.linked + ' из ' + sum.total +
+        (sum.stale ? ', перепроверить: ' + sum.stale : '');
+      items.forEach(function (item, i) {
+        const row = rows[i], r = records[item.id], found = Rubric.locate(answer.value, r);
+        const hasQuote = !!(r && typeof r.quote === 'string' && r.quote.trim());
+        const quote = row.querySelector('.rubric-quote'), state = row.querySelector('.rubric-state');
+        row.classList.toggle('rubric-stale', hasQuote && !found);
+        state.textContent = found ? 'Фрагмент есть в текущем ответе.' : hasQuote
+          ? 'Ранее выбранный фрагмент изменён или не находится однозначно. Выберите его заново.' : 'Фрагмент пока не выбран.';
+        quote.hidden = !hasQuote; quote.textContent = hasQuote ? r.quote : '';
+        row.querySelector('.rubric-show').disabled = !found;
+        row.querySelector('.rubric-clear').disabled = !hasQuote;
+      });
+    }
+    items.forEach(function (item, i) {
+      const row = rows[i], bind = row.querySelector('.rubric-bind');
+      bind.addEventListener('click', function () {
+        const r = Rubric.capture(answer.value, answer.selectionStart, answer.selectionEnd);
+        if (!r) { message.textContent = 'Сначала выделите фразу в поле вашего ответа, затем нажмите «Связать выделенное» у нужного пункта.'; return; }
+        records[item.id] = r; Store.set('seen', key(item), r); paint();
+        message.textContent = 'Фрагмент связан с пунктом «' + item.title + '». Проверьте сами, раскрывает ли он этот пункт.';
+      });
+      row.querySelector('.rubric-show').addEventListener('click', function () {
+        const r = Rubric.locate(answer.value, records[item.id]);
+        if (!r) { paint(); return; }
+        answer.focus({ preventScroll: true }); answer.setSelectionRange(r.start, r.end);
+        answer.scrollIntoView({ block: 'center' });
+      });
+      row.querySelector('.rubric-clear').addEventListener('click', function () {
+        records[item.id] = {}; Store.set('seen', key(item), {}); paint(); bind.focus();
+        message.textContent = 'Пометка «' + item.title + '» убрана.';
+      });
+    });
+    answer.addEventListener('input', function () { paint(); message.textContent = ''; });
+    paint();
+  }
+};
+
+/* Готовый SQL-запрос по промежуточным таблицам. Снимки и запросы
+   задаёт урок; переключение этапа и ключа не запускает код ученика. */
+const SqlTrace = {
+  counts: function (stage, key) {
+    return stage.tables.map(function (t) {
+      const col = t.columns.indexOf(t.key);
+      return t.rows.filter(function (r) { return r[col] === key; }).length;
+    });
+  },
+
+  table: function (t, key) {
+    const col = t.columns.indexOf(t.key);
+    return '<div class="trace-scroll" tabindex="0" role="region" aria-label="' + esc(t.title) + '">' +
+      '<table class="trace-table"><caption>' + esc(t.title) + '</caption><thead><tr>' +
+      t.columns.map(function (c) { return '<th scope="col">' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      t.rows.map(function (r) {
+        const selected = r[col] === key;
+        return '<tr' + (selected ? ' class="trace-selected"' : '') + '>' + r.map(function (v, i) {
+          const cell = v === null ? 'NULL' : esc(v);
+          return '<td>' + (selected && i === col ? '<strong>' + cell + '</strong>' : cell) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+  },
+
+  mount: function (root, data, id) {
+    const box = root && root.querySelector('[data-sql-trace]');
+    if (!box || !data || box.dataset.mounted) return;
+    box.dataset.mounted = '1';
+    box.className = 'sql-trace';
+    const panelId = 'sql-trace-' + id, titleId = panelId + '-title';
+    box.setAttribute('role', 'region'); box.setAttribute('aria-labelledby', titleId);
+    box.innerHTML = '<h3 id="' + titleId + '">' + esc(data.title) + '</h3><p>' + esc(data.intro) + '</p>' +
+      '<div class="trace-controls" role="group" aria-label="Этап запроса">' + data.stages.map(function (s, i) {
+        return '<button type="button" class="btn" data-stage="' + i + '" aria-controls="' + panelId +
+          '" aria-pressed="false">' + (i + 1) + '. ' + esc(s.title) + '</button>';
+      }).join('') + '</div><div class="trace-controls" role="group" aria-label="Выделить строки пользователя">' +
+      data.keys.map(function (key) {
+        return '<button type="button" class="btn" data-key="' + esc(key) + '" aria-controls="' + panelId +
+          '" aria-pressed="false">user_id = ' + esc(key) + '</button>';
+      }).join('') + '</div><p class="trace-status" role="status" aria-live="polite" aria-atomic="true"></p>' +
+      '<div class="trace-panel" id="' + panelId + '"></div>';
+    let index = 0, key = data.keys[0];
+    const panel = box.querySelector('.trace-panel');
+    function paint() {
+      const stage = data.stages[index], counts = SqlTrace.counts(stage, key);
+      Array.prototype.forEach.call(box.querySelectorAll('[data-stage]'), function (b) { b.setAttribute('aria-pressed', +b.dataset.stage === index ? 'true' : 'false'); });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-key]'), function (b) { b.setAttribute('aria-pressed', +b.dataset.key === key ? 'true' : 'false'); });
+      panel.innerHTML = '<h4>' + esc(stage.title) + '</h4><p>' + esc(stage.note) + '</p>' + stage.tables.map(function (t) {
+        return SqlTrace.table(t, key) + '<details class="trace-sql"><summary>SQL этой таблицы</summary><pre><code>' + esc(t.sql) + '</code></pre></details>';
+      }).join('');
+      box.querySelector('.trace-status').textContent = 'Этап ' + (index + 1) + ' из ' + data.stages.length +
+        '. Выбран user_id = ' + key + '. ' + stage.tables.map(function (t, i) {
+          return t.title + ': выделено ' + counts[i] + ' из ' + t.rows.length + ' строк.';
+        }).join(' ');
+      focusScrollers(panel);
+    }
+    box.addEventListener('click', function (event) {
+      const b = event.target.closest('button[data-stage], button[data-key]');
+      if (!b || !box.contains(b)) return;
+      if (b.hasAttribute('data-stage')) index = +b.dataset.stage;
+      else key = +b.dataset.key;
+      paint();
+    });
+    paint();
+  }
+};
+
 /* Таблицы «было → стало» у шага практикума: те же строки базы до новой
    конструкции и после неё. Ручкой выделено то, на что смотреть: новые
    столбцы в «стало» (hl) или строки «было», которые останутся (keep). */
@@ -4343,17 +5007,35 @@ function baHtml(ba) {
 /* ---------- модальное окно ---------- */
 function modal(title, html) {
   let bg = $("#modalBg");
-  function close() { bg.classList.remove("show"); }
   if (!bg) {
     bg = el("div", { class: "modal-bg", id: "modalBg" });
-    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalT">' +
       '<div class="modal-h"><span id="modalT"></span><span class="spacer"></span>' +
       '<button class="iconbtn" id="modalX" type="button">Закрыть</button></div>' +
       '<div class="modal-b" id="modalB"></div></div>';
     document.body.appendChild(bg);
-    bg.addEventListener("click", function (e) { if (e.target === bg) close(); });
-    $("#modalX").addEventListener("click", close);
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+    bg.addEventListener("click", function (e) { if (e.target === bg) modal.close(); });
+    $("#modalX").addEventListener("click", function () { modal.close(); });
+    document.addEventListener("keydown", function (e) {
+      if (!bg.classList.contains("show")) return;
+      if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); modal.close(); }
+      if (e.key !== "Tab") return;
+      const nodes = Array.prototype.filter.call(bg.querySelectorAll('a[href], button, input, textarea, select, [tabindex="0"]'),
+        function (n) { return !n.disabled && n.getClientRects().length > 0; });
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !bg.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !bg.contains(document.activeElement))) {
+        e.preventDefault(); first.focus();
+      }
+    }, true);
+  }
+  if (!bg.classList.contains("show")) {
+    modal.back = document.activeElement;
+    modal.locked = Array.prototype.filter.call(document.body.children, function (n) { return n !== bg && !n.inert; });
+    modal.locked.forEach(function (n) { n.inert = true; });
+    modal.overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
   }
   $("#modalT").textContent = title;
   $("#modalB").innerHTML = html;
@@ -4361,6 +5043,15 @@ function modal(title, html) {
   $("#modalX").focus();
   if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise([$("#modalB")]);
 }
+modal.close = function (restore) {
+  const bg = $("#modalBg");
+  if (!bg || !bg.classList.contains("show")) return;
+  bg.classList.remove("show");
+  (modal.locked || []).forEach(function (n) { n.inert = false; });
+  modal.locked = [];
+  document.body.style.overflow = modal.overflow || "";
+  if (restore !== false && modal.back && modal.back.isConnected) modal.back.focus({ preventScroll: true });
+};
 
 /* ============================================================
    Страница урока — один вертикальный лонгрид.
@@ -4562,7 +5253,7 @@ document.addEventListener("click", function (e) {
 function lessonHeadHtml(L, C, kindLabel) {
   const plan = C.plan || defaultPlan(C);
   let planHtml = '<div class="plan"><div class="plan-h"><span>План занятия</span>' +
-    '<span class="total">' + esc(C.duration || "≈ 2 часа") + "</span></div>" +
+    '<span class="total">≈ ' + Plan.base(L) + " мин</span></div>" +
     '<div class="plan-list" style="--plan-cols:' + Math.min(plan.length, 5) + '">';
   plan.forEach(function (p) {
     planHtml += '<div class="plan-item"><div class="m">' + esc(p.m) + '</div><div class="w">' + esc(p.w) + "</div></div>";
@@ -4597,13 +5288,15 @@ function focusScrollers(root) {
 function secNavHtml(secs) {
   let navHtml = '<nav class="secnav" id="secnav" aria-label="Разделы урока"><div class="secnav-in">';
   secs.forEach(function (s, i) {
-    navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
+    navHtml += '<a href="#' + Router.current + "/" + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
   });
   return navHtml + "</div></nav>";
 }
 
 /* полоса прочитанного и подсветка активного раздела в навигации */
 function mountReadbar(secs) {
+  const id = Router.current, nav = $("#secnav");
+  const main = nav.closest("main");
   const bar = el("div", { class: "readbar", id: "readbar" });
   document.body.appendChild(bar);
   /* В уроке две полосы прогресса не нужны: здесь важно, сколько
@@ -4613,8 +5306,9 @@ function mountReadbar(secs) {
   const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
   let ticking = false;
 
-  function upd() {
+  function upd(remember) {
     ticking = false;
+    if (Router.current !== id || !document.body.contains(nav)) return;
     const h = document.documentElement;
     const max = h.scrollHeight - h.clientHeight;
     bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + "%";
@@ -4626,16 +5320,29 @@ function mountReadbar(secs) {
       if (n && n.offsetTop <= line) cur = secs[i].id;
     }
     links.forEach(function (a) { a.classList.toggle("on", a.dataset.sec === cur); });
+    if (remember && !document.hidden && Router.route(location.hash).id === id) {
+      const active = document.activeElement;
+      const editing = active && (active.matches("input, textarea") || active.closest(".CodeMirror"));
+      const section = editing && active.closest("section.block[id]");
+      Place.section(id, section ? section.id : max > 0 && h.scrollTop >= max - 4 ? secs[secs.length - 1].id : cur);
+    }
   }
   function onScroll() {
-    if (!ticking) { ticking = true; requestAnimationFrame(upd); }
+    if (!ticking) { ticking = true; requestAnimationFrame(function () { upd(true); }); }
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", onScroll);
+  function onFocus(e) {
+    const section = e.target.closest("section.block[id]");
+    if (section) Place.section(id, section.id);
+  }
+  main.addEventListener("focusin", onFocus);
   upd();
+  if (!Router.route(location.hash).section) Place.section(id, secs[0].id);
   Router.cleanup.push(function () {
     window.removeEventListener("scroll", onScroll);
     window.removeEventListener("resize", onScroll);
+    main.removeEventListener("focusin", onFocus);
     document.body.classList.remove("reading");
     const b = document.getElementById("readbar");
     if (b) b.remove();
@@ -4764,6 +5471,7 @@ function mountLessonNav(id, onUnmark) {
    оно считается само и показывается на главной. Пауза — если отошли
    от открытого урока. Время по календарным дням — для серии на главной. */
 function mountTimer(id) {
+  const reset = Store.all()._reset;
   let secs = Store.get("time", id, 0);
   let day = isoDay(), daySecs = Store.get("days", day, 0);
   let running = true;
@@ -4785,6 +5493,7 @@ function mountTimer(id) {
   });
   Router.cleanup.push(function () {
     clearInterval(tick);
+    if (Store.all()._reset !== reset) return;
     if (secs > 0) Store.set("time", id, secs);
     if (daySecs > 0) Store.set("days", day, daySecs);
   });
@@ -5458,6 +6167,7 @@ const Steps = {
         Terms.mark($(".st-b .theory", fresh));
         Figs.mount($(".st-b .theory", fresh));
         bindDone(fresh);
+        if (peek[n]) Place.remember(id, tag ? "s-practice" : "s-steps", "step", n, total);
       });
     }
 
@@ -5477,6 +6187,9 @@ const Steps = {
       const n = open;
       const li = $(".st.open", list);
       const q = function (sel) { return $(sel, li); };
+      li.addEventListener("focusin", function () {
+        Place.remember(id, tag ? "s-practice" : "s-steps", "step", n, total);
+      });
 
       function status(kind, title, body) {
         const s = q(".st-status");
@@ -5526,15 +6239,18 @@ const Steps = {
       }
 
       async function runSql(code) {
+        const epoch = CodeReview.epoch();
         if (Engine.wait(code) !== "Выполняю…") q(".st-res").innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
         let r;
         try { r = await Run.sql(code); }
         catch (e) {
+          if (!CodeReview.current(epoch, li)) return false;
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
-        if (open !== n || !document.body.contains(li)) return false;
+        if (open !== n || !CodeReview.current(epoch, li)) return false;
+        if (r.err) CodeReview.record("sql", r.err, code, { lesson: id, section: tag ? "s-practice" : "s-steps", kind: "step", index: n, starter: S.steps[n].starter, reset: epoch });
         if (r.err) {
           last = null;
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
@@ -5556,17 +6272,20 @@ const Steps = {
          шага с matplotlib ещё и фигуры: картинка для вывода и «паспорт»
          графика для проверки. */
       async function runPy(code) {
+        const epoch = CodeReview.epoch();
         q(".st-res").innerHTML = '<div class="empty">' + (Engine.pyHas(S.packages) ? "Выполняю…"
           : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
         let r;
         try { r = await Run.python(code, S); }
         catch (e) {
+          if (!CodeReview.current(epoch, li)) return false;
           lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
-        if (open !== n || !document.body.contains(li)) return false;
+        if (open !== n || !CodeReview.current(epoch, li)) return false;
+        if (r.err) CodeReview.record("python", r.err, code, { lesson: id, section: tag ? "s-practice" : "s-steps", kind: "step", index: n, starter: S.steps[n].starter, reset: epoch });
         if (r.err) {
           lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
@@ -5646,6 +6365,7 @@ const Steps = {
       open = Steps.firstOpen(id, S, tag);
       draw();
       if (open >= 0) {
+        Place.remember(id, tag ? "s-practice" : "s-steps", "step", open, total);
         const li = $(".st.open", list);
         if (li) li.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (onFinish) {
@@ -5792,6 +6512,49 @@ function wroteHtml(r, keep) {
 /* Запуск кода — урок, шаги, тренажёр, песочница и собеседование. Python
    один на страницу и печатает в общий stdout, поэтому запуски идут
    строго по очереди. */
+/* Дополнительные варианты SQL-задачи. Для каждого — новая исходная база,
+   эталон считается на тех же изменениях, что и ответ ученика. */
+const SqlCases = {
+  check: function (code, reference, cases) {
+    if (Engine.writes(code)) return { ok: false, blocked: true };
+    for (let i = 0; i < cases.length; i++) {
+      const v = cases[i], db = Engine.createShop();
+      try {
+        db.run(v.change);
+        db.run("PRAGMA query_only=ON");
+        const expected = sqlLast(db, reference);
+        if (!expected) throw new Error("Эталон варианта не вернул таблицу");
+        const loop = Engine.loop(function (q) { return db.exec(q)[0].values[0]; }, code);
+        let got = null, error = loop;
+        if (!error) {
+          try { got = sqlLast(db, code); }
+          catch (e) { error = "SQLite: " + e.message; }
+        }
+        const ordered = /\bORDER\s+BY\b/i.test(reference.replace(/OVER\s*\([^()]*(\([^()]*\)[^()]*)*\)/gi, ""));
+        const c = error ? { ok: false } : Check.drillSql(got,
+          { columns: expected.columns, rows: expected.values, ordered: ordered }, code);
+        if (!c.ok) return { ok: false, variant: v, index: i, total: cases.length,
+          got: got, expected: expected, error: error, why: c.why };
+      } finally { db.close(); }
+    }
+    return { ok: true, total: cases.length };
+  },
+
+  html: function (r) {
+    function table(title, t) {
+      return '<p><strong>' + esc(title) + '</strong></p>' + (t
+        ? '<div class="sql-case-table" tabindex="0" role="region" aria-label="' + esc(title) + '">' +
+          renderTable(t.columns, t.values.slice(0, 10), -1) + '</div>' +
+          '<p>Показано ' + Math.min(t.values.length, 10) + ' из ' + t.values.length + ' строк.</p>'
+        : '<p>Таблицы в ответе нет.</p>');
+    }
+    return '<details class="sql-case"><summary>Контрпример: ' + esc(r.variant.title) + '</summary>' +
+      '<p>' + esc(r.variant.explain) + '</p><p>Это отдельная копия данных для проверки. Ваш вывод выше — на исходных данных.</p>' +
+      (r.error ? '<p>' + esc(r.error) + '</p>' : '') +
+      table('Ваш запрос на варианте', r.got) + table('Ожидаемый ответ на том же варианте', r.expected) + '</details>';
+  }
+};
+
 const Run = {
   queue: Promise.resolve(),
   guard: null,          /* { pyi, on, off } — функции GUARD_PY в этом Pyodide */
@@ -6044,6 +6807,43 @@ const Drills = {
     return Drills.cache[key];
   },
 
+  predictionHtml: function (d) {
+    const p = d.predict;
+    if (!p) return "";
+    return '<div class="dr-predict"><p><strong>Сначала предположите</strong></p><p>' + esc(p.q) + '</p>' +
+      '<div class="q-opts" role="group" aria-label="Ваше предположение">' + p.opts.map(function (x, i) {
+        return '<button class="q-opt" type="button" data-choice="' + i + '"><span class="mk">' +
+          "АБВГД".charAt(i) + "</span><span>" + esc(x) + "</span></button>";
+      }).join("") + '</div><p class="dr-predict-why" role="status" hidden></p></div>';
+  },
+
+  prediction: function (id, i, d, det, onReady) {
+    const box = $(".dr-predict", det), work = $(".dr-work", det), p = d.predict;
+    const key = id + ":d" + i + ":predict", saved = Store.get("seen", key, null);
+    const buttons = Array.prototype.slice.call(box.querySelectorAll("[data-choice]"));
+    function show(choice) {
+      buttons.forEach(function (b, n) {
+        b.disabled = true;
+        b.classList.toggle("right", n === p.right);
+        b.classList.toggle("wrong", n === choice && n !== p.right);
+      });
+      const why = $(".dr-predict-why", box);
+      why.hidden = false;
+      why.textContent = (choice === p.right ? "Верно. " : "Предположение не подтвердилось. ") + p.why + " Теперь исправьте запрос.";
+      work.hidden = false;
+    }
+    if (saved && Number.isInteger(saved.choice) && saved.choice >= 0 && saved.choice < p.opts.length) {
+      show(saved.choice); return true;
+    }
+    buttons.forEach(function (b, choice) {
+      b.addEventListener("click", function () {
+        Store.set("seen", key, { choice: choice }); show(choice); onReady();
+        $(".dr-run", work).focus({ preventScroll: true });
+      });
+    });
+    return false;
+  },
+
   itemHtml: function (L, d, i) {
     const k = Drills.kind(L, d);
     if (k === "nums") {
@@ -6061,13 +6861,14 @@ const Drills = {
           '<button class="btn dr-no" type="button">Нет</button></div>' +
         '<div class="status dr-status"></div></div>';
     }
-    return '<div class="dr-work">' +
+    return Drills.predictionHtml(d) + '<div class="dr-work"' + (d.predict ? " hidden" : "") + '>' +
       '<div class="editor-shell st-ed"><div class="editor-h"><span>задача ' + (i + 1) +
         (k === "sql" ? ".sql" : ".py") + "</span></div><textarea class=\"dr-ta\"></textarea></div>" +
       '<div class="st-actions">' +
         '<button class="btn primary dr-run" type="button">' + ICON.play + "Запустить</button>" +
         '<button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button>" +
       "</div>" +
+      (d.sqlCases ? '<p class="muted">Проверка: исходные данные и ' + d.sqlCases.length + ' дополнительных варианта. Запрос должен работать и после изменения данных.</p>' : '') +
       '<div class="status dr-status"></div>' +
       '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
         '<div class="io-body dr-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
@@ -6084,7 +6885,10 @@ const Drills = {
     counter();
     Array.prototype.forEach.call(root.querySelectorAll(".drill"), function (det) {
       const i = +det.dataset.i;
+      det.addEventListener("focusin", function () { Place.remember(id, "s-drills", "drill", i, C.drills.length); });
       det.addEventListener("toggle", function () {
+        if (det.open) Place.remember(id, "s-drills", "drill", i, C.drills.length);
+        else if (Place.get(id) && Place.get(id).index === i) Place.section(id, "s-drills");
         if (det.open && !det.dataset.ready) {
           det.dataset.ready = "1";
           Drills.mountOne(L, C, det, i, counter);
@@ -6093,8 +6897,11 @@ const Drills = {
     });
   },
 
-  mountOne: function (L, C, det, i, counter) {
+  mountOne: function (L, C, det, i, counter, predicted) {
     const id = L.id, d = C.drills[i], k = Drills.kind(L, d);
+    if (d.predict && !predicted && !Drills.prediction(id, i, d, det, function () {
+      Drills.mountOne(L, C, det, i, counter, true);
+    })) return;
     const q = function (sel) { return $(sel, det); };
     const codeKey = id + ":d" + i, triesKey = id + ":d" + i;
     const reveal = q(".d-reveal");
@@ -6166,12 +6973,14 @@ const Drills = {
     /* эталон и движок — заранее, пока ученик читает условие */
     idle(function () { Drills.expected(L, C, i).catch(function () {}); });
 
-    mountEditor(q(".dr-ta"), py ? "python" : "sql", Store.get("code", codeKey, "") || "",
+    const saved = Store.get("code", codeKey, null);
+    mountEditor(q(".dr-ta"), py ? "python" : "sql", saved !== null ? saved : (d.starter || ""),
       function (v) { Store.set("code", codeKey, v); }, function () { run(); },
       function () {}).then(function (ed) { editor = ed; });
 
     async function run() {
       status(null);
+      const epoch = CodeReview.epoch();
       const code = editor ? editor.get() : q(".dr-ta").value;
       if (!code.trim()) { status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос."); return null; }
       const rb = q(".dr-run");
@@ -6180,7 +6989,9 @@ const Drills = {
         : !py ? Engine.wait(code) : "Выполняю…") + "</div>";
       try {
         const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
+        if (!CodeReview.current(epoch, det)) return null;
         if (r.err) {
+          CodeReview.record(py ? "python" : "sql", r.err, code, { lesson: id, section: "s-drills", kind: "drill", index: i, starter: d.starter, reset: epoch });
           last = null;
           res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
           status("bad", py ? "Код упал с ошибкой" : sqlFail(r.err),
@@ -6189,6 +7000,7 @@ const Drills = {
           return null;
         }
         last = r;
+        r.code = code;
         if (py) {
           res.innerHTML = (r.out.trim() ? "<pre>" + esc(r.out) + "</pre>" : "") + Plots.html(r.figs || []) ||
             '<div class="empty">Код отработал без ошибок, но ничего не ' + (k === "plot" ? "нарисовал." : "напечатал. Нужен print().") + "</div>";
@@ -6201,6 +7013,7 @@ const Drills = {
         }
         return r;
       } catch (e) {
+        if (!CodeReview.current(epoch, det)) return null;
         res.innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
         status("bad", py ? "Python не загрузился" : "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
         return null;
@@ -6208,6 +7021,7 @@ const Drills = {
     }
 
     async function check() {
+      const epoch = CodeReview.epoch();
       const cb = q(".dr-check");
       cb.disabled = true;
       try {
@@ -6215,7 +7029,8 @@ const Drills = {
         if (!r) return;
         let want;
         try { want = await Drills.expected(L, C, i); }
-        catch (e) { status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        catch (e) { if (CodeReview.current(epoch, det)) status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        if (!CodeReview.current(epoch, det)) return;
         tried();
         if (want.err) {
           status("warn", "Эту задачу проверить не получилось", "Сравните свой ответ с разбором ниже.");
@@ -6236,8 +7051,23 @@ const Drills = {
           else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
           return;
         }
-        const c = Check.drillSql(r.res, want.exp, editor ? editor.get() : q(".dr-ta").value);
-        if (c.ok) { solve(); status("ok", "Решено", c.note || "Столбцы и строки сошлись с разбором."); }
+        const c = Check.drillSql(r.res, want.exp, r.code);
+        if (c.ok) {
+          let variants = null;
+          if (d.sqlCases) {
+            try { variants = SqlCases.check(r.code, Drills.code(d), d.sqlCases); }
+            catch (e) { status("warn", "Дополнительная проверка не выполнилась", "Зачёт пока не поставлен. Попробуйте проверить ещё раз."); return; }
+            if (!variants.ok) {
+              status("bad", "На исходных данных сошлось", variants.blocked
+                ? "Для проверки вариантов нужен запрос на чтение данных. Уберите команды изменения таблиц."
+                : "На изменённых данных ответ отличается. Откройте контрпример и проверьте логику запроса." + SqlCases.html(variants));
+              return;
+            }
+          }
+          solve(); status("ok", "Решено", variants
+            ? "Ответ сошёлся на исходных данных и на всех дополнительных вариантах: " + variants.total + " из " + variants.total + "."
+            : c.note || "Столбцы и строки сошлись с разбором.");
+        }
         else {
           if (r.res && c.marks) res.innerHTML = renderTable(r.res.columns, r.res.values, c.marks) +
             '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
@@ -6392,7 +7222,7 @@ function renderLesson(app, id) {
     C.quiz.forEach(function (q, i) {
       quizHtml += '<div class="q" data-q="' + i + '">' +
         '<div class="q-t"><span class="q-n">' + (i + 1) + " / " + C.quiz.length + "</span><span>" + q.q + "</span></div>" +
-        '<div class="q-opts">';
+        Confidence.html() + '<div class="q-opts">';
       /* Варианты тасуются при каждой отрисовке: без этого позиция верного
          ответа в исходнике складывается в угадываемый цикл. data-i хранит исходный
          номер, по нему и сверяется ответ.                                        */
@@ -6448,7 +7278,7 @@ function renderLesson(app, id) {
       (isSheet
         ? Nums.html(C.fields, "nm-" + id)
         : isText
-        ? '<textarea class="answer" id="answer" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
+        ? '<textarea class="answer" id="answer" aria-label="Ваш ответ" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
         : '<div class="editor-shell">' +
             '<div class="editor-h"><span>' + (L.kind === "sql" ? "запрос.sql" : "решение.py") + "</span>" +
             '<span class="spacer"></span>' +
@@ -6456,6 +7286,7 @@ function renderLesson(app, id) {
             '<textarea id="editor"></textarea>' +
           "</div>") +
 
+      (isText && C.rubric ? Rubric.html(C.rubric) : '') +
       '<div class="actions">' +
         (noCode ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
           "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
@@ -6501,6 +7332,7 @@ function renderLesson(app, id) {
   Terms.mark($("#s-theory .theory"));
   Figs.mount($("#s-theory .theory"));
   if (window.Tinker) Tinker.mount($("#s-theory .theory"));
+  SqlTrace.mount($("#s-theory .theory"), C.sqlTrace, L.id);
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
@@ -6515,13 +7347,15 @@ function renderLesson(app, id) {
     Array.prototype.forEach.call(document.querySelectorAll(".q"), function (card) {
       const qi = +card.dataset.q;
       const q = C.quiz[qi];
+      const confidence = Confidence.mount(card);
       const opts = Array.prototype.slice.call(card.querySelectorAll(".q-opt"));
       opts.forEach(function (btn) {
         btn.addEventListener("click", function () {
           if (answered[qi]) return;
           answered[qi] = true;
           const picked = +btn.dataset.i;
-          Review.record(id, qi, picked === q.right, true);
+          Review.record(id, qi, picked === q.right, true, confidence.value());
+          confidence.lock();
           opts.forEach(function (b) {
             b.disabled = true;
             const oi = +b.dataset.i;
@@ -6551,7 +7385,7 @@ function renderLesson(app, id) {
       pfin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
           (fresh ? penTick(id + ":p", "draw") : ICON.ok) + "</span>" +
         '<span class="s-body"><b>Практикум пройден</b>' + (P.done || "Все шаги решены.") +
-          '<br><a href="#s-task">Перейти к основной задаче</a></span>';
+          '<br><a href="#' + id + '/s-task">Перейти к основной задаче</a></span>';
     }, "p");
   }
 
@@ -6645,6 +7479,7 @@ function renderLesson(app, id) {
     answerEl = $("#answer");
     answerEl.value = savedCode || "";
     answerEl.addEventListener("input", function () { Store.set("code", id, answerEl.value); });
+    if (C.rubric) Rubric.mount($("#answerRubric"), answerEl, C.rubric, id);
   } else {
     mountEditor($("#editor"), L.kind, savedCode !== null ? savedCode : (C.starter || ""),
       function (v) { Store.set("code", id, v); }, run,
@@ -6671,6 +7506,7 @@ function renderLesson(app, id) {
   const notes = $("#notes");
   notes.value = Store.get("notes", id, "");
   let noteT = null;
+  Router.cleanup.push(function () { clearTimeout(noteT); });
   notes.addEventListener("input", function () {
     Store.set("notes", id, notes.value);
     clearTimeout(noteT);
@@ -6694,31 +7530,39 @@ function renderLesson(app, id) {
   let lastStdout = "", lastFigs = [];
 
   async function run() {
+    const epoch = CodeReview.epoch();
     clearStatus();
     const code = getCode();
     if (!code.trim()) { setStatus("warn", "Пусто", "Сначала напишите код."); return; }
     $("#runBtn").disabled = true;
     try {
-      if (L.kind === "sql") await runSQL(code);
-      else await runPython(code);
+      if (L.kind === "sql") await runSQL(code, epoch);
+      else await runPython(code, epoch);
     } catch (e) {
+      if (!CodeReview.current(epoch, main)) return;
       /* сюда попадает только незагрузившийся движок: ошибки кода разбирают runSQL и runPython */
       $("#outBox").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
       setStatus("bad", L.kind === "sql" ? "База не загрузилась" : "Python не загрузился",
         "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
     } finally {
-      const rb = $("#runBtn");
-      if (rb) rb.disabled = false;
-      loader(false);
+      if (CodeReview.current(epoch, main)) {
+        const rb = $("#runBtn");
+        if (rb) rb.disabled = false;
+        loader(false);
+      }
     }
   }
 
-  async function runSQL(code) {
+  async function runSQL(code, epoch) {
     loader(true, Engine.wait(code));
     const r = await Run.sql(code);
+    if (!CodeReview.current(epoch, main)) return;
     loader(false);
     lastSqlResult = r.err ? null : r.res;
-    if (r.err) { showError(r.err, Check.sqlErr(r.err, code)); return; }
+    if (r.err) {
+      CodeReview.record("sql", r.err, code, { lesson: id, section: "s-task", starter: C.starter, reset: epoch });
+      showError(r.err, Check.sqlErr(r.err, code)); return;
+    }
     const last = r.res;
     if (!last) {
       $("#outBox").innerHTML = r.changed !== undefined ? wroteHtml(r, false)
@@ -6735,13 +7579,16 @@ function renderLesson(app, id) {
      поможет и не помешает — сохранённый код сработает и после перезагрузки.
      С эталоном сравнивается только stdout; предупреждения библиотек
      (stderr) показываются мелко под выводом и проверку не ломают. */
-  async function runPython(code) {
+  async function runPython(code, epoch) {
     loader(true, Engine.pyHas(C.packages) ? "Выполняю..." : "Первый запуск: качаю Python в браузер, 15-40 секунд...");
     await Engine.python(C.packages || []);
+    if (!CodeReview.current(epoch, main)) return;
     loader(true, "Выполняю...");
     const r = await Run.python(code, C);
+    if (!CodeReview.current(epoch, main)) return;
     if (r.err) {
       lastStdout = ""; lastFigs = [];
+      CodeReview.record("python", r.err, code, { lesson: id, section: "s-task", starter: C.starter, reset: epoch });
       showError(r.err, Check.pyErr(r.err, code));
       return;
     }
@@ -7141,6 +7988,7 @@ const Find = {
   },
 
   open: function () {
+    modal.close();
     const bg = $("#findBg") || Find.build();
     if (!bg.classList.contains("show")) Find.back = document.activeElement;
     bg.classList.add("show");
@@ -7232,6 +8080,38 @@ const Router = {
   cleanup: [],
   current: null,          /* какой урок сейчас отрисован (null — главная) */
 
+  route: function (hash) {
+    const raw = hash.replace(/^#\/?/, "").trim();
+    const m = /^(m\d+l\d+)\/(s-[\w-]+)(?:\/(step|drill)-([1-9]\d*))?$/.exec(raw);
+    if (m) return { id: m[1], section: m[2], kind: m[3] || null, index: m[4] ? +m[4] - 1 : null };
+    if (/^s-[\w-]+$/.test(raw)) {
+      const id = Router.current || Store.get("seen", "last", "");
+      if (Course.byId(id)) return { id: id, section: raw };
+    }
+    return { id: raw, section: null };
+  },
+
+  scroll: function (route) {
+    const root = route.section && document.getElementById(route.section);
+    let target = root;
+    if (root && route.kind === "drill" && route.section === "s-drills") {
+      const det = root.querySelector('.drill[data-i="' + route.index + '"]');
+      if (det) { det.open = true; target = det; }
+    }
+    if (root && route.kind === "step" && (route.section === "s-practice" || route.section === "s-steps")) {
+      const li = root.querySelector('.st[data-n="' + route.index + '"]');
+      if (li && li.classList.contains("done")) {
+        if (!li.classList.contains("peek")) $("button.st-h", li).click();
+        target = root.querySelector('.st[data-n="' + route.index + '"]');
+      } else target = root.querySelector(".st.open") || root;
+    }
+    if (target) {
+      target.scrollIntoView({ behavior: "instant", block: "start" });
+      Place.section(route.id, route.section);
+    }
+    else window.scrollTo(0, 0);
+  },
+
   go: function (hash) {
     const h = hash || "#";
     if (location.hash === h) Router.render(true);
@@ -7241,8 +8121,10 @@ const Router = {
   /* force — перерисовать, даже если адрес не менялся (например, после
      переноса прогресса, когда поменялись отметки о пройденном).      */
   render: function (force) {
-    const id = location.hash.replace(/^#\/?/, "").trim();
+    const route = Router.route(location.hash), id = route.id;
     const lesson = id ? Course.byId(id) : null;
+    if (lesson && route.section && /^#\/?s-/.test(location.hash))
+      history.replaceState(null, "", "#" + id + "/" + route.section);
 
     /* Хэш — не только адрес урока. Навигация по секциям внутри урока
        (#s-task, #s-quiz) работает обычными якорями, и такой переход
@@ -7255,7 +8137,7 @@ const Router = {
     /* Возврат к адресу урока, который и так открыт (например, кнопкой
        «назад» после перехода по якорю), — просто подъём наверх.      */
     if (!force && lesson && Router.current === id) {
-      window.scrollTo(0, 0);
+      Router.scroll(route);
       return;
     }
 
@@ -7265,8 +8147,7 @@ const Router = {
     /* Окно и поиск живут вне страницы и пережили бы переход: открытая
        подсказка поверх новой страницы выглядит как сбой. */
     Find.close();
-    const open = $("#modalBg");
-    if (open) open.classList.remove("show");
+    modal.close(false);
 
     const hdr = $(".hdr"); if (hdr) hdr.remove();
     const bar = $("#storeBar"); if (bar) bar.remove();
@@ -7281,7 +8162,7 @@ const Router = {
     else if (id) renderLesson(app, id);
     else renderHome(app);
 
-    window.scrollTo(0, 0);
+    Router.scroll(route);
   }
 };
 

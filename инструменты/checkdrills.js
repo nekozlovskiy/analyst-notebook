@@ -31,12 +31,22 @@ for (const m of ctx.window.COURSE.modules) for (const L of m.lessons) {
     const k = kind || (/\bplt\.|\bax\.(plot|bar|barh|hist)\(/.test(code) ? "plot"
       : /print\(/.test(d.solution) ? "python" : "text");
     const where = L.id + " задача " + (i + 1) + " «" + d.title + "»";
+    if (d.predict) {
+      const p = d.predict;
+      if (k !== "sql" || !d.starter || !p.q || !p.why || !Array.isArray(p.opts) || p.opts.length < 2 ||
+          !Number.isInteger(p.right) || p.right < 0 || p.right >= p.opts.length)
+        bad.push(where + ": неверный формат предположения или нет исходного SQL");
+    }
     if (k === "text") { text++; return; }
     try {
       if (k === "sql") {
         sql++;
         const out = execFileSync("sqlite3", [db], { input: code, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
         if (!out.trim()) bad.push(where + ": запрос ничего не вернул");
+        if (d.predict && d.starter) {
+          const before = execFileSync("sqlite3", [db], { input: d.starter, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+          if (before.trim() === out.trim()) bad.push(where + ": исходный запрос уже даёт правильный ответ");
+        }
       } else {
         if (k === "plot") plot++; else py++;
         execFileSync("python3", ["-c", "import ast,sys; ast.parse(sys.stdin.read())"],

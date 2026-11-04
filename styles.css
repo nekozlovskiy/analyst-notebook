@@ -887,6 +887,44 @@ body.reading .hdr-bar { display: none; }
   background: color-mix(in srgb, var(--paper-2) 45%, transparent);
 }
 
+/* Готовый SQL-запрос по этапам; выделение ключа видно и без цвета. */
+.theory > .sql-trace { max-width: 100%; }
+.sql-trace { margin: 28px 0; padding: 20px; border: 1px solid var(--rule); border-radius: var(--r-lg); }
+.trace-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.trace-controls .btn { white-space: normal; text-align: left; }
+.trace-controls .btn[aria-pressed="true"] { background: var(--pen-soft); border-color: var(--pen); color: var(--pen); }
+.sql-trace .trace-status { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+.trace-panel h4 { margin: 18px 0 8px; font-family: var(--sans); }
+.trace-scroll { max-width: 100%; overflow-x: auto; margin: 14px 0 8px; }
+.theory .trace-table { display: table; width: 100%; margin: 0; font-size: 13px; }
+.trace-table caption { text-align: left; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.theory .trace-table th, .theory .trace-table td { padding: 8px 10px; white-space: nowrap; }
+.theory .trace-table .trace-selected td { background: var(--pen-soft); }
+.trace-table .trace-selected strong { color: var(--pen); text-decoration: underline; text-underline-offset: 3px; }
+.trace-sql { margin-bottom: 18px; font-family: var(--sans); font-size: 14px; }
+.trace-sql summary { cursor: pointer; }
+.trace-sql pre { margin-top: 10px; font-size: 12px; }
+
+.answer-rubric { margin: 18px 0; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-size: 15px; }
+.answer-rubric > summary { cursor: pointer; font-weight: 600; }
+.rubric-count { font-weight: 400; color: var(--ink-2); }
+.answer-rubric > p { margin: 12px 0; }
+.rubric-help, .rubric-hint, .rubric-state { color: var(--ink-2); }
+.rubric-items { padding-left: 24px; }
+.rubric-item { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.rubric-item:last-child { border-bottom: 0; }
+.rubric-item h4 { margin: 0 0 6px; font-size: 16px; }
+.rubric-item p { margin: 6px 0 10px; }
+.rubric-state { font-size: 13px; }
+.rubric-stale .rubric-state { color: var(--amber); }
+.rubric-quote { margin: 10px 0; padding: 10px 14px; border-left: 3px solid var(--pen); background: var(--pen-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rubric-stale .rubric-quote { border-color: var(--rule); background: var(--paper-2); color: var(--ink-2); }
+.rubric-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rubric-actions .linkbtn { min-height: 44px; padding: 6px; }
+.rubric-actions .linkbtn:not(:disabled) { color: var(--pen); }
+.rubric-actions .linkbtn:disabled { opacity: .45; text-decoration: none; }
+.rubric-message { color: var(--ink-2); font-size: 14px; }
+
 .theory .lead {
   font-size: 20px; line-height: 1.6; color: var(--ink-2);
   margin-bottom: 26px;
@@ -1171,6 +1209,11 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .status .s-ico.s-pen .pen-tick { width: 26px; height: 26px; }
 [data-theme="dark"] .status .s-ico { color: #0E1218; }
 .status .s-body { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.status .s-body:has(.sql-case) { flex: 1; }
+.sql-case { margin-top: 12px; }
+.sql-case summary { cursor: pointer; font-weight: 600; }
+.sql-case p { margin: 10px 0; }
+.sql-case-table { max-width: 100%; overflow-x: auto; }
 .status .s-body b { display: block; margin-bottom: 4px; }
 .status.ok   .s-body b { color: var(--green); }
 .status.bad  .s-body b { color: var(--red); }
@@ -1512,6 +1555,10 @@ li > .term-x { margin: 8px 0 6px; }
 .q-opt.wrong { border-color: var(--red); background: var(--red-soft); }
 .q-opt.wrong .mk { color: var(--red); }
 .q-opt:disabled { opacity: 1; }
+.dr-predict { margin: 18px 0; }
+.dr-predict-why { margin: 16px 0; padding-left: 14px; border-left: 2px solid var(--pen); color: var(--ink-2); }
+.actions.cr-actions { flex-wrap: wrap; }
+.actions.cr-actions .btn { flex: 1 1 140px; white-space: normal; }
 .q-why {
   display: none; margin-top: 14px; padding: 13px 16px;
   border-radius: var(--r); background: var(--paper-2);
@@ -1530,6 +1577,15 @@ li > .term-x { margin: 8px 0 6px; }
   display: flex; align-items: center; gap: 10px;
 }
 .quiz-score b { font-family: var(--serif); color: var(--pen); font-weight: 700; }
+
+.quiz-confidence { margin: 0 0 16px; font-size: 14px; color: var(--ink-2); }
+.confidence-optional { color: var(--ink-3); }
+.confidence-options, .rv-start-actions, .mx-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.confidence-options .btn, .rv-start-actions .btn, .mx-filters .btn { white-space: normal; }
+.confidence-options .btn[aria-pressed="true"], .mx-filters .btn[aria-pressed="true"] { background: var(--pen-soft); border-color: var(--pen); color: var(--pen); }
+.confidence-options .btn[aria-pressed="true"]:disabled { opacity: .75; }
+.confidence-badge { display: block; color: var(--pen); font-size: 13px; margin: 8px 0; }
+.mx-filters { margin-bottom: 20px; }
 
 /* ============================================================
    Карточки «вопрос → ответ»
@@ -1652,6 +1708,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .modal {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-lg);
   max-width: 720px; width: 100%; max-height: 84vh; overflow: auto;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-3);
   animation: ink-in .26s var(--ease) both;
 }
