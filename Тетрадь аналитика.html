@@ -914,6 +914,44 @@ body.reading .hdr-bar { display: none; }
   background: color-mix(in srgb, var(--paper-2) 45%, transparent);
 }
 
+/* Готовый SQL-запрос по этапам; выделение ключа видно и без цвета. */
+.theory > .sql-trace { max-width: 100%; }
+.sql-trace { margin: 28px 0; padding: 20px; border: 1px solid var(--rule); border-radius: var(--r-lg); }
+.trace-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.trace-controls .btn { white-space: normal; text-align: left; }
+.trace-controls .btn[aria-pressed="true"] { background: var(--pen-soft); border-color: var(--pen); color: var(--pen); }
+.sql-trace .trace-status { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+.trace-panel h4 { margin: 18px 0 8px; font-family: var(--sans); }
+.trace-scroll { max-width: 100%; overflow-x: auto; margin: 14px 0 8px; }
+.theory .trace-table { display: table; width: 100%; margin: 0; font-size: 13px; }
+.trace-table caption { text-align: left; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.theory .trace-table th, .theory .trace-table td { padding: 8px 10px; white-space: nowrap; }
+.theory .trace-table .trace-selected td { background: var(--pen-soft); }
+.trace-table .trace-selected strong { color: var(--pen); text-decoration: underline; text-underline-offset: 3px; }
+.trace-sql { margin-bottom: 18px; font-family: var(--sans); font-size: 14px; }
+.trace-sql summary { cursor: pointer; }
+.trace-sql pre { margin-top: 10px; font-size: 12px; }
+
+.answer-rubric { margin: 18px 0; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-size: 15px; }
+.answer-rubric > summary { cursor: pointer; font-weight: 600; }
+.rubric-count { font-weight: 400; color: var(--ink-2); }
+.answer-rubric > p { margin: 12px 0; }
+.rubric-help, .rubric-hint, .rubric-state { color: var(--ink-2); }
+.rubric-items { padding-left: 24px; }
+.rubric-item { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.rubric-item:last-child { border-bottom: 0; }
+.rubric-item h4 { margin: 0 0 6px; font-size: 16px; }
+.rubric-item p { margin: 6px 0 10px; }
+.rubric-state { font-size: 13px; }
+.rubric-stale .rubric-state { color: var(--amber); }
+.rubric-quote { margin: 10px 0; padding: 10px 14px; border-left: 3px solid var(--pen); background: var(--pen-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rubric-stale .rubric-quote { border-color: var(--rule); background: var(--paper-2); color: var(--ink-2); }
+.rubric-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rubric-actions .linkbtn { min-height: 44px; padding: 6px; }
+.rubric-actions .linkbtn:not(:disabled) { color: var(--pen); }
+.rubric-actions .linkbtn:disabled { opacity: .45; text-decoration: none; }
+.rubric-message { color: var(--ink-2); font-size: 14px; }
+
 .theory .lead {
   font-size: 20px; line-height: 1.6; color: var(--ink-2);
   margin-bottom: 26px;
@@ -1198,6 +1236,11 @@ textarea.answer::placeholder { color: var(--ink-3); }
 .status .s-ico.s-pen .pen-tick { width: 26px; height: 26px; }
 [data-theme="dark"] .status .s-ico { color: #0E1218; }
 .status .s-body { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.status .s-body:has(.sql-case) { flex: 1; }
+.sql-case { margin-top: 12px; }
+.sql-case summary { cursor: pointer; font-weight: 600; }
+.sql-case p { margin: 10px 0; }
+.sql-case-table { max-width: 100%; overflow-x: auto; }
 .status .s-body b { display: block; margin-bottom: 4px; }
 .status.ok   .s-body b { color: var(--green); }
 .status.bad  .s-body b { color: var(--red); }
@@ -1539,6 +1582,10 @@ li > .term-x { margin: 8px 0 6px; }
 .q-opt.wrong { border-color: var(--red); background: var(--red-soft); }
 .q-opt.wrong .mk { color: var(--red); }
 .q-opt:disabled { opacity: 1; }
+.dr-predict { margin: 18px 0; }
+.dr-predict-why { margin: 16px 0; padding-left: 14px; border-left: 2px solid var(--pen); color: var(--ink-2); }
+.actions.cr-actions { flex-wrap: wrap; }
+.actions.cr-actions .btn { flex: 1 1 140px; white-space: normal; }
 .q-why {
   display: none; margin-top: 14px; padding: 13px 16px;
   border-radius: var(--r); background: var(--paper-2);
@@ -1557,6 +1604,15 @@ li > .term-x { margin: 8px 0 6px; }
   display: flex; align-items: center; gap: 10px;
 }
 .quiz-score b { font-family: var(--serif); color: var(--pen); font-weight: 700; }
+
+.quiz-confidence { margin: 0 0 16px; font-size: 14px; color: var(--ink-2); }
+.confidence-optional { color: var(--ink-3); }
+.confidence-options, .rv-start-actions, .mx-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.confidence-options .btn, .rv-start-actions .btn, .mx-filters .btn { white-space: normal; }
+.confidence-options .btn[aria-pressed="true"], .mx-filters .btn[aria-pressed="true"] { background: var(--pen-soft); border-color: var(--pen); color: var(--pen); }
+.confidence-options .btn[aria-pressed="true"]:disabled { opacity: .75; }
+.confidence-badge { display: block; color: var(--pen); font-size: 13px; margin: 8px 0; }
+.mx-filters { margin-bottom: 20px; }
 
 /* ============================================================
    Карточки «вопрос → ответ»
@@ -1679,6 +1735,7 @@ textarea.notes::placeholder { color: var(--ink-3); }
 .modal {
   background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-lg);
   max-width: 720px; width: 100%; max-height: 84vh; overflow: auto;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-3);
   animation: ink-in .26s var(--ease) both;
 }
@@ -2544,17 +2601,17 @@ window.COURSE = {
           desc: "print, переменные, функции и списки — первый из четырёх уроков Python",
           say: "код идёт сверху вниз, скобки — изнутри наружу",
           sayTask: "печатайте всё: print — ваши глаза в Python" },
-        { id: "m0l3", title: "pandas: таблица и столбцы", kind: "python", ready: true, steps: true, mins: 30,
+        { id: "m0l3", title: "pandas: таблица и столбцы", kind: "python", ready: true, steps: true, mins: 25,
           prep: "m2", route: "m0l2",
           desc: "head, len, один и несколько столбцов, сумма и среднее по столбцу",
           say: "цепочка через точку читается слева направо",
           sayTask: "сначала столбец, потом расчёт" },
-        { id: "m0l4", title: "pandas: отбор, сортировка, группировка", kind: "python", ready: true, steps: true, mins: 30,
+        { id: "m0l4", title: "pandas: отбор, сортировка, группировка", kind: "python", ready: true, steps: true, mins: 35,
           prep: "m2", route: "m0l2",
           desc: "WHERE, ORDER BY, LIMIT и GROUP BY на pandas — по звену за шаг",
           say: "сначала отбор, потом сортировка, потом первые строки",
           sayTask: "от порядка звеньев меняется ответ" },
-        { id: "m0l5", title: "Python: условия, циклы, словари", kind: "python", ready: true, steps: true, mins: 30,
+        { id: "m0l5", title: "Python: условия, циклы, словари", kind: "python", ready: true, steps: true, mins: 35,
           prep: "m2", route: "m0l2",
           desc: "if, for, счётчик, множество, словарь и f-строка — основы Python перед модулем 2",
           say: "отступ решает, что внутри условия и цикла",
@@ -2569,47 +2626,47 @@ window.COURSE = {
       sayDone: "SQL-секцию теперь проходят, а не переживают",
       weeks: "~2 недели",
       lessons: [
-        { id: "m1l3", title: "Агрегации, GROUP BY, HAVING", kind: "sql", ready: true,
+        { id: "m1l3", title: "Агрегации, GROUP BY, HAVING", kind: "sql", ready: true, mins: 165,
           desc: "COUNT(*) vs COUNT(col), фильтр до и после агрегации",
           say: "COUNT(*) и COUNT(колонка) — любимый устный вопрос",
           sayTask: "COUNT(*) и COUNT(колонка) дадут разное",
           sayDrills: "«Два средних, которые нельзя путать» — это спрашивают" },
-        { id: "m1l1", title: "JOIN: соединяем таблицы", kind: "sql", ready: true,
+        { id: "m1l1", title: "JOIN: соединяем таблицы", kind: "sql", ready: true, mins: 165,
           desc: "INNER и LEFT, размножение строк, ловушка с WHERE",
           say: "ON и WHERE — разные вещи. Здесь валятся чаще всего",
           sayTask: "канал без заказов обязан остаться в ответе",
           sayDrills: "«Размножение строк» — ради неё всё и затевалось" },
-        { id: "m1l9", title: "Строки, NULL и UNION", kind: "sql", ready: true,
+        { id: "m1l9", title: "Строки, NULL и UNION", kind: "sql", ready: true, mins: 145,
           desc: "LIKE, TRIM и CASE для грязных строк, IS NULL, COALESCE, NULLIF, UNION",
           say: "«= NULL» не найдёт ни одной строки — частый устный вопрос",
           sayTask: "сначала посмотрите все написания города, потом пишите CASE",
           sayDrills: "«Сумма из текста» — CAST в SQLite молча отрежет всё после пробела" },
-        { id: "m1l2", title: "Оконные функции", kind: "sql", ready: true,
+        { id: "m1l2", title: "Оконные функции", kind: "sql", ready: true, mins: 155,
           desc: "ROW_NUMBER, LAG/LEAD, накопительные суммы",
           say: "если поймёте окна, SQL-секция уже не страшна",
           sayTask: "GROUP BY схлопнет строки, а здесь нужны все",
           sayDrills: "«Доля заказа в сумме клиента» — окно внутри группы" },
-        { id: "m1l4", title: "CTE и читаемость запроса", kind: "sql", ready: true,
+        { id: "m1l4", title: "CTE и читаемость запроса", kind: "sql", ready: true, mins: 155,
           desc: "как разложить запрос на шаги, которые поймёт коллега",
           say: "запрос читает коллега, а не машина",
           sayTask: "если сами перечитываете дважды — разбейте на шаги",
           sayDrills: "«Прочитать чужой запрос» — половина работы аналитика" },
-        { id: "m1l5", title: "Подзапросы и когда они лишние", kind: "sql", ready: true,
+        { id: "m1l5", title: "Подзапросы и когда они лишние", kind: "sql", ready: true, mins: 155,
           desc: "IN, EXISTS, коррелированные подзапросы",
           say: "половину подзапросов можно не писать",
           sayTask: "прежде чем писать подзапрос, проверьте, нужен ли он",
           sayDrills: "«NOT EXISTS против NOT IN» — ловушка с NULL" },
-        { id: "m1l6", title: "Даты и когорты в SQL", kind: "sql", ready: true,
+        { id: "m1l6", title: "Даты и когорты в SQL", kind: "sql", ready: true, mins: 150,
           desc: "усечение до месяца, разница дат, первая покупка",
           say: "даты — то место, где тихо теряются строки",
           sayTask: "первая покупка — это MIN, а не первая строка",
           sayDrills: "«Честная когорта» — там обычно и ошибаются" },
-        { id: "m1l8", title: "Проект: анализ поведения пользователей", kind: "sql", ready: true,
+        { id: "m1l8", title: "Проект: анализ поведения пользователей", kind: "sql", ready: true, mins: 145,
           desc: "7 запросов под реальные продуктовые вопросы",
           say: "это уже похоже на рабочий день аналитика",
           sayTask: "семь вопросов — семь запросов, а не один огромный",
           sayDrills: "начните с проверки данных. Всегда с неё" },
-        { id: "m1l7", title: "ClickHouse: чем отличается", kind: "text", ready: true,
+        { id: "m1l7", title: "ClickHouse: чем отличается", kind: "text", ready: true, mins: 125,
           desc: "колоночное хранение, свой синтаксис, чего нет",
           say: "спрашивают «слышали?». Достаточно ответить по делу",
           sayTask: "своими словами. Список фич не нужен никому",
@@ -2624,37 +2681,37 @@ window.COURSE = {
       sayDone: "таблица на миллион строк — это вечер, а не неделя",
       weeks: "~2 недели",
       lessons: [
-        { id: "m2l1", title: "pandas: groupby, merge, сводная", kind: "python", ready: true,
+        { id: "m2l1", title: "pandas: groupby, merge, сводная", kind: "python", ready: true, mins: 155,
           desc: "тот же отчёт, что в модуле 1, но в Python",
           say: "тот же отчёт, что в SQL. Сверьте числа — сойдутся",
           sayTask: "merge по умолчанию inner. Считайте строки до и после",
           sayDrills: "«Диагностика merge» — проверяйте, а не верьте" },
-        { id: "m2l2", title: "Очистка: пропуски, дубликаты, типы", kind: "python", ready: true,
+        { id: "m2l2", title: "Очистка: пропуски, дубликаты, типы", kind: "python", ready: true, mins: 165,
           desc: "почему нельзя просто dropna()",
           say: "dropna() — самый дорогой способ потерять данные",
           sayTask: "сначала посмотрите, чего не хватает, потом решайте",
           sayDrills: "«Сколько лидов теряет dropna» — впечатляет" },
-        { id: "m2l3", title: "Выбросы", kind: "python", ready: true,
+        { id: "m2l3", title: "Выбросы", kind: "python", ready: true, mins: 155,
           desc: "IQR, перцентили и когда выброс — это правда",
           say: "не каждый выброс надо выбрасывать",
           sayTask: "чтобы убрать точку, нужна причина, а не порог",
           sayDrills: "«Выброс из CRM» — тот случай, когда это правда" },
-        { id: "m2l4", title: "Временные ряды и resample", kind: "python", ready: true,
+        { id: "m2l4", title: "Временные ряды и resample", kind: "python", ready: true, mins: 155,
           desc: "недельная динамика, скользящее среднее",
           say: "недельная динамика врёт меньше дневной",
           sayTask: "resample промолчит, если индекс не дата",
           sayDrills: "«Незакрытый период» — иначе неделя врёт" },
-        { id: "m2l5", title: "Визуализация: график под задачу", kind: "python", ready: true,
+        { id: "m2l5", title: "Визуализация: график под задачу", kind: "python", ready: true, mins: 155,
           desc: "matplotlib и seaborn, что когда уместно",
           say: "график должен отвечать на вопрос, а не украшать",
           sayTask: "оси подписаны? На собеседовании это замечают первым",
           sayDrills: "«Разбор чужого графика» учит быстрее, чем свои десять" },
-        { id: "m2l6", title: "Функции и читаемый код", kind: "python", ready: true,
+        { id: "m2l6", title: "Функции и читаемый код", kind: "python", ready: true, mins: 155,
           desc: "как оформить ноутбук, который не стыдно показать",
           say: "этот ноутбук покажут на собеседовании",
           sayTask: "не назвать одним глаголом — делает слишком много",
           sayDrills: "чек-лист в конце приложите к своему проекту" },
-        { id: "m2l7", title: "Проект: EDA-ноутбук", kind: "python", ready: true,
+        { id: "m2l7", title: "Проект: EDA-ноутбук", kind: "python", ready: true, mins: 145,
           desc: "первый проект в портфолио",
           say: "первый проект в портфолио. Не торопитесь",
           sayTask: "вывод в конце важнее числа графиков",
@@ -2669,47 +2726,47 @@ window.COURSE = {
       sayDone: "p-value больше не пугает — и продакта тоже",
       weeks: "~2 недели",
       lessons: [
-        { id: "m3l9", title: "Вероятность: условная, Байес, комбинаторика", kind: "python", ready: true,
+        { id: "m3l9", title: "Вероятность: условная, Байес, комбинаторика", kind: "python", ready: true, mins: 145,
           desc: "P(A | B), формула Байеса, «хотя бы один», сочетания — формулой и симуляцией",
           say: "P(купил | organic) и P(organic | купил) — разные числа",
           sayTask: "«точная на 95%» ещё не значит, что флагу можно верить",
           sayDrills: "«Задача о днях рождения» — её любят на собеседованиях" },
-        { id: "m3l2", title: "Распределения и ЦПТ на пальцах", kind: "python", ready: true,
+        { id: "m3l2", title: "Распределения и ЦПТ на пальцах", kind: "python", ready: true, mins: 155,
           desc: "откуда берётся «нормальность» средних",
           say: "откуда берётся нормальность — стоит понять один раз",
           sayTask: "нормальны средние, а не сами данные",
           sayDrills: "«Сколько нужно для скошенных» — там всё и ломается" },
-        { id: "m3l1", title: "Доверительный интервал и результат теста", kind: "python", ready: true,
+        { id: "m3l1", title: "Доверительный интервал и результат теста", kind: "python", ready: true, mins: 155,
           desc: "почему 5% и 6% могут быть одним и тем же числом",
           say: "5% и 6% часто одно и то же число",
           sayTask: "интервалы пересеклись — это ещё не «разницы нет»",
           sayDrills: "«Значимо, но бесполезно» — забывают чаще всего" },
-        { id: "m3l3", title: "t-тест, Манна-Уитни, хи-квадрат", kind: "python", ready: true,
+        { id: "m3l3", title: "t-тест, Манна-Уитни, хи-квадрат", kind: "python", ready: true, mins: 165,
           desc: "выбор критерия под тип метрики",
           say: "критерий выбирают под метрику, а не наоборот",
           sayTask: "сначала тип метрики, потом уже критерий",
           sayDrills: "«Один заказ ломает t-тест» — увидите своими глазами" },
-        { id: "m3l4", title: "Дизайн A/B: метрика, MDE, размер выборки", kind: "python", ready: true,
+        { id: "m3l4", title: "Дизайн A/B: метрика, MDE, размер выборки", kind: "python", ready: true, mins: 160,
           desc: "сколько ждать до выводов",
           say: "«сколько ждать» спросят на интервью",
           sayTask: "MDE выбирают до теста. После — это подгонка",
           sayDrills: "«Цена низкой базы» — почему тесты идут месяцами" },
-        { id: "m3l5", title: "Ошибки I и II рода, поправки", kind: "python", ready: true, fast: false,
+        { id: "m3l5", title: "Ошибки I и II рода, поправки", kind: "python", ready: true, fast: false, mins: 160,
           desc: "Бонферрони и почему 10 метрик — это проблема",
           say: "десять метрик — это десять шансов ошибиться",
           sayTask: "десять метрик почти гарантируют «находку»",
           sayDrills: "«Сколько правды среди значимых» — отрезвляет" },
-        { id: "m3l6", title: "Ловушки A/B: SRM, подглядывание, сегменты", kind: "text", ready: true, fast: false,
+        { id: "m3l6", title: "Ловушки A/B: SRM, подглядывание, сегменты", kind: "text", ready: true, fast: false, mins: 130,
           desc: "разбор одного плохого теста",
           say: "один плохой тест учит больше десяти хороших",
           sayTask: "назовите, что именно сломано, а не «тест плохой»",
           sayDrills: "«Парадокс Симпсона в цифрах» — не пропускайте" },
-        { id: "m3l8", title: "Ratio-метрики и CUPED", kind: "python", ready: true, fast: false,
+        { id: "m3l8", title: "Ratio-метрики и CUPED", kind: "python", ready: true, fast: false, mins: 150,
           desc: "средний чек в A/B: дельта-метод, бутстрап по пользователям, CUPED",
           say: "делили людей — значит, и ошибку считают по людям",
           sayTask: "t-тест по заказам скажет «значимо» — проверьте, так ли это",
           sayDrills: "«A/A на своих данных» — после неё перестают верить тесту по заказам" },
-        { id: "m3l7", title: "Проект: разбор результатов A/B", kind: "python", ready: true,
+        { id: "m3l7", title: "Проект: разбор результатов A/B", kind: "python", ready: true, mins: 130,
           desc: "расчёт, вывод и рекомендация продакту",
           say: "здесь вы говорите не с данными, а с продактом",
           sayTask: "рекомендация продакту — одна строка, без «возможно»",
@@ -2724,42 +2781,42 @@ window.COURSE = {
       sayDone: "теперь вы говорите с продактом на одном языке",
       weeks: "~2 недели",
       lessons: [
-        { id: "m4l1", title: "Метрика упала на 20%: разбор кейса", kind: "text", ready: true,
+        { id: "m4l1", title: "Метрика упала на 20%: разбор кейса", kind: "text", ready: true, mins: 125,
           desc: "самый частый вопрос на продуктовом собеседовании",
           say: "правильного ответа нет, проверяют ход мысли",
           sayTask: "первым делом проверьте, не сломался ли счётчик",
           sayDrills: "«Продукт или счётчик» — всегда начинают с этого" },
-        { id: "m4l2", title: "Воронки и конверсия между шагами", kind: "sql", ready: true,
+        { id: "m4l2", title: "Воронки и конверсия между шагами", kind: "sql", ready: true, mins: 155,
           desc: "где именно теряются пользователи",
           say: "воронка почти всегда врёт на определении шага",
           sayTask: "шаг воронки определяют до того, как считать",
           sayDrills: "«Куда вкладываться» — считаем эффект, а не жалуемся" },
-        { id: "m4l3", title: "Retention и когортный анализ", kind: "sql", ready: true,
+        { id: "m4l3", title: "Retention и когортный анализ", kind: "sql", ready: true, mins: 155,
           desc: "кривая удержания и как её читать",
           say: "кривая удержания — первое, что просят нарисовать",
           sayTask: "день 7 — это ровно седьмой день или «в течение»?",
           sayDrills: "«Цензурирование» — половина ошибок в retention отсюда" },
-        { id: "m4l4", title: "DAU/MAU, ARPU, LTV, churn", kind: "python", ready: true,
+        { id: "m4l4", title: "DAU/MAU, ARPU, LTV, churn", kind: "python", ready: true, mins: 155,
           desc: "какие метрики за что отвечают",
           say: "путать ARPU и ARPPU — классика",
           sayTask: "у ARPU и ARPPU разные знаменатели",
           sayDrills: "«LTV через отток и почему он завышен» — обязательно" },
-        { id: "m4l5", title: "Сегментация и RFM", kind: "python", ready: true,
+        { id: "m4l5", title: "Сегментация и RFM", kind: "python", ready: true, mins: 155,
           desc: "разбить базу так, чтобы с ней что-то сделали",
           say: "сегмент нужен, только если с ним что-то сделают",
           sayTask: "сегмент без действия — потраченный вечер",
           sayDrills: "«Правило Парето» — проверьте, а не повторяйте" },
-        { id: "m4l6", title: "Дашборд: что показывать", kind: "text", ready: true,
+        { id: "m4l6", title: "Дашборд: что показывать", kind: "text", ready: true, mins: 125,
           desc: "структура дашборда, который читают",
           say: "дашборд, который не открывают, — неделя впустую",
           sayTask: "начните с вопроса, на который он отвечает",
           sayDrills: "«Вычеркнуть лишнее» — главный навык в дашбордах" },
-        { id: "m4l8", title: "BI на практике: дашборд в DataLens", kind: "sheet", ready: true,
+        { id: "m4l8", title: "BI на практике: дашборд в DataLens", kind: "sheet", ready: true, mins: 175,
           desc: "собрать дашборд из 4.6 руками и сверить числа",
           say: "дашборд, собранный руками, — строка в резюме",
           sayTask: "сначала датасет и связи, потом чарты",
           sayDrills: "«Выручка в 32 раза больше» — здесь спотыкаются почти все" },
-        { id: "m4l7", title: "Проект: записка по итогам квартала", kind: "text", ready: true,
+        { id: "m4l7", title: "Проект: записка по итогам квартала", kind: "text", ready: true, mins: 125,
           desc: "свести четыре расчёта в одно решение о деньгах",
           say: "свести четыре расчёта в одно решение о деньгах",
           sayTask: "одно решение о деньгах, а не четыре наблюдения",
@@ -2776,27 +2833,27 @@ window.COURSE = {
       sayDone: "модель больше не чёрный ящик",
       weeks: "~1 неделя, параллельно",
       lessons: [
-        { id: "m5l1", title: "Линейная регрессия: смысл коэффициентов", kind: "python", ready: true,
+        { id: "m5l1", title: "Линейная регрессия: смысл коэффициентов", kind: "python", ready: true, mins: 155,
           desc: "что значит «при прочих равных»",
           say: "«при прочих равных» — почти всегда неправда",
           sayTask: "коэффициент говорит «связано», а не «влияет»",
           sayDrills: "«Единицы измерения» — на этом ловят чаще всего" },
-        { id: "m5l2", title: "R², остатки и когда модель врёт", kind: "python", ready: true,
+        { id: "m5l2", title: "R², остатки и когда модель врёт", kind: "python", ready: true, mins: 155,
           desc: "высокий R² не значит «хорошо»",
           say: "высокий R² бывает у совершенно бесполезной модели",
           sayTask: "смотрите на остатки, а не на одну цифру",
           sayDrills: "«Сколько мусора нужно» — очень показательно" },
-        { id: "m5l3", title: "Логистическая регрессия и ROC-AUC", kind: "python", ready: true,
+        { id: "m5l3", title: "Логистическая регрессия и ROC-AUC", kind: "python", ready: true, mins: 155,
           desc: "вероятности, порог, что спрашивают на интервью",
           say: "ROC-AUC спрашивают, даже если вы не ML-инженер",
           sayTask: "порог 0,5 — это умолчание, а не выбор",
           sayDrills: "«Доля правильных обманывает» — спросят точно" },
-        { id: "m5l4", title: "Корреляция и причинность", kind: "text", ready: true,
+        { id: "m5l4", title: "Корреляция и причинность", kind: "text", ready: true, mins: 125,
           desc: "конфаундеры и как не опозориться в выводе",
           say: "конфаундер — то, что портит красивый вывод",
           sayTask: "найдите третью переменную прежде, чем делать вывод",
           sayDrills: "«Конфаундер с числами» — увидеть важнее" },
-        { id: "m5l5", title: "Градиентный спуск концептуально", kind: "python", ready: true,
+        { id: "m5l5", title: "Градиентный спуск концептуально", kind: "python", ready: true, mins: 155,
           desc: "как модель вообще что-то «подбирает»",
           say: "достаточно понимать идею, формулы никто не спросит",
           sayTask: "большой шаг улетит, малый не дойдёт",
@@ -2811,42 +2868,42 @@ window.COURSE = {
       sayDone: "осталось откликаться — остальное вы умеете",
       weeks: "~2 недели",
       lessons: [
-        { id: "m6l1", title: "Резюме аналитика без опыта", kind: "text", ready: true,
+        { id: "m6l1", title: "Резюме аналитика без опыта", kind: "text", ready: true, mins: 125,
           desc: "как описать учебные проекты, чтобы позвали",
           say: "учебный проект — тоже опыт, если описать по делу",
           sayTask: "цифры вместо «занимался аналитикой»",
           sayDrills: "«Тридцать секунд» — ровно столько резюме и смотрят" },
-        { id: "m6l2", title: "Оформление проектов в портфолио", kind: "text", ready: true,
+        { id: "m6l2", title: "Оформление проектов в портфолио", kind: "text", ready: true, mins: 125,
           desc: "GitHub, README, структура ноутбука",
           say: "README читают дольше, чем код",
           sayTask: "README прочитают, ноутбук — вряд ли",
           sayDrills: "«Что нельзя выкладывать» — прочтите до, а не после" },
-        { id: "m6l3", title: "SQL на собеседовании: типовые задачи", kind: "sql", ready: true,
+        { id: "m6l3", title: "SQL на собеседовании: типовые задачи", kind: "sql", ready: true, mins: 130,
           desc: "15 задач, которые реально дают",
           say: "пятнадцать задач, которые дают чаще прочих",
           sayTask: "проговаривайте вслух, даже когда уже пишете",
           sayDrills: "«Вторая по величине» — просят чаще всех остальных" },
-        { id: "m6l8", title: "Чужая схема: такси", kind: "sql", base: "taxi", ready: true,
+        { id: "m6l8", title: "Чужая схема: такси", kind: "sql", base: "taxi", ready: true, mins: 150,
           desc: "незнакомая база за десять минут и типовые задачи такси",
           say: "на собеседовании схема всегда чужая",
           sayTask: "сначала посчитайте строки и статусы, потом решайте",
           sayDrills: "«Перерыв водителя» — LAG по дням без повторов" },
-        { id: "m6l4", title: "Python на собеседовании", kind: "python", ready: true,
+        { id: "m6l4", title: "Python на собеседовании", kind: "python", ready: true, mins: 160,
           desc: "что спрашивают и как думать вслух",
           say: "думать вслух важнее, чем сразу написать верно",
           sayTask: "скажите, что собираетесь делать, до того как писать",
           sayDrills: "«Копия или вид» — здесь спотыкаются почти все" },
-        { id: "m6l7", title: "Excel и Google Таблицы на тестовом", kind: "sheet", ready: true,
+        { id: "m6l7", title: "Excel и Google Таблицы на тестовом", kind: "sheet", ready: true, mins: 120,
           desc: "сводная, ВПР и СУММЕСЛИМН на тех же данных",
           say: "тестовое в xlsx — та же аналитика, другим инструментом",
           sayTask: "сначала ВПР, потом сводная — не наоборот",
           sayDrills: "«Закрытые лиды» — восемь написаний четырёх статусов" },
-        { id: "m6l5", title: "Продуктовые кейсы на интервью", kind: "text", ready: true,
+        { id: "m6l5", title: "Продуктовые кейсы на интервью", kind: "text", ready: true, mins: 125,
           desc: "структура ответа на открытый вопрос",
           say: "структура ответа важнее самого ответа",
           sayTask: "структура ответа важнее самого ответа",
           sayDrills: "«Найти самоотбор» — любимая проверка на кейсах" },
-        { id: "m6l6", title: "Mock-интервью и список компаний", kind: "text", ready: true,
+        { id: "m6l6", title: "Mock-интервью и список компаний", kind: "text", ready: true, mins: 125,
           desc: "куда откликаться и в каком порядке",
           say: "самый недооценённый урок курса",
           sayTask: "список компаний — по возрастанию желанности",
@@ -2861,37 +2918,37 @@ window.COURSE = {
       sayDone: "в портфолио — ноутбук, дашборд и записка на одной базе",
       weeks: "3–5 вечеров",
       lessons: [
-        { id: "m7l1", title: "Техзадание и рабочее место", kind: "text", ready: true,
+        { id: "m7l1", title: "Техзадание и рабочее место", kind: "text", ready: true, mins: 90,
           desc: "письмо заказчика, Colab и план работы",
           say: "сначала вопросы, потом запросы",
           sayTask: "ответьте заказчику до того, как считать",
           sayDrills: "«Что спросить у Арины» — здесь решается половина тестового" },
-        { id: "m7l2", title: "Качество данных", kind: "sheet", ready: true,
+        { id: "m7l2", title: "Качество данных", kind: "sheet", ready: true, mins: 120,
           desc: "дубли, тестовые аккаунты и отмены до любого расчёта",
           say: "грязная выгрузка — норма, а не исключение",
           sayTask: "сосчитать каждую ловушку до того, как чистить",
           sayDrills: "«Сколько стоили дубли» — посчитайте, а не прикиньте" },
-        { id: "m7l3", title: "SQL-выгрузка: GMV и выручка", kind: "sheet", ready: true,
+        { id: "m7l3", title: "SQL-выгрузка: GMV и выручка", kind: "sheet", ready: true, mins: 120,
           desc: "деньги ресторанов и деньги сервиса — разные числа",
           say: "GMV на слайде вместо выручки — частая ошибка тестового",
           sayTask: "деньги — от доставленных, отмены — от всех оформленных",
           sayDrills: "«Лучший месяц по заказам» — сначала назовите метрику" },
-        { id: "m7l4", title: "pandas: когорты и средний чек", kind: "sheet", ready: true,
+        { id: "m7l4", title: "pandas: когорты и средний чек", kind: "sheet", ready: true, mins: 120,
           desc: "удержание по месяцам регистрации и чек на клиента",
           say: "когорта отвечает на вопрос, который выручка прячет",
           sayTask: "сначала таблица когорт, потом выводы",
           sayDrills: "«M1 апрельской когорты» — посмотрите, что было в мае" },
-        { id: "m7l5", title: "A/B: бесплатная доставка", kind: "sheet", ready: true,
+        { id: "m7l5", title: "A/B: бесплатная доставка", kind: "sheet", ready: true, mins: 150,
           desc: "конверсия выросла — а деньги?",
           say: "значимый рост, за который платит компания, — ещё не успех",
           sayTask: "сначала SRM, потом конверсия, решает выручка на пользователя",
           sayDrills: "«Заказы у порога» — так выглядит бесплатная доставка в данных" },
-        { id: "m7l6", title: "Дашборд проекта", kind: "sheet", ready: true,
+        { id: "m7l6", title: "Дашборд проекта", kind: "sheet", ready: true, mins: 150,
           desc: "дашборд DataLens по чистой таблице из ноутбука",
           say: "числа дашборда и ноутбука должны совпадать по построению",
           sayTask: "чистая таблица из Colab, потом DataLens",
           sayDrills: "«Дашборд на сыром файле» — насколько он соврёт" },
-        { id: "m7l7", title: "Записка заказчику", kind: "text", ready: true,
+        { id: "m7l7", title: "Записка заказчику", kind: "text", ready: true, mins: 120,
           desc: "решение по эксперименту, деньги и портфолио",
           say: "записку читают первой, а часто — единственной",
           sayTask: "решение первым абзацем, три числа под ним",
@@ -3269,6 +3326,49 @@ P = np.column_stack([(feat["platform"] == p).to_numpy(float) for p in PLATFORMS]
 y  = feat["rev90"].to_numpy(float)
 yb = feat["converted"].to_numpy(float)
 `;
+
+/* Короткие самостоятельные повторы после распознанной ошибки запуска.
+   Их зачёт не меняет прохождение уроков и шагов. */
+window.SH.codePractice = {
+  "sql-schema": {
+    body: "<p>Выведите <code>user_id</code> и <code>city</code> первых трёх пользователей по <code>user_id</code>. В заготовке перепутаны имена таблицы и столбца. Сверьтесь со схемой и исправьте их.</p>",
+    starter: "SELECT id, city\nFROM user\nORDER BY id\nLIMIT 3;",
+    hint: "Имя таблицы — users. Имя идентификатора посмотрите в её схеме; после SELECT и в ORDER BY оно должно совпадать.",
+    solution: "SELECT user_id, city\nFROM users\nORDER BY user_id\nLIMIT 3;",
+    expected: { columns: ["user_id", "city"], rows: [[1, "Новосибирск"], [2, "Казань"], [3, "Москва"]], ordered: true }
+  },
+  "sql-aggregate": {
+    body: "<p>Найдите города, в которых больше 40 зарегистрированных пользователей. Выведите <code>city</code> и <code>users_cnt</code>, сортировка по городу. В заготовке условие по числу пользователей поставлено до группировки.</p>",
+    starter: "SELECT city, COUNT(*) AS users_cnt\nFROM users\nWHERE COUNT(*) > 40\nGROUP BY city\nORDER BY city;",
+    hint: "WHERE отбирает отдельные строки. Условие по COUNT(*) поставьте после GROUP BY, используя HAVING.",
+    solution: "SELECT city, COUNT(*) AS users_cnt\nFROM users\nGROUP BY city\nHAVING COUNT(*) > 40\nORDER BY city;",
+    expected: { columns: ["city", "users_cnt"], rows: [["Екатеринбург", 43], ["Казань", 47], ["Москва", 53], ["Санкт-Петербург", 42]], ordered: true }
+  },
+  "py-name": {
+    body: "<p>Переменные <code>paid</code> и <code>total</code> должны существовать до печати. Исправьте порядок строк и допишите <code>print</code>, чтобы получить строку <code>Оплачено: 189 из 215</code>. В печати используйте обе переменные.</p>",
+    env: { packages: [], data: [] },
+    starter: 'print("Оплачено:", paid)\npaid = 189\ntotal = 215',
+    hint: "Сначала выполните присваивания paid и total. Ниже напечатайте текст и обе переменные через запятые.",
+    solution: 'paid = 189\ntotal = 215\nprint("Оплачено:", paid, "из", total)',
+    expected: { stdout: "Оплачено: 189 из 215", uses: [["print\\([^\\n]*\\bpaid\\b[^\\n]*\\btotal\\b", "В print используйте paid и total, чтобы строка брала числа из переменных."]] }
+  },
+  "py-column": {
+    body: "<p>В таблице <code>orders</code> посчитайте сумму <code>revenue</code> по всем заказам, округлите до двух знаков и напечатайте. В заготовке опечатка в имени столбца.</p>",
+    env: { packages: ["pandas"], data: window.SH.pyData, prelude: window.SH.pyPrelude },
+    starter: 'print(round(orders["revenu"].sum(), 2))',
+    hint: 'Имя столбца пишется revenue. Его берут у orders в квадратных скобках с кавычками.',
+    solution: 'print(round(orders["revenue"].sum(), 2))',
+    expected: { stdout: "765476.25" }
+  },
+  "py-condition": {
+    body: "<p>Отберите оплаченные заказы с <code>revenue &gt; 5000</code> и напечатайте их число. Условия в заготовке верны по отдельности, но соединены оператором для одного значения.</p>",
+    env: { packages: ["pandas"], data: window.SH.pyData, prelude: window.SH.pyPrelude },
+    starter: 'big = orders[(orders["status"] == "paid") and (orders["revenue"] > 5000)]\nprint(len(big))',
+    hint: "Условия по целым столбцам соединяют через &, каждое условие берут в скобки.",
+    solution: 'big = orders[(orders["status"] == "paid") & (orders["revenue"] > 5000)]\nprint(len(big))',
+    expected: { stdout: "28" }
+  }
+};
 
 </script>
 <script>
@@ -4889,7 +4989,7 @@ window.CONTENT.m1l1 = {
     { m: "35 мин", w: "Теория и карточки: четыре вида соединений и две главные ловушки" },
     { m: "30 мин", w: "Практикум: шесть шагов от INNER JOIN до размножения строк" },
     { m: "40 мин", w: "Основная задача: сводка по каналам для маркетинга" },
-    { m: "35 мин", w: "Тренажёр: 5 задач на ту же базу" },
+    { m: "45 мин", w: "Тренажёр: 6 задач на ту же базу" },
     { m: "10 мин", w: "Самопроверка вопросами" },
     { m: "5 мин",  w: "Заметки и ссылки на разбор" }
   ],
@@ -4992,6 +5092,8 @@ LEFT JOIN orders o ON o.user_id = u.user_id
   <tr><td><code>100 + NULL</code></td><td><code>NULL</code></td><td>закрывать <code>COALESCE</code> заранее</td></tr>
 </table>
 
+<div data-sql-trace></div>
+
 <div class="callout work">
   <span class="ct">Где это в работе</span>
   <p>Любой отчёт «в разрезе чего-то» — это джойн. «Выручка по каналам привлечения», «заказы по городам», «активность по тарифам»: атрибут лежит в одной таблице, событие — в другой. Задача про каналы без заказов — типичный запрос от маркетинга перед перераспределением бюджета: канал, который не принёс ни рубля, обязан быть в таблице с нулём, иначе его просто не заметят и продолжат оплачивать.</p>
@@ -5007,6 +5109,44 @@ LEFT JOIN orders o ON o.user_id = u.user_id
   </ul>
 </div>
 `,
+
+  sqlTrace: {
+    title: "Проследите строки: JOIN → GROUP BY",
+    intro: "Разберите готовый запрос по этапам. В примере выбраны пользователи 16, 19 и 21; учитываются заказы всех статусов, включая возврат. Выберите user_id, чтобы выделить его строки в каждой таблице.",
+    keys: [16, 19, 21],
+    stages: [
+      {
+        title: "До JOIN",
+        note: "В users у каждого выбранного пользователя одна строка. В orders у одного человека может быть несколько заказов, а у другого — ни одного. Сравните строки пользователя 16 и пользователя 19.",
+        tables: [
+          { title: "users: выбранные пользователи", key: "user_id",
+            sql: "SELECT user_id, channel\nFROM users\nWHERE user_id IN (16, 19, 21)\nORDER BY user_id;",
+            columns: ["user_id", "channel"], rows: [[16, "organic"], [19, "partner"], [21, "email"]] },
+          { title: "orders: их заказы всех статусов", key: "user_id",
+            sql: "SELECT user_id, order_id, status\nFROM orders\nWHERE user_id IN (16, 19, 21)\nORDER BY user_id, order_id;",
+            columns: ["user_id", "order_id", "status"], rows: [[16, 18, "refunded"], [16, 19, "paid"], [21, 23, "paid"]] }
+        ]
+      },
+      {
+        title: "После LEFT JOIN",
+        note: "Пользователь 16 встречается по разу на каждый свой заказ: это один человек в нескольких строках. Пользователь 19 остаётся в результате, хотя заказа нет; справа у него NULL. Выделение показывает все строки выбранного ключа.",
+        tables: [
+          { title: "Промежуточные строки соединения", key: "user_id",
+            sql: "SELECT u.user_id, o.order_id, o.status\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21)\nORDER BY u.user_id, o.order_id;",
+            columns: ["user_id", "order_id", "status"], rows: [[16, 18, "refunded"], [16, 19, "paid"], [19, null, null], [21, 23, "paid"]] }
+        ]
+      },
+      {
+        title: "После GROUP BY",
+        note: "Группируем по пользователю. rows_cnt = COUNT(*) считает строки соединения; users_cnt = COUNT(DISTINCT u.user_id) — разных людей внутри группы; orders_cnt = COUNT(o.order_id) — заказы. У пользователя 19 строка есть, а заказов нет. GROUP BY сам по себе не исправляет неверный выбор счётчика.",
+        tables: [
+          { title: "По одной строке на пользователя", key: "user_id",
+            sql: "SELECT u.user_id,\n       COUNT(*) AS rows_cnt,\n       COUNT(DISTINCT u.user_id) AS users_cnt,\n       COUNT(o.order_id) AS orders_cnt\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.user_id\nWHERE u.user_id IN (16, 19, 21)\nGROUP BY u.user_id\nORDER BY u.user_id;",
+            columns: ["user_id", "rows_cnt", "users_cnt", "orders_cnt"], rows: [[16, 2, 1, 2], [19, 1, 1, 0], [21, 1, 1, 1]] }
+        ]
+      }
+    ]
+  },
 
   ticket: {
     from: "Ира, performance-маркетинг",
@@ -5248,6 +5388,12 @@ ORDER BY revenue DESC;`,
     {
       title: "Заказы-сироты",
       level: "mid",
+      sqlCases: [
+        { title: "Заказ без пользователя", change: "INSERT INTO orders VALUES (216, 999, '2024-06-30', 1000, 'paid');",
+          explain: "Добавлен один заказ с user_id = 999. Такого пользователя в users нет: заказ должен попасть в счётчик сирот." },
+        { title: "Удалён аккаунт покупателя", change: "DELETE FROM users WHERE user_id = 31;",
+          explain: "Из копии users удалён пользователь 31, его заказы остались. Проверяйте отсутствие пары, а не конкретный номер пользователя." }
+      ],
       body: `<p>В реальной базе иногда встречаются заказы, у которых <code>user_id</code> не находится в таблице пользователей: удалили аккаунт, сломался импорт, кривая миграция. Это первое, что проверяет аналитик перед тем, как строить отчёт.</p>
 <p>Напишите запрос, который покажет, есть ли в <code>orders</code> такие «сироты»: выведите <code>orphan_orders</code> — их количество. Если данные целые, должен получиться ноль.</p>`,
       solution: `SELECT COUNT(*) AS orphan_orders
@@ -5294,6 +5440,40 @@ GROUP BY u.city, u.channel
 HAVING SUM(o.revenue) > 30000
 ORDER BY revenue DESC;`,
       note: `<p>Ответ на вопрос: здесь нас интересуют только пары «город × канал», где деньги реально есть. Пустых комбинаций «город × канал» здесь семь из тридцати возможных, и в отчёте они только шумят. Вид соединения выбирается не по привычке, а по тому, нужны ли вам нули в отчёте.</p>`
+    },
+    {
+      title: "Исправьте отчёт: пропал пользователь без заказов",
+      level: "mid",
+      body: `<p>Коллега считает оплаченные заказы для пользователей <code>31</code>, <code>196</code> и <code>220</code>. В отчёте должны остаться все три пользователя, даже если оплаченных заказов нет.</p>
+<p>Запрос выполняется, но нарушает это условие. Сначала предположите, что случится со строками, затем исправьте запрос в редакторе.</p>
+<pre><code>SELECT u.user_id, COUNT(o.order_id) AS paid_orders
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.user_id
+WHERE u.user_id IN (31, 196, 220)
+  AND o.status = 'paid'
+GROUP BY u.user_id
+ORDER BY u.user_id;</code></pre>
+<p>Нужны <code>user_id</code> и <code>paid_orders</code>, сортировка по <code>user_id</code>. Меняйте логику отбора, чтобы запрос работал и для других пользователей.</p>`,
+      starter: `SELECT u.user_id, COUNT(o.order_id) AS paid_orders
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.user_id
+WHERE u.user_id IN (31, 196, 220)
+  AND o.status = 'paid'
+GROUP BY u.user_id
+ORDER BY u.user_id;`,
+      predict: {
+        q: "Кто останется в отчёте до исправления?",
+        opts: ["Все выбранные пользователи: LEFT JOIN сохраняет их при любом WHERE", "Только пользователи с оплаченным заказом", "Только пользователи без заказов"],
+        right: 1,
+        why: "У строки без заказа o.status равен NULL. Условие в WHERE не пропускает её. Определите, где отбирать оплаченные заказы, чтобы нулевые пользователи сохранились."
+      },
+      solution: `SELECT u.user_id, COUNT(o.order_id) AS paid_orders
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.user_id AND o.status = 'paid'
+WHERE u.user_id IN (31, 196, 220)
+GROUP BY u.user_id
+ORDER BY u.user_id;`,
+      note: `<p>Сохранены 3 из 3 выбранных пользователей. У 31 — 2 оплаченных заказа из 3, у 196 — 2 из 5, у 220 заказов нет и счётчик равен 0. Отбор <code>paid</code> перенесён в <code>ON</code>, а <code>COUNT(o.order_id)</code> не считает строку с <code>NULL</code>.</p>`
     }
   ],
 
@@ -5404,7 +5584,7 @@ window.CONTENT.m1l9 = {
     { m: "30 мин", w: "Теория и карточки: шаблоны LIKE, строковые функции, три ловушки NULL, UNION" },
     { m: "35 мин", w: "Практикум: семь шагов от LIKE до CASE со списком на событиях и лидах" },
     { m: "30 мин", w: "Основная задача: лиды по городам для отдела продаж" },
-    { m: "25 мин", w: "Тренажёр: 8 задач на ту же выгрузку и базу магазина" },
+    { m: "35 мин", w: "Тренажёр: 9 задач на ту же выгрузку и базу магазина" },
     { m: "10 мин", w: "Самопроверка вопросами" },
     { m: "5 мин",  w: "Заметки и ссылки на разбор" }
   ],
@@ -5756,6 +5936,12 @@ FROM leads;`,
     {
       title: "Отрицательные суммы",
       level: "mid",
+      sqlCases: [
+        { title: "Повтор отрицательной строки", change: "INSERT INTO leads SELECT * FROM leads WHERE lead_id = 1022;",
+          explain: "Строка лида 1022 с отрицательной суммой повторена ещё раз. Условие задачи требует сохранить каждый повтор." },
+        { title: "Новая отрицательная сумма", change: "UPDATE leads SET deal_sum = '-100,50' WHERE lead_id = 1001;",
+          explain: "Сумма лида 1001 заменена на −100,50. Эта строка тоже должна попасть в ответ; список прежних отрицательных лидов уже недостаточен." }
+      ],
       body: `<p>Сумма сделки не может быть меньше нуля, но в выгрузке такие есть.</p>
 <p>Выведите <code>lead_id</code> и <code>deal</code> — сумму, переведённую в число, для всех строк выгрузки с отрицательной суммой, повторы не убирайте. Сортировка по <code>lead_id</code>.</p>`,
       solution: `SELECT lead_id,
@@ -5802,6 +5988,34 @@ GROUP BY 1;`,
 EXCEPT                            -- строки первого запроса, которых нет во втором
 SELECT LOWER(TRIM(source)) FROM leads;`,
       note: `<p>Ответ — один канал, <code>partner</code>. Тот же вопрос через <code>WHERE channel NOT IN (SELECT LOWER(TRIM(source)) FROM leads)</code> вернул бы 0 строк: среди источников есть <code>NULL</code>, а сравнение с ним даёт «неизвестно». Эту ловушку подробно разбирает урок 1.6.</p>`
+    },
+    {
+      title: "Исправьте отбор: кому не назначен менеджер",
+      level: "easy",
+      sqlCases: [
+        { title: "Ещё один пропуск менеджера", change: "UPDATE leads SET manager = NULL WHERE lead_id = 1022;",
+          explain: "У лида 1022 вместо назначенного менеджера теперь NULL. Счётчик должен учитывать новый пропуск." },
+        { title: "Все пропуски заполнены", change: "UPDATE leads SET manager = 'Новый менеджер' WHERE manager IS NULL;",
+          explain: "В этой копии всем лидам без менеджера назначен ответственный. Отбор по отсутствию значения не должен находить ни одной строки." }
+      ],
+      body: `<p>Выгрузка <code>leads</code> хранит отсутствие менеджера как SQL-пропуск <code>NULL</code>. Коллега хочет посчитать такие лиды:</p>
+<pre><code>SELECT COUNT(*) AS unassigned
+FROM leads
+WHERE manager = NULL;</code></pre>
+<p>Сначала предположите, что вернёт этот запрос. Затем исправьте условие отбора и выведите одну строку со столбцом <code>unassigned</code>. Не заменяйте проверку пропуска списком известных менеджеров.</p>`,
+      starter: `SELECT COUNT(*) AS unassigned
+FROM leads
+WHERE manager = NULL;`,
+      predict: {
+        q: "Что получится до исправления, если в данных есть пропуски?",
+        opts: ["Запрос упадёт с синтаксической ошибкой", "Будут посчитаны все лиды без менеджера", "Получится нулевой счётчик"],
+        right: 2,
+        why: "Сравнение через = с NULL даёт неизвестный результат. WHERE оставляет только истину, поэтому ни одна строка не проходит. Нужна проверка самого факта пропуска."
+      },
+      solution: `SELECT COUNT(*) AS unassigned
+FROM leads
+WHERE manager IS NULL;`,
+      note: `<p>Менеджер не назначен у 13 из 63 лидов. <code>IS NULL</code> проверяет отсутствие значения; <code>= NULL</code> не находит даже те строки, где менеджер отсутствует.</p>`
     }
   ],
 
@@ -6457,7 +6671,7 @@ window.CONTENT.m1l3 = {
     { m: "35 мин", w: "Теория и карточки: агрегаты, гранулярность, WHERE против HAVING" },
     { m: "30 мин", w: "Практикум: CASE WHEN за шесть шагов — от подписи до условного подсчёта" },
     { m: "40 мин", w: "Основная задача: отчёт по городам с порогом" },
-    { m: "35 мин", w: "Тренажёр: 5 задач на подсчёты и ловушки среднего" },
+    { m: "45 мин", w: "Тренажёр: 6 задач на подсчёты и ловушки среднего" },
     { m: "10 мин", w: "Самопроверка вопросами" },
     { m: "5 мин",  w: "Заметки" }
   ],
@@ -6844,6 +7058,34 @@ FROM ordered
 -- для чётного — две, и AVG усредняет их
 WHERE rn IN ((total + 1) / 2, (total + 2) / 2);`,
       note: `<p>Медиана — 2 997,20 против среднего 3 457,30. Разрыв в 15% означает, что распределение чеков скошено вправо: много мелких заказов и хвост крупных. В отчётах про деньги почти всегда стоит показывать оба числа: среднее отвечает на вопрос «сколько всего денег делить на всех», медиана — «как выглядит типичный заказ».</p>`
+    },
+    {
+      title: "Исправьте долю: заказы поделили на пользователей",
+      level: "mid",
+      body: `<p>Продакт спросил: «Какая доля всех заказов оплачена?» Коллега написал запрос и назвал результат процентом оплаченных заказов:</p>
+<pre><code>SELECT COUNT(*) AS orders_cnt,
+       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt,
+       ROUND(100.0 * SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END)
+             / COUNT(DISTINCT user_id), 1) AS paid_pct
+FROM orders;</code></pre>
+<p>Сначала определите, почему ответ не соответствует вопросу. Затем исправьте знаменатель. Сохраните столбцы <code>orders_cnt</code>, <code>paid_cnt</code>, <code>paid_pct</code> и округление доли до одного знака после запятой.</p>`,
+      starter: `SELECT COUNT(*) AS orders_cnt,
+       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt,
+       ROUND(100.0 * SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END)
+             / COUNT(DISTINCT user_id), 1) AS paid_pct
+FROM orders;`,
+      predict: {
+        q: "Что на самом деле посчитано в paid_pct?",
+        opts: ["Число оплаченных заказов на пользователя с заказами, умноженное на 100", "Доля оплаченных заказов среди всех заказов", "Доля пользователей без заказов"],
+        right: 0,
+        why: "Числитель посчитан по заказам, знаменатель — по уникальным пользователям. Это разные единицы счёта. Для доли оплаченных заказов выберите знаменатель по тому же набору заказов, о котором спросил продакт."
+      },
+      solution: `SELECT COUNT(*) AS orders_cnt,
+       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_cnt,
+       ROUND(100.0 * SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END)
+             / COUNT(*), 1) AS paid_pct
+FROM orders;`,
+      note: `<p>Оплачены 189 из 215 заказов: 87,9%. Исходный запрос делил 189 оплаченных заказов на 110 пользователей с заказами и получал 171,8%. Он отвечал на другой вопрос. В доле числитель и знаменатель должны относиться к одной единице счёта.</p>`
     }
   ],
 
@@ -24308,6 +24550,19 @@ window.CONTENT.m4l7 = {
   ],
   minCriteria: 7,
   minWords: 160,
+
+  rubric: [
+    { id: "metric", title: "Метрика и единицы",
+      hint: "Какой показатель обосновывает ваш вывод? Подпишите, в чём он измерен: деньги, доля, деньги на пользователя." },
+    { id: "period", title: "Период и горизонт",
+      hint: "За какой период сравниваются данные и на каком горизонте посчитана экономика? Выделите фразу, которая задаёт границы по времени." },
+    { id: "denominator", title: "Знаменатель или база сравнения",
+      hint: "От чего считается доля, на кого приходится сумма или с чем сравнивается показатель? Вся когорта и только покупатели — разные базы." },
+    { id: "limits", title: "Ограничения анализа",
+      hint: "Что не учтено в расчёте и какой вывод эти данные не позволяют сделать? Нужна конкретная оговорка, а не просто слово «ограничения»." },
+    { id: "action", title: "Следующее действие",
+      hint: "Что предлагаете сделать, кто это проверит и по какому результату будет принято решение? Выделите проверяемый следующий шаг." }
+  ],
 
   hints: [
     "Прежде чем писать, сформулируйте одно предложение: что именно директор по маркетингу должен сделать иначе после вашей записки? Если такого предложения нет, записка не нужна.",
@@ -81309,7 +81564,7 @@ const CDN = {
 const Store = (function () {
   const KEY = "da.state.v1";
   const EMPTY = { theme: {}, done: {}, code: {}, notes: {}, attempts: {}, time: {}, seen: {},
-                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {}, mock: {} };
+                  days: {}, review: {}, prep: {}, steps: {}, drills: {}, mtest: {}, plan: {}, entry: {}, mock: {}, conflicts: {}, codeReview: {} };
 
   let mode = "local";
   let dirty = false;              /* есть несохранённые изменения (аварийный режим) */
@@ -81349,12 +81604,156 @@ const Store = (function () {
   })();
 
   let timer = null;
-  function notify() { listeners.forEach(function (f) { f(); }); }
+  let changes = Object.create(null);
+  let backup = Object.create(null);
+  const PREFIX = "da.pending.v1.";
+  const tabKey = PREFIX + Date.now() + "-" + Math.random().toString(36).slice(2);
+  let locks = typeof navigator !== "undefined" && navigator.locks;
+  let revision = 0;
+  const clone = function (v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); };
+  let initial = clone(state);
+  const same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b); };
+  function notify(why) { listeners.forEach(function (f) { f(why); }); }
+
+  function latest() {
+    const raw = localStorage.getItem(KEY);
+    return raw ? Object.assign(blank(), JSON.parse(raw)) : clone(initial);
+  }
+
+  /* Журнал каждой вкладки пишется под своим ключом до ожидания блокировки.
+     Закрытие вкладки не отменяет правку: следующая загрузка восстановит её.
+     Без Web Locks журналы остаются запасным источником при гонке записей. */
+  function journal() {
+    if (mode !== "local") return;
+    try {
+      localStorage.setItem(tabKey, JSON.stringify({ reset: state._reset, rev: revision, changes: locks ? changes : backup }));
+    } catch (e) { mode = "memory"; dirty = true; notify(); }
+  }
+
+  function collect(next) {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || key.indexOf(PREFIX) !== 0) continue;
+      const raw = localStorage.getItem(key);
+      try { entries.push({ key: key, raw: raw, data: JSON.parse(raw) }); } catch (e) {}
+    }
+    next._applied = next._applied || {}; next._writers = next._writers || {};
+    let changed = false;
+    entries.forEach(function (entry) {
+      const d = entry.data, applied = next._applied[entry.key] || 0;
+      if (!d || d.reset !== next._reset || d.rev <= applied) return;
+      Object.keys(d.changes || {}).forEach(function (k) {
+        const p = d.changes[k], b = p.bucket;
+        if (p.rev <= applied) return;
+        if (!next[b]) next[b] = {};
+        const cur = next[b][p.id];
+        if ((b === "code" || b === "notes") && next._writers[k] !== entry.key &&
+            !same(cur, p.before) && !same(cur, p.value)) {
+          const id = entry.key + ":" + p.rev;
+          next.conflicts[id] = { bucket: b, id: p.id, mine: p.value, other: cur === undefined ? "" : cur };
+        }
+        if (p.remove) delete next[b][p.id];
+        else if (["done", "attempts", "time", "days", "steps", "drills", "mtest"].indexOf(b) >= 0 &&
+                 typeof p.value === "number" && typeof cur === "number") next[b][p.id] = Math.max(cur, p.value);
+        else next[b][p.id] = p.value;
+        if (b === "code" || b === "notes") next._writers[k] = entry.key;
+      });
+      next._applied[entry.key] = d.rev; changed = true;
+    });
+    return { next: next, entries: entries, changed: changed };
+  }
+
+  function locked(f) {
+    if (!locks) return f();
+    return locks.request(KEY, f).catch(function () {
+      locks = null;
+      Object.keys(changes).forEach(function (k) { backup[k] = clone(changes[k]); });
+      if (mode === "local" && Object.keys(changes).length) journal();
+      return f();
+    });
+  }
+  function save() { return locked(flush); }
+
+  /* Записываем только поля, изменённые этой вкладкой. Код и заметки в
+     открытом редакторе не подменяем чужим текстом: его исходная версия
+     нужна для обнаружения конфликта при следующей правке. */
+  function receive(next) {
+    Object.keys(changes).forEach(function (k) {
+      if (changes[k].rev <= ((next._applied || {})[tabKey] || 0)) delete changes[k];
+    });
+    state = Object.assign({}, next, { code: state.code, notes: state.notes });
+    Object.keys(changes).forEach(function (k) {
+      const p = changes[k];
+      if (!state[p.bucket]) state[p.bucket] = {};
+      if (p.remove) delete state[p.bucket][p.id]; else state[p.bucket][p.id] = p.value;
+    });
+  }
+
+  function put(bucket, id, val, remove) {
+    if (!state[bucket]) state[bucket] = {};
+    const key = JSON.stringify([bucket, id]);
+    if (!changes[key]) changes[key] = { bucket: bucket, id: id, before: clone(state[bucket][id]) };
+    changes[key].value = clone(val);
+    changes[key].remove = !!remove;
+    changes[key].rev = ++revision;
+    if (!locks) backup[key] = clone(changes[key]);
+    if (remove) delete state[bucket][id]; else state[bucket][id] = val;
+    if (mode === "memory") { dirty = true; notify(); }
+    else { journal(); clearTimeout(timer); timer = setTimeout(save, 220); }
+  }
+
+  function snapshot() {
+    if (mode !== "local") return state;
+    try {
+      return collect(latest()).next;
+    } catch (e) { return state; }
+  }
 
   function flush() {
+    clearTimeout(timer);
     if (mode !== "local") return;
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch (e) { mode = "memory"; dirty = true; notify(); }
+    let next, conflict = false;
+    try {
+      next = latest();
+      /* Сброс в другой вкладке отменяет и отложенные записи старого курса. */
+      if (next._reset !== state._reset) {
+        changes = Object.create(null); backup = Object.create(null);
+        localStorage.removeItem(tabKey); state = next; notify("reset"); return;
+      }
+      const before = Object.keys(next.conflicts).length, merged = collect(next);
+      conflict = Object.keys(next.conflicts).length > before;
+      if (merged.changed) localStorage.setItem(KEY, JSON.stringify(next));
+      if (locks) merged.entries.forEach(function (e) {
+        if (localStorage.getItem(e.key) === e.raw) localStorage.removeItem(e.key);
+      });
+      receive(next);
+      if (conflict) notify("conflict");
+    } catch (e) {
+      if (next) receive(next);
+      mode = "memory"; dirty = true; notify();
+    }
+  }
+
+  window.addEventListener("storage", function (e) {
+    if (mode !== "local" || (e.key !== KEY && e.key !== null)) return;
+    try {
+      /* Подтверждением служит только запись в KEY. Сбор журналов здесь
+         ещё не сохранён и не вправе очищать местные changes. */
+      const next = e.newValue ? latest() : blank();
+      if (next._reset !== state._reset || !e.newValue) {
+        if (!e.newValue) initial = blank();
+        clearTimeout(timer); changes = Object.create(null); backup = Object.create(null); state = next; notify("reset");
+      } else {
+        const hasConflict = Object.keys(next.conflicts).some(function (k) { return !state.conflicts[k]; });
+        const textChanged = !same(next.code, state.code) || !same(next.notes, state.notes);
+        receive(next); notify(hasConflict ? "conflict" : textChanged ? "remote" : "sync");
+      }
+    } catch (err) { /* временная недоступность не отменяет местную работу */ }
+  });
+
+  if (mode === "local") {
+    try { state = collect(latest()).next; timer = setTimeout(save, 0); } catch (e) {}
   }
 
   return {
@@ -81363,20 +81762,29 @@ const Store = (function () {
     markSaved: function () { dirty = false; notify(); },
     onChange: function (f) { listeners.push(f); },
 
-    all: function () { return state; },
+    all: snapshot,
     get: function (bucket, id, dflt) {
       const b = state[bucket];
       return b && b[id] !== undefined ? b[id] : dflt;
     },
-    set: function (bucket, id, val) {
-      if (!state[bucket]) state[bucket] = {};
-      state[bucket][id] = val;
-      if (mode === "memory") { dirty = true; notify(); }
-      else { clearTimeout(timer); timer = setTimeout(flush, 220); }
-    },
+    set: put,
     replace: function (next) {
-      state = Object.assign(blank(), next || {});
-      if (mode === "memory") { dirty = false; notify(); } else flush();
+      return locked(function () {
+        clearTimeout(timer); changes = Object.create(null); backup = Object.create(null);
+        state = Object.assign(blank(), next || {});
+        state._reset = Date.now() + "-" + Math.random().toString(36).slice(2);
+        if (mode === "memory") { dirty = false; notify(); }
+        else {
+          try { localStorage.setItem(KEY, JSON.stringify(state)); localStorage.removeItem(tabKey); }
+          catch (e) { mode = "memory"; dirty = true; notify(); }
+        }
+      });
+    },
+    resolve: function (id, which) {
+      const next = snapshot(), c = next.conflicts[id];
+      if (!c || (which !== "mine" && which !== "other")) return;
+      state[c.bucket][c.id] = next[c.bucket][c.id];
+      put(c.bucket, c.id, c[which]); put("conflicts", id, undefined, true);
     },
 
     /* Перенос прогресса не должен ничего отменять: пройденное
@@ -81386,33 +81794,35 @@ const Store = (function () {
     merge: function (next) {
       const res = { added: 0, changed: 0 };
       if (!next || typeof next !== "object") return res;
+      if (mode === "local") { try { receive(latest()); } catch (e) {} }
+      const current = snapshot();
       /* Число из файла побеждает, если здесь пусто, не число (урок
          сброшен — done: false) или меньше. Пройденное из файла поверх
          сброшенного считается новым пройденным уроком.             */
       ["done", "attempts", "time", "days", "steps", "drills", "mtest"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id], val = src[id];
+          const cur = current[b][id], val = src[id];
           const better = cur === undefined ||
             (typeof val === "number" && (typeof cur !== "number" || val > cur));
           if (!better) return;
           if (b === "done" && val && !cur) res.added++;
-          state[b][id] = val;
+          put(b, id, val);
           res.changed++;
         });
       });
-      ["code", "notes", "seen", "review", "prep", "plan", "entry", "mock"].forEach(function (b) {
+      ["code", "notes", "seen", "review", "prep", "plan", "entry", "mock", "conflicts", "codeReview"].forEach(function (b) {
         const src = next[b] || {};
         Object.keys(src).forEach(function (id) {
-          const cur = state[b][id], val = src[id];
+          const cur = current[b][id], val = src[id];
           const empty = function (v) { return v === undefined || v === null || v === ""; };
-          if (empty(cur) && !empty(val)) { state[b][id] = val; res.changed++; }
+          if (empty(cur) && !empty(val)) { put(b, id, val); res.changed++; }
         });
       });
-      if (res.changed) { if (mode === "memory") { dirty = true; notify(); } else flush(); }
+      if (res.changed) { if (mode === "memory") { dirty = true; notify(); } else save(); }
       return res;
     },
-    flush: flush
+    flush: save
   };
 })();
 
@@ -81597,7 +82007,8 @@ const Theme = {
    ============================================================ */
 
 const Progress = {
-  save: function () {
+  save: async function () {
+    await Store.flush();
     const blob = new Blob([JSON.stringify(Store.all(), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -81643,9 +82054,9 @@ const Progress = {
     inp.click();
   },
 
-  reset: function () {
+  reset: async function () {
     if (!confirm("Начать курс заново? Прогресс, весь написанный код и заметки будут удалены.")) return;
-    Store.replace(null);
+    await Store.replace(null);
     Router.go("#");
     Router.render(true);
   },
@@ -81653,6 +82064,7 @@ const Progress = {
   openMenu: function () {
     const done = Course.doneCount(Course.flat), skills = Skills.list();
     const risky = Store.mode() === "memory";
+    const conflicts = Object.keys(Store.all().conflicts || {}).length;
     modal("Прогресс",
       '<div class="theory" style="font-size:14px">' +
         (risky
@@ -81669,6 +82081,8 @@ const Progress = {
           /* в шапке шестой ссылке нет места — к карте навыков ведёт счётчик */
           "Навыки собеседования: изучено " + skills.filter(Skills.learned).length + " из " + skills.length +
           ' — <a href="#skills">карта навыков</a>.</p>' +
+        (conflicts ? '<p>Есть разные версии ответов из вкладок: ' + conflicts +
+          '. <button class="linkbtn" id="pgConflicts" type="button">Сравнить версии</button>.</p>' : "") +
         (Offline.ready()
           ? "<p>Курс уже открывается без интернета: страница и прочитанные уроки лежат " +
             "в браузере. Кнопка ниже докачает остальное — это около трёх мегабайт, " +
@@ -81692,14 +82106,39 @@ const Progress = {
     $("#pgReset").addEventListener("click", Progress.reset);
     $("#pgSave").addEventListener("click", Progress.save);
     $("#pgLoad").addEventListener("click", Progress.load);
+    const versions = $("#pgConflicts");
+    if (versions) versions.addEventListener("click", Progress.openConflicts);
     const keep = $("#pgKeep");
     if (keep) keep.addEventListener("click", function () { Offline.keep(keep, $("#pgKeepMsg")); });
   },
 
-  toast: function (text) {
+  openConflicts: function () {
+    const all = Store.all().conflicts || {}, keys = Object.keys(all);
+    if (!keys.length) { modal.close(); Router.render(true); return; }
+    const key = keys[0], c = all[key], l = Course.byId(c.id.split(":")[0]);
+    modal("Две версии ответа",
+      '<p>Этот ответ меняли в двух вкладках. Обе версии сохранены. Выберите, какую оставить в уроке.</p>' +
+      '<p>' + esc(l ? "Урок " + l.num + ": " + l.title : c.id) +
+        (c.bucket === "notes" ? " — заметка" : " — ответ") + ".</p>" +
+      '<p><b>Версия 1</b></p><pre>' + esc(c.mine || "(пусто)") + '</pre>' +
+      '<button class="btn" id="cfMine" type="button">Оставить версию 1</button>' +
+      '<p style="margin-top:20px"><b>Версия 2</b></p><pre>' + esc(c.other || "(пусто)") + '</pre>' +
+      '<button class="btn" id="cfOther" type="button">Оставить версию 2</button>' +
+      '<p style="margin-top:20px">Осталось сравнений: ' + keys.length +
+        '. Можно закрыть окно и вернуться к ним через «Прогресс».</p>');
+    async function choose(which) { Store.resolve(key, which); await Store.flush(); Progress.openConflicts(); }
+    $("#cfMine").addEventListener("click", function () { choose("mine"); });
+    $("#cfOther").addEventListener("click", function () { choose("other"); });
+  },
+
+  toast: function (text, action) {
     let t = $("#toast");
-    if (!t) { t = el("div", { class: "toast", id: "toast" }); document.body.appendChild(t); }
+    if (!t) { t = el("div", { class: "toast", id: "toast", role: "status" }); document.body.appendChild(t); }
     t.textContent = text;
+    if (action) {
+      const b = el("button", { type: "button", class: "linkbtn" }, "Сравнить версии");
+      b.addEventListener("click", Progress.openConflicts); t.appendChild(document.createTextNode(" ")); t.appendChild(b);
+    }
     t.classList.add("show");
     clearTimeout(Progress._t);
     Progress._t = setTimeout(function () { t.classList.remove("show"); }, 5200);
@@ -81738,7 +82177,7 @@ function acceptDroppedProgress() {
 /* если сохранять некуда — предупреждаем перед закрытием вкладки */
 window.addEventListener("beforeunload", function (e) {
   Store.flush();
-  if (Store.mode() === "memory" && Store.isDirty() && Course.doneCount(Course.flat) > 0) {
+  if (Store.mode() === "memory" && Store.isDirty()) {
     e.preventDefault();
     e.returnValue = "";
     return "";
@@ -81943,9 +82382,13 @@ function refreshBar() {
   if (pb) pb.textContent = Course.doneCount(Course.flat) + " из " + Course.flat.length;
 }
 
-Store.onChange(function () {
+Store.onChange(function (why) {
   const b = $("#progBtn");
   if (b) b.classList.toggle("unsaved", Store.mode() === "memory" && Store.isDirty());
+  if (why === "conflict") Progress.toast("Ответ меняли в двух вкладках. Обе версии сохранены в «Прогрессе».", true);
+  if (why === "remote") Progress.toast("Другая вкладка сохранила ответы. Чтобы увидеть их здесь, обновите страницу.");
+  if (why === "reset") Router.render(true);
+  if (why === "sync" || why === "remote") refreshBar();
 });
 
 /* ============================================================
@@ -82095,6 +82538,59 @@ const Stats = {
   }
 };
 
+/* Позиция в уроке хранится отдельно от отметок о прохождении:
+   раздел и номер уже существующего шага/задачи, без изменения их ключей. */
+const Place = {
+  names: { "s-theory": "Теория", "s-cards": "Карточки", "s-practice": "Практикум",
+    "s-steps": "Шаги", "s-task": "Основная задача", "s-drills": "Тренажёр",
+    "s-quiz": "Самопроверка", "s-links": "Что почитать", "s-notes": "Заметки", "s-after": "Как дальше" },
+  get: function (id) {
+    const p = Store.get("seen", id, null);
+    if (!p || typeof p.section !== "string" || !Object.prototype.hasOwnProperty.call(Place.names, p.section)) return null;
+    const out = { section: p.section };
+    const kind = p.kind === "drill" && p.section === "s-drills" ? "drill"
+      : p.kind === "step" && (p.section === "s-steps" || p.section === "s-practice") ? "step" : null;
+    if (kind && Number.isInteger(p.index) && Number.isInteger(p.total) && p.index >= 0 && p.index < p.total) {
+      out.kind = kind; out.index = p.index; out.total = p.total;
+    }
+    return out;
+  },
+  remember: function (id, section, kind, index, total) {
+    if (!Object.prototype.hasOwnProperty.call(Place.names, section)) return;
+    const p = { section: section };
+    if (kind && Number.isInteger(index) && Number.isInteger(total) && index >= 0 && index < total) {
+      p.kind = kind; p.index = index; p.total = total;
+    }
+    if (JSON.stringify(Store.get("seen", id, null)) !== JSON.stringify(p)) Store.set("seen", id, p);
+    if (Store.get("seen", "last", null) !== id) Store.set("seen", "last", id);
+  },
+  href: function (id) {
+    const p = Place.get(id);
+    return "#" + id + (p ? "/" + p.section + (p.kind ? "/" + p.kind + "-" + (p.index + 1) : "") : "");
+  },
+  label: function (id) {
+    const p = Place.get(id);
+    return p ? Place.names[p.section] + (p.kind ? " — " + (p.kind === "step" ? "шаг " : "задача ") +
+      (p.index + 1) + " из " + p.total : "") : "";
+  },
+  section: function (id, section) {
+    const root = document.getElementById(section);
+    if (!root) return;
+    const p = Place.get(id);
+    if (section === "s-practice" || section === "s-steps") {
+      const peek = p && p.kind === "step" && root.querySelector('.st.peek[data-n="' + p.index + '"]');
+      const active = peek || root.querySelector(".st.open");
+      if (active) { Place.remember(id, section, "step", +active.dataset.n, root.querySelectorAll(".st").length); return; }
+    }
+    if (section === "s-drills") {
+      const last = p && p.kind === "drill" && root.querySelector('.drill[open][data-i="' + p.index + '"]');
+      const active = last || root.querySelector(".drill[open]");
+      if (active) { Place.remember(id, section, "drill", +active.dataset.i, root.querySelectorAll(".drill").length); return; }
+    }
+    Place.remember(id, section);
+  }
+};
+
 /* ============================================================
    План на день
 
@@ -82110,7 +82606,7 @@ const Stats = {
 
 const Plan = {
   DAILY: [30, 60, 120],
-  MINS: 90,               /* урок без своей оценки */
+  MINS: 90,               /* запасная оценка для будущего урока без mins */
   REVIEW_SEC: 30,         /* на вопрос или карточку повторения */
   REVIEW_DAY: 5,          /* в среднем минут в день на повторение — для прогноза */
 
@@ -82268,7 +82764,7 @@ const Plan = {
         (p.n >= 3
           ? "Оценка по вашему темпу: " + p.n + " " + plural(p.n, "пройденный урок занял", "пройденных урока заняли", "пройденных уроков заняли") +
             " " + Plan.dur(Math.round(p.spent)) + " при оценке " + Plan.dur(Math.round(p.est)) + "."
-          : "Урок — около " + Plan.MINS + " минут, в модуле 0 меньше. После трёх пройденных уроков оценка подстроится под ваш темп.") +
+          : "Длительность взята из плана каждого урока. После трёх пройденных уроков оценка подстроится под ваш темп.") +
         " Из минут в день ≈ " + Plan.REVIEW_DAY + " уходит на повторение. " + paceNote + "</p>";
     }
     node.innerHTML =
@@ -82360,6 +82856,36 @@ const Flash = {
    «урок:cномер» — карточка; miss — сколько раз ошибся или не вспомнил.
    ============================================================ */
 
+const Confidence = {
+  normalize: function (value) { return value === 'high' || value === 'low' ? value : null; },
+  number: function (value) { return Number.isInteger(value) && value > 0 ? value : 0; },
+  misses: function (r) { return r ? Math.min(Confidence.number(r.highMiss), Confidence.number(r.miss)) : 0; },
+  filter: function (items) { return items.filter(function (x) { return x.kind === 'quiz' && Confidence.misses(x.r) > 0; }); },
+  badge: function (r) {
+    const n = Confidence.misses(r);
+    return n ? '<span class="confidence-badge">Ранее ошибок с уверенностью: ' + n + ' из ' + r.miss + '</span>' : '';
+  },
+  html: function () {
+    return '<div class="quiz-confidence" role="group" aria-label="Уверенность перед ответом, необязательно">' +
+      '<span>Насколько уверены? <span class="confidence-optional">Можно не выбирать.</span></span>' +
+      '<div class="confidence-options"><button class="btn" type="button" data-confidence="high" aria-pressed="false">Уверен</button>' +
+      '<button class="btn" type="button" data-confidence="low" aria-pressed="false">Сомневаюсь</button></div></div>';
+  },
+  mount: function (root) {
+    const box = root.querySelector('.quiz-confidence');
+    let value = null, locked = false;
+    const buttons = box ? Array.prototype.slice.call(box.querySelectorAll('[data-confidence]')) : [];
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (locked) return;
+        value = value === b.dataset.confidence ? null : b.dataset.confidence;
+        buttons.forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.confidence === value ? 'true' : 'false'); });
+      });
+    });
+    return { value: function () { return value; }, lock: function () { locked = true; buttons.forEach(function (b) { b.disabled = true; }); } };
+  }
+};
+
 const Review = {
   STEPS: [1, 3, 7, 21],
   LIMIT: 20,              /* больше за раз — уже не пять минут, а урок */
@@ -82369,20 +82895,26 @@ const Review = {
     return m ? { key: k, id: m[1], kind: m[2] ? "card" : "quiz", n: +m[3] } : null;
   },
 
-  /* ref — номер вопроса или "c" + номер карточки. false — запись
-     пропущена: повторный проход в уроке не должен сбивать расписание. */
-  record: function (id, ref, ok, fromLesson) {
+  /* ref — номер вопроса или "c" + номер карточки. false — расписание
+     не менялось. Повторный ответ на вопрос в уроке обновляет статистику,
+     но сохраняет due/step/done. Карточки повторно в уроке не записываются. */
+  record: function (id, ref, ok, fromLesson, confidence) {
     const k = id + ":" + ref;
     const cur = Store.get("review", k, null);
-    if (fromLesson && cur) return false;
+    const quiz = /^\d+$/.test(String(ref)), level = Confidence.normalize(confidence);
+    const miss = Confidence.number(cur && cur.miss) + (ok ? 0 : 1);
+    const extra = quiz ? { confidence: level, highMiss: Confidence.misses(cur) + (!ok && level === 'high' ? 1 : 0) } : {};
+    if (fromLesson && cur) {
+      if (quiz) Store.set('review', k, Object.assign({}, cur, { miss: miss }, extra));
+      return false;
+    }
     const step = cur ? cur.step : -1;
-    const miss = ((cur && cur.miss) || 0) + (ok ? 0 : 1);
     if (ok && step + 1 >= Review.STEPS.length) {
-      Store.set("review", k, { step: step, done: true, miss: miss });
+      Store.set("review", k, Object.assign({ step: step, done: true, miss: miss }, extra));
       return true;
     }
     const next = ok ? step + 1 : 0;
-    Store.set("review", k, { step: next, due: addDays(isoDay(), Review.STEPS[next]), miss: miss });
+    Store.set("review", k, Object.assign({ step: next, due: addDays(isoDay(), Review.STEPS[next]), miss: miss }, extra));
     return true;
   },
 
@@ -82400,6 +82932,7 @@ const Review = {
     const t = isoDay();
     return Review.items().filter(function (x) { return x.r.due <= t; });
   },
+  queue: function (highOnly) { return highOnly ? Confidence.filter(Review.due()) : Review.due(); },
   nextDate: function () {
     const t = isoDay();
     return Review.items().map(function (x) { return x.r.due; })
@@ -82424,7 +82957,9 @@ const Review = {
   /* Блок на главной. Пока в очереди ничего нет, его нет вовсе. */
   section: function () {
     const due = Review.due(), next = Review.nextDate();
-    if (!due.length && !next) return null;
+    const high = Confidence.filter(due).length;
+    const code = CodeReview.list(), codeDue = CodeReview.due();
+    if (!due.length && !next && !code.length) return null;
     const n = Math.min(due.length, Review.LIMIT);
     const node = el("section", { class: "review has-margin" });
     node.innerHTML =
@@ -82437,16 +82972,21 @@ const Review = {
               ? "Накопилось " + Review.say(due) + ", сегодня возьмём " + n + ". "
               : "Сегодня " + Review.say(due) + " из пройденных уроков. ") +
             "Минут пять — и материал останется с вами надолго.</p>" +
-          '<button class="btn primary" id="rvStart" type="button">Начать повторение</button>'
-        : '<p class="review-later">Всё повторено. Следующие вопросы вернутся ' + Review.when(next) + ".</p>") +
+          '<div class="rv-start-actions"><button class="btn primary" id="rvStart" type="button">Начать повторение</button>' +
+          (high ? '<button class="btn" id="rvHigh" type="button">Только ошибки с уверенностью: ' + high + ' из ' + due.length + ' заданий на сегодня</button>' : '') + '</div>'
+        : next ? '<p class="review-later">Вопросы повторены. Следующие вернутся ' + Review.when(next) + ".</p>" : "") +
+      (code.length ? '<p class="review-intro">Ошибки в коде: на сегодня ' + codeDue.length + " из " + code.length + " " +
+        plural(code.length, "темы", "тем", "тем") + '. <a href="#mistakes">Открыть короткую практику</a>.</p>' : "") +
       "</div>";
     const start = $("#rvStart", node);
     if (start) start.addEventListener("click", function () { Review.run($(".review-body", node)); });
+    const highStart = $("#rvHigh", node);
+    if (highStart) highStart.addEventListener('click', function () { Review.run($('.review-body', node), true); });
     return node;
   },
 
-  run: function (box) {
-    const list = Review.due();
+  run: function (box, highOnly) {
+    const list = Review.queue(highOnly);
     const order = shuffled(list.length).slice(0, Review.LIMIT).map(function (i) { return list[i]; });
     const mods = {};
     order.forEach(function (x) { mods[Course.byId(x.id).module.id] = true; });
@@ -82462,15 +83002,16 @@ const Review = {
     }, function () {
       box.innerHTML = '<p class="review-intro">Вопросы не загрузились — похоже, пропал интернет.</p>' +
         '<button class="btn" id="rvRetry" type="button">Попробовать ещё раз</button>';
-      $("#rvRetry", box).addEventListener("click", function () { Review.run(box); });
+      $("#rvRetry", box).addEventListener("click", function () { Review.run(box, highOnly); });
     });
   },
 
   step: function (box, order, i, right) {
     if (i >= order.length) {
-      const next = Review.nextDate();
+      const next = Review.nextDate(), left = Review.due().length;
       box.innerHTML = '<p class="review-intro">Готово: верно ' + right + " из " + order.length + ". " +
-        (next ? "Следующие вопросы вернутся " + Review.when(next) + "." : "Все вопросы выучены.") + "</p>" +
+        (left ? "На сегодня осталось ещё " + left + " " + plural(left, "задание", "задания", "заданий") + ". Закройте этот проход, чтобы вернуться к общей очереди."
+          : next ? "Следующие вопросы вернутся " + Review.when(next) + "." : "Все вопросы выучены.") + "</p>" +
         '<button class="btn" id="rvClose" type="button">Закрыть</button>';
       $("#rvClose", box).addEventListener("click", function () { Router.render(true); });
       return;
@@ -82501,7 +83042,7 @@ const Review = {
 
     const q = C.quiz[x.n];
     let h = '<div class="rv-meta">Вопрос ' + (i + 1) + from + "</div>" +
-      '<div class="q"><div class="q-t"><span>' + q.q + '</span></div><div class="q-opts">';
+      Confidence.badge(x.r) + '<div class="q"><div class="q-t"><span>' + q.q + '</span></div>' + Confidence.html() + '<div class="q-opts">';
     shuffled(q.opts.length).forEach(function (orig, pos) {
       h += '<button class="q-opt" type="button" data-i="' + orig + '">' +
         '<span class="mk">' + "АБВГД".charAt(pos) + "</span><span>" + q.opts[orig] + "</span></button>";
@@ -82509,12 +83050,14 @@ const Review = {
     h += '</div><div class="q-why"><b>Почему:</b> ' + q.why + "</div></div>" + nextHtml;
     box.innerHTML = h;
 
+    const confidence = Confidence.mount(box);
     const opts = Array.prototype.slice.call(box.querySelectorAll(".q-opt"));
     opts.forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (btn.disabled) return;
         const picked = +btn.dataset.i, ok = picked === q.right;
-        Review.record(x.id, x.n, ok, false);
+        Review.record(x.id, x.n, ok, false, confidence.value());
+        confidence.lock();
         opts.forEach(function (b) {
           b.disabled = true;
           const oi = +b.dataset.i;
@@ -82931,6 +83474,7 @@ const Pages = {
     if (id === "my-notes") return renderMyNotes;
     if (id === "cheats" || /^cheat-[a-z]+$/.test(id)) return renderCheats;
     if (id === "mistakes") return renderMistakes;
+    if (/^code-practice\/[\w-]+$/.test(id)) return renderCodePractice;
     if (id === "skills") return renderSkills;
     if (id === "sandbox") return renderSandbox;
     if (id === "entry-test") return renderEntryTest;
@@ -83465,6 +84009,109 @@ function renderCheats(app, id) {
    (поле miss в корзине review). Группы — уроки, сначала те, где ошибок
    больше; в группе — сначала самые частые. Отсюда ведёт ссылка назад
    к теории: ошибка чаще всего значит, что тему надо перечитать. */
+const CodeReview = {
+  epoch: function () { return Store.all()._reset; },
+  current: function (epoch, node) { return CodeReview.epoch() === epoch && (!node || document.body.contains(node)); },
+  topics: [
+    { id: "sql-schema", lang: "sql", title: "Таблицы и столбцы SQL", theory: "#m0l1/s-steps/step-2" },
+    { id: "sql-aggregate", lang: "sql", title: "Агрегаты и HAVING", theory: "#m1l3/s-theory" },
+    { id: "py-name", lang: "python", title: "Переменные Python", theory: "#m0l2/s-steps/step-4" },
+    { id: "py-column", lang: "python", title: "Имена столбцов pandas", theory: "#m0l3/s-steps/step-3" },
+    { id: "py-condition", lang: "python", title: "Условия над столбцом", theory: "#m0l4/s-steps/step-2" }
+  ],
+  topic: function (id) { return CodeReview.topics.filter(function (t) { return t.id === id; })[0] || null; },
+  identify: function (lang, msg, code) {
+    const why = lang === "sql" ? Check.sqlErr(msg, code) : lang === "python" ? Check.pyErr(msg, code) : "";
+    if (!why) return null;
+    if (lang === "sql") {
+      const plain = code.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ").replace(/'(?:''|[^'])*'/g, "''");
+      if (/no such table:/i.test(msg) || (/no such column:/i.test(msg) && /^(Столбца|У таблицы) /.test(why))) return "sql-schema";
+      if (/misuse of aggregate/i.test(msg) && /\bWHERE\s+(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(plain)) return "sql-aggregate";
+    } else {
+      if (/NameError:/.test(msg) && /^Python не знает имени /.test(why)) return "py-name";
+      if (/KeyError:/.test(msg) && /^(Столбца|Нет столбца|Нет столбцов) /.test(why) && !/\.(loc|iloc|at|iat)\s*\[/.test(code)) return "py-column";
+      if (/truth value of a (Series|DataFrame) is ambiguous/.test(msg)) return "py-condition";
+    }
+    return null;
+  },
+  valid: function (r) { return r && Number.isInteger(r.count) && r.count > 0 && Number.isInteger(r.round) && r.round > 0 &&
+    typeof r.done === "boolean" && (r.done || typeof r.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.due)); },
+  record: function (lang, msg, code, source) {
+    if (!source || !Course.byId(source.lesson)) return null;
+    if (Object.prototype.hasOwnProperty.call(source, 'reset') && !CodeReview.current(source.reset)) return null;
+    if (typeof source.starter === "string" && String(code).trim() === source.starter.trim()) return null;
+    const id = CodeReview.identify(lang, String(msg), String(code));
+    if (!id) return null;
+    const all = Store.all().codeReview || {}, old = CodeReview.valid(all[id]) ? all[id] : {};
+    Store.set("codeReview", id, { count: (old.count || 0) + 1, first: old.first || Date.now(), last: Date.now(),
+      lesson: source.lesson, section: source.section, kind: source.kind, index: source.index,
+      step: -1, due: isoDay(), done: false, round: (old.round || 0) + 1 });
+    return id;
+  },
+  list: function () {
+    const all = Store.all().codeReview || {};
+    return CodeReview.topics.filter(function (t) { return CodeReview.valid(all[t.id]); }).map(function (t) {
+      return { topic: t, r: all[t.id] };
+    }).sort(function (a, b) { return (a.r.done ? 1 : 0) - (b.r.done ? 1 : 0) || b.r.count - a.r.count; });
+  },
+  due: function () { return CodeReview.list().filter(function (x) { return !x.r.done && x.r.due <= isoDay(); }); },
+  complete: function (id, round) {
+    const r = (Store.all().codeReview || {})[id];
+    if (!CodeReview.topic(id) || !CodeReview.valid(r) || r.round !== round || r.done || r.due > isoDay()) return null;
+    const step = Number.isInteger(r.step) && r.step >= -1 && r.step < Review.STEPS.length ? r.step + 1 : 0;
+    const done = step >= Review.STEPS.length;
+    const next = Object.assign({}, r, { step: step, done: done, due: done ? null : addDays(isoDay(), Review.STEPS[step]), round: round + 1 });
+    Store.set("codeReview", id, next); return next;
+  },
+  origin: function (r) {
+    const l = Course.byId(r.lesson);
+    if (!l) return "";
+    const section = typeof r.section === "string" && Object.prototype.hasOwnProperty.call(Place.names, r.section) ? r.section : "s-task";
+    const part = Number.isInteger(r.index) && r.index >= 0 && (r.kind === "step" || r.kind === "drill")
+      ? "/" + r.kind + "-" + (r.index + 1) : "";
+    return '<a href="#' + l.id + "/" + section + part + '">Вернуться к месту ошибки</a>';
+  },
+  theoryLink: function (t) {
+    return /\/s-steps\//.test(t.theory)
+      ? '<button class="linkbtn" type="button" data-code-theory="' + t.id + '">Перечитать объяснение</button>'
+      : '<a href="' + t.theory + '">Перечитать объяснение</a>';
+  },
+  bind: function (root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-code-theory]"), function (b) {
+      b.addEventListener("click", function () {
+        const t = CodeReview.topic(b.dataset.codeTheory), m = t && /^#(m\d+l\d+)\/s-steps\/step-(\d+)$/.exec(t.theory);
+        if (!m) return;
+        const l = Course.byId(m[1]), title = "Объяснение: " + t.title, token = {};
+        CodeReview.explaining = token;
+        modal(title, '<p>Открываю объяснение…</p>');
+        Lazy.content(l.module.id).then(function () {
+          if (CodeReview.explaining !== token || !$("#modalBg.show") || $("#modalT").textContent !== title) return;
+          const s = window.CONTENT[l.id].steps[+m[2] - 1];
+          modal(title, '<div class="theory">' + s.body + '</div>');
+          Terms.mark($("#modalB"));
+        }).catch(function () {
+          if (CodeReview.explaining === token && $("#modalBg.show") && $("#modalT").textContent === title)
+            modal(title, '<p>Объяснение не загрузилось. Проверьте соединение и откройте его ещё раз.</p>');
+        });
+      });
+    });
+  },
+  panel: function () {
+    const items = CodeReview.list();
+    if (!items.length) return "";
+    return '<section class="block mx-group" id="mxCode"><div class="block-h"><h2>Ошибки в коде</h2></div>' +
+      '<p class="block-intro">Распознанные ошибки запуска из уроков. После верной практики тема вернётся через 1, 3, 7 и 21 день.</p>' +
+      '<ol class="mx-list">' + items.map(function (x) {
+        const r = x.r, t = x.topic;
+        const when = r.done ? "закреплено" : r.due <= isoDay() ? "практика на сегодня" : "повторить " + Review.when(r.due);
+        return '<li class="mx-item"><div class="mx-meta">' + (t.lang === "sql" ? "SQL" : "Python") + " · " +
+          r.count + " " + plural(r.count, "запуск с ошибкой", "запуска с ошибкой", "запусков с ошибкой") + " · " + when + '</div>' +
+          '<div class="mx-q">' + t.title + '</div><p class="mx-go"><a href="#code-practice/' + t.id + '">Короткая практика</a> · ' +
+          CodeReview.theoryLink(t) + '</p>' + CodeReview.origin(r) + "</li>";
+      }).join("") + "</ol></section>";
+  }
+};
+
 function renderMistakes(app) {
   const again = takeRetry("mistakes");
   document.title = "Мои ошибки — Тетрадь аналитика";
@@ -83475,17 +84122,20 @@ function renderMistakes(app) {
     if (x) { x.r = all[k]; x.lesson = Course.byId(x.id); }
     return x;
   }).filter(function (x) { return x && x.lesson && x.r && x.r.miss > 0; });
+  const codeItems = CodeReview.list();
 
   const main = el("main", { class: "wrap lesson-wrap page" });
   main.innerHTML = pageHead("Мои ошибки",
-    items.length
+    items.length || codeItems.length
       ? "Вопросы и карточки, на которых вы ошибались, — по урокам, сначала самые трудные. " +
-        "Там, где ошибок много, быстрее перечитать теорию, чем ждать повторения."
+        "Ошибки запуска кода собраны по темам: у каждой есть объяснение и короткая практика."
       : "Здесь соберутся вопросы самопроверки и карточки, на которых вы ошиблись или " +
-        "не вспомнили ответ. Пока таких нет.",
+        "не вспомнили ответ, и распознанные ошибки кода из уроков. Пока таких нет.",
     "ошибка — это адрес, куда вернуться") +
+    CodeReview.panel() +
     '<div id="mxBody">' + (items.length ? '<p class="page-wait">Собираю вопросы из уроков…</p>' : "") + "</div>";
   app.appendChild(main);
+  CodeReview.bind(main);
   if (!items.length) {
     const r = Stats.resume();
     $("#mxBody").innerHTML = '<p class="page-empty"><a href="#' + (r ? r.lesson.id : "m0l1") + '">' +
@@ -83504,39 +84154,53 @@ function renderMistakes(app) {
       const list = C && (x.kind === "card" ? C.cards : C.quiz);
       return list && list[x.n];
     });
-    const byLesson = {};
-    live.forEach(function (x) { (byLesson[x.id] = byLesson[x.id] || []).push(x); });
-    const miss = function (xs) { return xs.reduce(function (s, x) { return s + x.r.miss; }, 0); };
-    const groups = Course.flat.filter(function (l) { return byLesson[l.id]; })
-      .map(function (l) { return { lesson: l, xs: byLesson[l.id] }; })
-      .sort(function (a, b) { return miss(b.xs) - miss(a.xs); });   /* sort устойчив: при равенстве — порядок курса */
-    const total = miss(live);
-
-    let h = '<p class="prep-sum">' + total + " " + plural(total, "ошибка", "ошибки", "ошибок") + " в " +
-      live.length + " " + plural(live.length, "вопросе", "вопросах", "вопросах") + " и карточках из " +
-      groups.length + " " + plural(groups.length, "урока", "уроков", "уроков") + ".</p>";
-    groups.forEach(function (g) {
-      const L = g.lesson, C = window.CONTENT[L.id], m = miss(g.xs);
-      g.xs.sort(function (a, b) { return b.r.miss - a.r.miss; });
-      h += '<section class="block mx-group"><div class="block-h"><h2>' + L.num + " " + esc(L.title) +
-          '<span class="prep-n">' + m + "</span></h2></div>" +
-        '<p class="mx-go"><a href="#' + L.id + '">Перечитать теорию урока ' + L.num + "</a></p>" +
-        '<ol class="mx-list">' + g.xs.map(function (x) {
-          const card = x.kind === "card";
-          const it = card ? C.cards[x.n] : C.quiz[x.n];
-          const state = x.r.done ? "выучено"
-            : x.r.due <= isoDay() ? "в повторении сегодня" : "вернётся " + Review.when(x.r.due);
-          return '<li class="mx-item"><div class="mx-meta"><span class="mx-n">' +
-              x.r.miss + " " + plural(x.r.miss, "ошибка", "ошибки", "ошибок") + "</span>" +
-              (card ? "карточка" : "вопрос") + " · " + state + "</div>" +
-            '<div class="mx-q">' + it.q + "</div>" +
-            '<details class="mx-a"><summary>Правильный ответ</summary><div>' +
-              (card ? it.a : "<p><b>" + it.opts[it.right] + "</b></p><p>" + it.why + "</p>") +
-            "</div></details></li>";
-        }).join("") + "</ol></section>";
+    const high = Confidence.filter(live).length;
+    box.innerHTML = '<div class="mx-filters" role="group" aria-label="Фильтр вопросов и карточек с ошибками">' +
+      '<button class="btn" type="button" data-mx-filter="all" aria-pressed="true">Все вопросы и карточки</button>' +
+      '<button class="btn" type="button" data-mx-filter="high" aria-pressed="false">С уверенностью: ' + high + ' из ' + live.length + '</button></div>' +
+      '<div id="mxList"></div>';
+    function draw(highOnly) {
+      const selected = highOnly ? Confidence.filter(live) : live, byLesson = {};
+      selected.forEach(function (x) { (byLesson[x.id] = byLesson[x.id] || []).push(x); });
+      const miss = function (xs) { return xs.reduce(function (s, x) { return s + x.r.miss; }, 0); };
+      const groups = Course.flat.filter(function (l) { return byLesson[l.id]; })
+        .map(function (l) { return { lesson: l, xs: byLesson[l.id] }; })
+        .sort(function (a, b) { return miss(b.xs) - miss(a.xs); });
+      const total = miss(selected);
+      const questions = selected.filter(function (x) { return x.kind === 'quiz'; }).length, cards = selected.length - questions;
+      const where = (questions ? questions + ' ' + plural(questions, 'вопросе', 'вопросах', 'вопросах') : '') +
+        (questions && cards ? ' и ' : '') + (cards ? cards + ' ' + plural(cards, 'карточке', 'карточках', 'карточках') : '');
+      let h = selected.length ? '<p class="prep-sum">' + total + ' ' + plural(total, 'ошибка', 'ошибки', 'ошибок') + ' в ' +
+        where + ' из ' +
+        groups.length + ' ' + plural(groups.length, 'урока', 'уроков', 'уроков') + '.</p>'
+        : '<p class="page-empty">' + (highOnly ? 'Пока нет ошибок с отмеченной высокой уверенностью. Её можно выбрать перед ответом в самопроверке урока или в повторении.' : 'Вопросов и карточек с ошибками пока нет.') + '</p>';
+      groups.forEach(function (g) {
+        const L = g.lesson, C = window.CONTENT[L.id], m = miss(g.xs);
+        g.xs.sort(function (a, b) { return b.r.miss - a.r.miss; });
+        h += '<section class="block mx-group"><div class="block-h"><h2>' + L.num + ' ' + esc(L.title) +
+          '<span class="prep-n">' + m + '</span></h2></div>' +
+          '<p class="mx-go"><a href="#' + L.id + '">Перечитать теорию урока ' + L.num + '</a></p>' +
+          '<ol class="mx-list">' + g.xs.map(function (x) {
+            const card = x.kind === 'card', it = card ? C.cards[x.n] : C.quiz[x.n];
+            const state = x.r.done ? 'лестница повторения пройдена'
+              : x.r.due <= isoDay() ? 'в повторении сегодня' : 'вернётся ' + Review.when(x.r.due);
+            return '<li class="mx-item"><div class="mx-meta"><span class="mx-n">' +
+              x.r.miss + ' ' + plural(x.r.miss, 'ошибка', 'ошибки', 'ошибок') + '</span>' +
+              (card ? 'карточка' : 'вопрос') + ' · ' + state + '</div>' +
+              (card ? '' : Confidence.badge(x.r)) + '<div class="mx-q">' + it.q + '</div>' +
+              '<details class="mx-a"><summary>Правильный ответ</summary><div>' +
+              (card ? it.a : '<p><b>' + it.opts[it.right] + '</b></p><p>' + it.why + '</p>') + '</div></details></li>';
+          }).join('') + '</ol></section>';
+      });
+      const list = $('#mxList', box); list.innerHTML = h; Terms.mark(list);
+      Array.prototype.forEach.call(box.querySelectorAll('[data-mx-filter]'), function (b) {
+        b.setAttribute('aria-pressed', (b.dataset.mxFilter === 'high') === highOnly ? 'true' : 'false');
+      });
+    }
+    Array.prototype.forEach.call(box.querySelectorAll('[data-mx-filter]'), function (b) {
+      b.addEventListener('click', function () { draw(b.dataset.mxFilter === 'high'); });
     });
-    box.innerHTML = h;
-    Terms.mark(box);
+    draw(false);
     if (again) focusHere(box.firstElementChild);
   }).catch(function (e) {
     /* и сбой загрузки, и ошибка при отрисовке — иначе страница навсегда «собирает» */
@@ -83547,6 +84211,95 @@ function renderMistakes(app) {
       'пропавший интернет. <button class="linkbtn" id="mxRetry" type="button">Попробовать ещё раз</button></p>';
     $("#mxRetry").addEventListener("click", function () { retried = "mistakes"; Router.render(true); });
     if (again) focusHere($("#mxRetry"));
+  });
+}
+
+function renderCodePractice(app, id) {
+  const topic = CodeReview.topic(id.split("/")[1]);
+  document.title = "Практика по ошибкам — Тетрадь аналитика";
+  mountHeader("<b>Практика по ошибкам</b>");
+  const main = el("main", { class: "wrap lesson-wrap page" }); app.appendChild(main);
+  if (!topic) {
+    main.innerHTML = pageHead("Тема не найдена", "Откройте практику со страницы «Мои ошибки».") + '<p><a href="#mistakes">Мои ошибки</a></p>';
+    return;
+  }
+  const p = window.SH.codePractice[topic.id], py = topic.lang === "python";
+  const r = (Store.all().codeReview || {})[topic.id];
+  const round = CodeReview.valid(r) ? r.round : 0;
+  const early = CodeReview.valid(r) && !r.done && r.due > isoDay();
+  const key = "code-practice:" + topic.id + ":" + round + (early ? ":extra" : "");
+  const schema = py ? p.env.data.length ? window.SH.pySchema : "" : window.SH.sqlSchema;
+  main.innerHTML = pageHead(topic.title, "Исправьте короткий пример. Эта практика не меняет отметки о прохождении уроков.") +
+    '<div class="theory">' + p.body + '</div>' +
+    (schema ? '<details class="st-schema"><summary>Схема данных</summary><div class="theory">' + schema + '</div></details>' : "") +
+    '<div class="editor-shell"><div class="editor-h"><span>' + (py ? "практика.py" : "практика.sql") + '</span></div>' +
+      '<textarea id="crEditor" aria-label="Ваш код для практики"></textarea></div>' +
+    '<div class="actions cr-actions"><button class="btn primary" id="crRun" type="button">Запустить</button>' +
+      '<button class="btn check" id="crCheck" type="button">Проверить</button>' +
+      '<button class="btn" id="crHint" type="button" aria-expanded="false" aria-controls="crHintText">Подсказка</button>' +
+      '<button class="btn" id="crSolution" type="button" disabled>Показать решение</button></div>' +
+    '<p class="callout" id="crHintText" hidden>' + esc(p.hint) + '</p>' +
+    '<div class="status" id="crStatus" role="status"></div>' +
+    '<div class="io-box"><div class="io-h">Ваш вывод</div><div class="io-body" id="crOut" role="region" aria-label="Вывод практики" tabindex="0">' +
+      '<div class="empty">Исправьте код и нажмите «Запустить».</div></div></div>' +
+    '<p class="mx-go"><a href="#mistakes">К моим ошибкам</a> · ' + CodeReview.theoryLink(topic) + '</p>';
+  CodeReview.bind(main);
+  CodeKit.lesson({ kind: topic.lang }, { schema: schema });
+  let editor = null, busy = false, passed = false;
+  const saved = Store.get("code", key, null);
+  mountEditor($("#crEditor", main), topic.lang, saved === null ? p.starter : saved,
+    function (v) { Store.set("code", key, v); }, function () { run(false); }, function () {}).then(function (ed) { editor = ed; });
+  function status(kind, title, text) {
+    const box = $("#crStatus", main);
+    box.className = "status show " + kind;
+    box.innerHTML = '<span class="s-body"><b>' + esc(title) + '</b>' + (text ? '<br>' + esc(text) : "") + '</span>';
+  }
+  async function run(checking) {
+    if (busy) return;
+    const epoch = CodeReview.epoch();
+    const code = editor ? editor.get() : $("#crEditor", main).value;
+    if (!code.trim()) { status("warn", "Редактор пуст", "Напишите код или начните с заготовки."); return; }
+    busy = true;
+    $("#crRun", main).disabled = true; $("#crCheck", main).disabled = true;
+    const out = $("#crOut", main);
+    out.innerHTML = '<div class="empty">' + (py && !Engine.pyHas(p.env.packages) ? "Готовлю Python в браузере…" : "Выполняю…") + '</div>';
+    try {
+      const result = py ? await Run.python(code, p.env) : await Run.sql(code);
+      if (!CodeReview.current(epoch, main)) return;
+      $("#crSolution", main).disabled = false;
+      if (result.err) {
+        out.innerHTML = '<pre class="err">' + esc(result.err) + '</pre>';
+        status("bad", "Код остановился с ошибкой", (py ? Check.pyErr(result.err, code) : Check.sqlErr(result.err, code)) || "Прочитайте сообщение в выводе и исправьте код.");
+        return;
+      }
+      out.innerHTML = py ? '<pre>' + esc(result.out) + '</pre>' : result.res
+        ? renderTable(result.res.columns, result.res.values, -1) : '<div class="empty">Запрос не вернул таблицу.</div>';
+      if (!checking) { $("#crStatus", main).className = "status"; return; }
+      const judged = py ? Check.python(result.out, p.expected.stdout) : result.res
+        ? Check.sql(result.res, p.expected, { code: code, hide: true }) : { ok: false, why: "Нужен запрос SELECT с результатом." };
+      const use = py && judged.ok ? Check.uses(code, p.expected.uses) : "";
+      if (!judged.ok || use) { status("bad", "Пока не совпало", use || judged.why); return; }
+      const next = passed ? null : CodeReview.complete(topic.id, round);
+      if (next) passed = true;
+      const current = (Store.all().codeReview || {})[topic.id];
+      status("ok", "Сошлось", next ? next.done ? "Тема закреплена. Новая ошибка вернёт её в практику."
+        : "Следующее повторение — " + Review.when(next.due) + "."
+        : current && !current.done && current.due > isoDay() ? "Это дополнительная тренировка. Расписание не изменилось: повторение — " + Review.when(current.due) + "."
+        : "Можно вернуться к своим ошибкам или перечитать объяснение.");
+    } catch (e) {
+      if (document.body.contains(main)) status("warn", "Не получилось запустить", "Проверьте соединение и попробуйте ещё раз.");
+    } finally {
+      busy = false;
+      if (document.body.contains(main)) { $("#crRun", main).disabled = false; $("#crCheck", main).disabled = false; }
+    }
+  }
+  $("#crRun", main).addEventListener("click", function () { run(false); });
+  $("#crCheck", main).addEventListener("click", function () { run(true); });
+  $("#crHint", main).addEventListener("click", function () {
+    const text = $("#crHintText", main); text.hidden = !text.hidden; this.setAttribute("aria-expanded", String(!text.hidden));
+  });
+  $("#crSolution", main).addEventListener("click", function () {
+    modal("Решение практики", '<pre>' + esc(p.solution) + '</pre>');
   });
 }
 
@@ -83923,13 +84676,14 @@ function renderHome(app) {
   /* Вернувшемуся человеку первым делом нужно «где я остановился»,
      а не описание курса, — поэтому карточка стоит сразу под заголовком. */
   const resume = Stats.resume();
+  const resumePlace = resume && Place.get(resume.lesson.id);
   const resumeHtml = resume
-    ? '<a class="resume" href="#' + resume.lesson.id + '">' +
+    ? '<a class="resume" href="' + Place.href(resume.lesson.id) + '">' +
         '<span class="resume-txt">' +
           '<span class="resume-k">' + (resume.entry ? "Начать отсюда — по входному тесту"
-                                       : resume.fresh ? "Следующий урок" : "Вы остановились здесь") + "</span>" +
+                                       : resumePlace || !resume.fresh ? "Вы остановились здесь" : "Следующий урок") + "</span>" +
           '<span class="resume-t">' + resume.lesson.num + " " + esc(resume.lesson.title) + "</span>" +
-          '<span class="resume-d">' + esc(resume.lesson.desc) + "</span>" +
+          '<span class="resume-d">' + esc(Place.label(resume.lesson.id) || resume.lesson.desc) + "</span>" +
         "</span>" +
         '<span class="resume-go">' + (resume.entry ? "Начать" : "Продолжить") + "</span>" +
       "</a>"
@@ -84336,26 +85090,36 @@ const Engine = {
     /* база и движок качаются одновременно */
     await Promise.all([Lazy.data(), loadScript(CDN.sqlBase + "sql-wasm.js")]);
     const SQL = await window.initSqlJs({ locateFile: function (f) { return CDN.sqlBase + f; } });
+    Engine.sqlModule = SQL;
+    Engine.db = Engine.createShop();
+    return Engine.db;
+  },
+
+  /* Независимая исходная база для урока или дополнительной проверки.
+     Варианты данных не касаются общей базы и песочницы. */
+  createShop: function () {
+    const SQL = Engine.sqlModule;
     const db = new SQL.Database();
-    db.run(window.DATA.shopSQL);
-    /* Журнал мобильного приложения лежит в data.js одним CSV: так он
-       не дублируется между SQL- и Python-уроками и числа сходятся. */
-    fillFromCsv(db, window.DATA.appUsersCSV,
-      "INSERT INTO app_users VALUES (?,?,?,?,?)",
-      function (c) { return [+c[0], c[1], c[2], c[3], c[4]]; });
-    fillFromCsv(db, window.DATA.appActivityCSV,
-      "INSERT INTO app_activity VALUES (?,?)",
-      function (c) { return [+c[0], c[1]]; });
-    fillFromCsv(db, window.DATA.appOrdersCSV,
-      "INSERT INTO app_orders VALUES (?,?,?)",
-      function (c) { return [+c[0], c[1], +c[2]]; });
-    /* Выгрузка лидов из CRM (урок 1.3, в pandas — 2.2) грязная нарочно:
-       пустая ячейка — NULL, остальное как в выгрузке */
-    fillFromCsv(db, window.DATA.leadsCSV,
-      "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
-      function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
-    Engine.db = db;
-    return db;
+    try {
+      db.run(window.DATA.shopSQL);
+      /* Журнал мобильного приложения лежит в data.js одним CSV: так он
+         не дублируется между SQL- и Python-уроками и числа сходятся. */
+      fillFromCsv(db, window.DATA.appUsersCSV,
+        "INSERT INTO app_users VALUES (?,?,?,?,?)",
+        function (c) { return [+c[0], c[1], c[2], c[3], c[4]]; });
+      fillFromCsv(db, window.DATA.appActivityCSV,
+        "INSERT INTO app_activity VALUES (?,?)",
+        function (c) { return [+c[0], c[1]]; });
+      fillFromCsv(db, window.DATA.appOrdersCSV,
+        "INSERT INTO app_orders VALUES (?,?,?)",
+        function (c) { return [+c[0], c[1], +c[2]]; });
+      /* Выгрузка лидов из CRM (урок 1.3, в pandas — 2.2) грязная нарочно:
+         пустая ячейка — NULL, остальное как в выгрузке */
+      fillFromCsv(db, window.DATA.leadsCSV,
+        "INSERT INTO leads VALUES (?,?,?,?,?,?,?)",
+        function (c) { return [+c[0]].concat(c.slice(1, 7).map(function (v) { return v === "" ? null : v; })); });
+      return db;
+    } catch (e) { db.close(); throw e; }
   },
 
   python: async function (pkgs) {
@@ -85589,6 +86353,161 @@ function renderTable(cols, rows, badRow, mask) {
   return h;
 }
 
+/* Самопроверка письменного вывода: пометки ученика ссылаются только
+   на существующие фрагменты его ответа и не влияют на Check.text. */
+const Rubric = {
+  capture: function (answer, start, end) {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > answer.length || end <= start) return null;
+    const raw = answer.slice(start, end), quote = raw.trim();
+    if (!quote) return null;
+    const at = start + raw.length - raw.trimStart().length;
+    return { quote: quote, start: at, end: at + quote.length };
+  },
+
+  locate: function (answer, record) {
+    if (!record || typeof record.quote !== "string" || !record.quote.trim()) return null;
+    const quote = record.quote;
+    if (Number.isInteger(record.start) && Number.isInteger(record.end) && record.start >= 0 &&
+        record.end - record.start === quote.length && answer.slice(record.start, record.end) === quote) return record;
+    const at = answer.indexOf(quote);
+    return at >= 0 && at === answer.lastIndexOf(quote) ? { quote: quote, start: at, end: at + quote.length } : null;
+  },
+
+  summary: function (answer, items, records) {
+    let linked = 0, stale = 0;
+    items.forEach(function (item) {
+      const r = (records || {})[item.id];
+      if (!r || typeof r.quote !== "string" || !r.quote.trim()) return;
+      if (Rubric.locate(answer, r)) linked++; else stale++;
+    });
+    return { linked: linked, stale: stale, total: items.length };
+  },
+
+  html: function (items) {
+    return '<details class="answer-rubric" id="answerRubric"><summary>Самопроверка вывода <span class="rubric-count"></span></summary>' +
+      '<p>Перед сравнением с эталоном выделите фразу в своём ответе и свяжите её с подходящим пунктом. Можно вернуться к ответу и дописать недостающее.</p>' +
+      '<p class="rubric-help">Это ваши пометки, а не оценка правильности. Они не ставят зачёт задания; для него есть кнопка «Проверить».</p>' +
+      '<ol class="rubric-items">' + items.map(function (item) {
+        return '<li class="rubric-item"><h4>' + esc(item.title) + '</h4><p class="rubric-hint">' + esc(item.hint) + '</p>' +
+          '<p class="rubric-state"></p><blockquote class="rubric-quote" hidden></blockquote>' +
+          '<div class="rubric-actions"><button class="btn rubric-bind" type="button">Связать выделенное</button>' +
+          '<button class="linkbtn rubric-show" type="button" disabled>Найти в ответе</button>' +
+          '<button class="linkbtn rubric-clear" type="button" disabled>Убрать пометку</button></div></li>';
+      }).join('') + '</ol><p class="rubric-message" role="status" aria-live="polite"></p></details>';
+  },
+
+  mount: function (box, answer, items, lesson) {
+    if (!box || !answer || !items) return;
+    const records = {}, rows = box.querySelectorAll('.rubric-item'), message = box.querySelector('.rubric-message');
+    const key = function (item) { return lesson + ':rubric:' + item.id; };
+    items.forEach(function (item) { records[item.id] = Store.get('seen', key(item), null); });
+    function paint() {
+      const sum = Rubric.summary(answer.value, items, records);
+      box.querySelector('.rubric-count').textContent = '— связано ' + sum.linked + ' из ' + sum.total +
+        (sum.stale ? ', перепроверить: ' + sum.stale : '');
+      items.forEach(function (item, i) {
+        const row = rows[i], r = records[item.id], found = Rubric.locate(answer.value, r);
+        const hasQuote = !!(r && typeof r.quote === 'string' && r.quote.trim());
+        const quote = row.querySelector('.rubric-quote'), state = row.querySelector('.rubric-state');
+        row.classList.toggle('rubric-stale', hasQuote && !found);
+        state.textContent = found ? 'Фрагмент есть в текущем ответе.' : hasQuote
+          ? 'Ранее выбранный фрагмент изменён или не находится однозначно. Выберите его заново.' : 'Фрагмент пока не выбран.';
+        quote.hidden = !hasQuote; quote.textContent = hasQuote ? r.quote : '';
+        row.querySelector('.rubric-show').disabled = !found;
+        row.querySelector('.rubric-clear').disabled = !hasQuote;
+      });
+    }
+    items.forEach(function (item, i) {
+      const row = rows[i], bind = row.querySelector('.rubric-bind');
+      bind.addEventListener('click', function () {
+        const r = Rubric.capture(answer.value, answer.selectionStart, answer.selectionEnd);
+        if (!r) { message.textContent = 'Сначала выделите фразу в поле вашего ответа, затем нажмите «Связать выделенное» у нужного пункта.'; return; }
+        records[item.id] = r; Store.set('seen', key(item), r); paint();
+        message.textContent = 'Фрагмент связан с пунктом «' + item.title + '». Проверьте сами, раскрывает ли он этот пункт.';
+      });
+      row.querySelector('.rubric-show').addEventListener('click', function () {
+        const r = Rubric.locate(answer.value, records[item.id]);
+        if (!r) { paint(); return; }
+        answer.focus({ preventScroll: true }); answer.setSelectionRange(r.start, r.end);
+        answer.scrollIntoView({ block: 'center' });
+      });
+      row.querySelector('.rubric-clear').addEventListener('click', function () {
+        records[item.id] = {}; Store.set('seen', key(item), {}); paint(); bind.focus();
+        message.textContent = 'Пометка «' + item.title + '» убрана.';
+      });
+    });
+    answer.addEventListener('input', function () { paint(); message.textContent = ''; });
+    paint();
+  }
+};
+
+/* Готовый SQL-запрос по промежуточным таблицам. Снимки и запросы
+   задаёт урок; переключение этапа и ключа не запускает код ученика. */
+const SqlTrace = {
+  counts: function (stage, key) {
+    return stage.tables.map(function (t) {
+      const col = t.columns.indexOf(t.key);
+      return t.rows.filter(function (r) { return r[col] === key; }).length;
+    });
+  },
+
+  table: function (t, key) {
+    const col = t.columns.indexOf(t.key);
+    return '<div class="trace-scroll" tabindex="0" role="region" aria-label="' + esc(t.title) + '">' +
+      '<table class="trace-table"><caption>' + esc(t.title) + '</caption><thead><tr>' +
+      t.columns.map(function (c) { return '<th scope="col">' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      t.rows.map(function (r) {
+        const selected = r[col] === key;
+        return '<tr' + (selected ? ' class="trace-selected"' : '') + '>' + r.map(function (v, i) {
+          const cell = v === null ? 'NULL' : esc(v);
+          return '<td>' + (selected && i === col ? '<strong>' + cell + '</strong>' : cell) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+  },
+
+  mount: function (root, data, id) {
+    const box = root && root.querySelector('[data-sql-trace]');
+    if (!box || !data || box.dataset.mounted) return;
+    box.dataset.mounted = '1';
+    box.className = 'sql-trace';
+    const panelId = 'sql-trace-' + id, titleId = panelId + '-title';
+    box.setAttribute('role', 'region'); box.setAttribute('aria-labelledby', titleId);
+    box.innerHTML = '<h3 id="' + titleId + '">' + esc(data.title) + '</h3><p>' + esc(data.intro) + '</p>' +
+      '<div class="trace-controls" role="group" aria-label="Этап запроса">' + data.stages.map(function (s, i) {
+        return '<button type="button" class="btn" data-stage="' + i + '" aria-controls="' + panelId +
+          '" aria-pressed="false">' + (i + 1) + '. ' + esc(s.title) + '</button>';
+      }).join('') + '</div><div class="trace-controls" role="group" aria-label="Выделить строки пользователя">' +
+      data.keys.map(function (key) {
+        return '<button type="button" class="btn" data-key="' + esc(key) + '" aria-controls="' + panelId +
+          '" aria-pressed="false">user_id = ' + esc(key) + '</button>';
+      }).join('') + '</div><p class="trace-status" role="status" aria-live="polite" aria-atomic="true"></p>' +
+      '<div class="trace-panel" id="' + panelId + '"></div>';
+    let index = 0, key = data.keys[0];
+    const panel = box.querySelector('.trace-panel');
+    function paint() {
+      const stage = data.stages[index], counts = SqlTrace.counts(stage, key);
+      Array.prototype.forEach.call(box.querySelectorAll('[data-stage]'), function (b) { b.setAttribute('aria-pressed', +b.dataset.stage === index ? 'true' : 'false'); });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-key]'), function (b) { b.setAttribute('aria-pressed', +b.dataset.key === key ? 'true' : 'false'); });
+      panel.innerHTML = '<h4>' + esc(stage.title) + '</h4><p>' + esc(stage.note) + '</p>' + stage.tables.map(function (t) {
+        return SqlTrace.table(t, key) + '<details class="trace-sql"><summary>SQL этой таблицы</summary><pre><code>' + esc(t.sql) + '</code></pre></details>';
+      }).join('');
+      box.querySelector('.trace-status').textContent = 'Этап ' + (index + 1) + ' из ' + data.stages.length +
+        '. Выбран user_id = ' + key + '. ' + stage.tables.map(function (t, i) {
+          return t.title + ': выделено ' + counts[i] + ' из ' + t.rows.length + ' строк.';
+        }).join(' ');
+      focusScrollers(panel);
+    }
+    box.addEventListener('click', function (event) {
+      const b = event.target.closest('button[data-stage], button[data-key]');
+      if (!b || !box.contains(b)) return;
+      if (b.hasAttribute('data-stage')) index = +b.dataset.stage;
+      else key = +b.dataset.key;
+      paint();
+    });
+    paint();
+  }
+};
+
 /* Таблицы «было → стало» у шага практикума: те же строки базы до новой
    конструкции и после неё. Ручкой выделено то, на что смотреть: новые
    столбцы в «стало» (hl) или строки «было», которые останутся (keep). */
@@ -85618,17 +86537,35 @@ function baHtml(ba) {
 /* ---------- модальное окно ---------- */
 function modal(title, html) {
   let bg = $("#modalBg");
-  function close() { bg.classList.remove("show"); }
   if (!bg) {
     bg = el("div", { class: "modal-bg", id: "modalBg" });
-    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+    bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalT">' +
       '<div class="modal-h"><span id="modalT"></span><span class="spacer"></span>' +
       '<button class="iconbtn" id="modalX" type="button">Закрыть</button></div>' +
       '<div class="modal-b" id="modalB"></div></div>';
     document.body.appendChild(bg);
-    bg.addEventListener("click", function (e) { if (e.target === bg) close(); });
-    $("#modalX").addEventListener("click", close);
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+    bg.addEventListener("click", function (e) { if (e.target === bg) modal.close(); });
+    $("#modalX").addEventListener("click", function () { modal.close(); });
+    document.addEventListener("keydown", function (e) {
+      if (!bg.classList.contains("show")) return;
+      if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); modal.close(); }
+      if (e.key !== "Tab") return;
+      const nodes = Array.prototype.filter.call(bg.querySelectorAll('a[href], button, input, textarea, select, [tabindex="0"]'),
+        function (n) { return !n.disabled && n.getClientRects().length > 0; });
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !bg.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !bg.contains(document.activeElement))) {
+        e.preventDefault(); first.focus();
+      }
+    }, true);
+  }
+  if (!bg.classList.contains("show")) {
+    modal.back = document.activeElement;
+    modal.locked = Array.prototype.filter.call(document.body.children, function (n) { return n !== bg && !n.inert; });
+    modal.locked.forEach(function (n) { n.inert = true; });
+    modal.overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
   }
   $("#modalT").textContent = title;
   $("#modalB").innerHTML = html;
@@ -85636,6 +86573,15 @@ function modal(title, html) {
   $("#modalX").focus();
   if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise([$("#modalB")]);
 }
+modal.close = function (restore) {
+  const bg = $("#modalBg");
+  if (!bg || !bg.classList.contains("show")) return;
+  bg.classList.remove("show");
+  (modal.locked || []).forEach(function (n) { n.inert = false; });
+  modal.locked = [];
+  document.body.style.overflow = modal.overflow || "";
+  if (restore !== false && modal.back && modal.back.isConnected) modal.back.focus({ preventScroll: true });
+};
 
 /* ============================================================
    Страница урока — один вертикальный лонгрид.
@@ -85837,7 +86783,7 @@ document.addEventListener("click", function (e) {
 function lessonHeadHtml(L, C, kindLabel) {
   const plan = C.plan || defaultPlan(C);
   let planHtml = '<div class="plan"><div class="plan-h"><span>План занятия</span>' +
-    '<span class="total">' + esc(C.duration || "≈ 2 часа") + "</span></div>" +
+    '<span class="total">≈ ' + Plan.base(L) + " мин</span></div>" +
     '<div class="plan-list" style="--plan-cols:' + Math.min(plan.length, 5) + '">';
   plan.forEach(function (p) {
     planHtml += '<div class="plan-item"><div class="m">' + esc(p.m) + '</div><div class="w">' + esc(p.w) + "</div></div>";
@@ -85872,13 +86818,15 @@ function focusScrollers(root) {
 function secNavHtml(secs) {
   let navHtml = '<nav class="secnav" id="secnav" aria-label="Разделы урока"><div class="secnav-in">';
   secs.forEach(function (s, i) {
-    navHtml += '<a href="#' + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
+    navHtml += '<a href="#' + Router.current + "/" + s.id + '" data-sec="' + s.id + '"' + (i === 0 ? ' class="on"' : "") + ">" + s.t + "</a>";
   });
   return navHtml + "</div></nav>";
 }
 
 /* полоса прочитанного и подсветка активного раздела в навигации */
 function mountReadbar(secs) {
+  const id = Router.current, nav = $("#secnav");
+  const main = nav.closest("main");
   const bar = el("div", { class: "readbar", id: "readbar" });
   document.body.appendChild(bar);
   /* В уроке две полосы прогресса не нужны: здесь важно, сколько
@@ -85888,8 +86836,9 @@ function mountReadbar(secs) {
   const links = Array.prototype.slice.call(document.querySelectorAll(".secnav a"));
   let ticking = false;
 
-  function upd() {
+  function upd(remember) {
     ticking = false;
+    if (Router.current !== id || !document.body.contains(nav)) return;
     const h = document.documentElement;
     const max = h.scrollHeight - h.clientHeight;
     bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + "%";
@@ -85901,16 +86850,29 @@ function mountReadbar(secs) {
       if (n && n.offsetTop <= line) cur = secs[i].id;
     }
     links.forEach(function (a) { a.classList.toggle("on", a.dataset.sec === cur); });
+    if (remember && !document.hidden && Router.route(location.hash).id === id) {
+      const active = document.activeElement;
+      const editing = active && (active.matches("input, textarea") || active.closest(".CodeMirror"));
+      const section = editing && active.closest("section.block[id]");
+      Place.section(id, section ? section.id : max > 0 && h.scrollTop >= max - 4 ? secs[secs.length - 1].id : cur);
+    }
   }
   function onScroll() {
-    if (!ticking) { ticking = true; requestAnimationFrame(upd); }
+    if (!ticking) { ticking = true; requestAnimationFrame(function () { upd(true); }); }
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", onScroll);
+  function onFocus(e) {
+    const section = e.target.closest("section.block[id]");
+    if (section) Place.section(id, section.id);
+  }
+  main.addEventListener("focusin", onFocus);
   upd();
+  if (!Router.route(location.hash).section) Place.section(id, secs[0].id);
   Router.cleanup.push(function () {
     window.removeEventListener("scroll", onScroll);
     window.removeEventListener("resize", onScroll);
+    main.removeEventListener("focusin", onFocus);
     document.body.classList.remove("reading");
     const b = document.getElementById("readbar");
     if (b) b.remove();
@@ -86039,6 +87001,7 @@ function mountLessonNav(id, onUnmark) {
    оно считается само и показывается на главной. Пауза — если отошли
    от открытого урока. Время по календарным дням — для серии на главной. */
 function mountTimer(id) {
+  const reset = Store.all()._reset;
   let secs = Store.get("time", id, 0);
   let day = isoDay(), daySecs = Store.get("days", day, 0);
   let running = true;
@@ -86060,6 +87023,7 @@ function mountTimer(id) {
   });
   Router.cleanup.push(function () {
     clearInterval(tick);
+    if (Store.all()._reset !== reset) return;
     if (secs > 0) Store.set("time", id, secs);
     if (daySecs > 0) Store.set("days", day, daySecs);
   });
@@ -86733,6 +87697,7 @@ const Steps = {
         Terms.mark($(".st-b .theory", fresh));
         Figs.mount($(".st-b .theory", fresh));
         bindDone(fresh);
+        if (peek[n]) Place.remember(id, tag ? "s-practice" : "s-steps", "step", n, total);
       });
     }
 
@@ -86752,6 +87717,9 @@ const Steps = {
       const n = open;
       const li = $(".st.open", list);
       const q = function (sel) { return $(sel, li); };
+      li.addEventListener("focusin", function () {
+        Place.remember(id, tag ? "s-practice" : "s-steps", "step", n, total);
+      });
 
       function status(kind, title, body) {
         const s = q(".st-status");
@@ -86801,15 +87769,18 @@ const Steps = {
       }
 
       async function runSql(code) {
+        const epoch = CodeReview.epoch();
         if (Engine.wait(code) !== "Выполняю…") q(".st-res").innerHTML = '<div class="empty">' + Engine.wait(code) + "</div>";
         let r;
         try { r = await Run.sql(code); }
         catch (e) {
+          if (!CodeReview.current(epoch, li)) return false;
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
-        if (open !== n || !document.body.contains(li)) return false;
+        if (open !== n || !CodeReview.current(epoch, li)) return false;
+        if (r.err) CodeReview.record("sql", r.err, code, { lesson: id, section: tag ? "s-practice" : "s-steps", kind: "step", index: n, starter: S.steps[n].starter, reset: epoch });
         if (r.err) {
           last = null;
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
@@ -86831,17 +87802,20 @@ const Steps = {
          шага с matplotlib ещё и фигуры: картинка для вывода и «паспорт»
          графика для проверки. */
       async function runPy(code) {
+        const epoch = CodeReview.epoch();
         q(".st-res").innerHTML = '<div class="empty">' + (Engine.pyHas(S.packages) ? "Выполняю…"
           : "Готовлю Python в браузере — первый раз 15–40 секунд…") + "</div>";
         let r;
         try { r = await Run.python(code, S); }
         catch (e) {
+          if (!CodeReview.current(epoch, li)) return false;
           lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
           status("bad", "Python не загрузился", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
           return false;
         }
-        if (open !== n || !document.body.contains(li)) return false;
+        if (open !== n || !CodeReview.current(epoch, li)) return false;
+        if (r.err) CodeReview.record("python", r.err, code, { lesson: id, section: tag ? "s-practice" : "s-steps", kind: "step", index: n, starter: S.steps[n].starter, reset: epoch });
         if (r.err) {
           lastOut = null; lastFigs = [];
           q(".st-res").innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
@@ -86921,6 +87895,7 @@ const Steps = {
       open = Steps.firstOpen(id, S, tag);
       draw();
       if (open >= 0) {
+        Place.remember(id, tag ? "s-practice" : "s-steps", "step", open, total);
         const li = $(".st.open", list);
         if (li) li.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (onFinish) {
@@ -87067,6 +88042,49 @@ function wroteHtml(r, keep) {
 /* Запуск кода — урок, шаги, тренажёр, песочница и собеседование. Python
    один на страницу и печатает в общий stdout, поэтому запуски идут
    строго по очереди. */
+/* Дополнительные варианты SQL-задачи. Для каждого — новая исходная база,
+   эталон считается на тех же изменениях, что и ответ ученика. */
+const SqlCases = {
+  check: function (code, reference, cases) {
+    if (Engine.writes(code)) return { ok: false, blocked: true };
+    for (let i = 0; i < cases.length; i++) {
+      const v = cases[i], db = Engine.createShop();
+      try {
+        db.run(v.change);
+        db.run("PRAGMA query_only=ON");
+        const expected = sqlLast(db, reference);
+        if (!expected) throw new Error("Эталон варианта не вернул таблицу");
+        const loop = Engine.loop(function (q) { return db.exec(q)[0].values[0]; }, code);
+        let got = null, error = loop;
+        if (!error) {
+          try { got = sqlLast(db, code); }
+          catch (e) { error = "SQLite: " + e.message; }
+        }
+        const ordered = /\bORDER\s+BY\b/i.test(reference.replace(/OVER\s*\([^()]*(\([^()]*\)[^()]*)*\)/gi, ""));
+        const c = error ? { ok: false } : Check.drillSql(got,
+          { columns: expected.columns, rows: expected.values, ordered: ordered }, code);
+        if (!c.ok) return { ok: false, variant: v, index: i, total: cases.length,
+          got: got, expected: expected, error: error, why: c.why };
+      } finally { db.close(); }
+    }
+    return { ok: true, total: cases.length };
+  },
+
+  html: function (r) {
+    function table(title, t) {
+      return '<p><strong>' + esc(title) + '</strong></p>' + (t
+        ? '<div class="sql-case-table" tabindex="0" role="region" aria-label="' + esc(title) + '">' +
+          renderTable(t.columns, t.values.slice(0, 10), -1) + '</div>' +
+          '<p>Показано ' + Math.min(t.values.length, 10) + ' из ' + t.values.length + ' строк.</p>'
+        : '<p>Таблицы в ответе нет.</p>');
+    }
+    return '<details class="sql-case"><summary>Контрпример: ' + esc(r.variant.title) + '</summary>' +
+      '<p>' + esc(r.variant.explain) + '</p><p>Это отдельная копия данных для проверки. Ваш вывод выше — на исходных данных.</p>' +
+      (r.error ? '<p>' + esc(r.error) + '</p>' : '') +
+      table('Ваш запрос на варианте', r.got) + table('Ожидаемый ответ на том же варианте', r.expected) + '</details>';
+  }
+};
+
 const Run = {
   queue: Promise.resolve(),
   guard: null,          /* { pyi, on, off } — функции GUARD_PY в этом Pyodide */
@@ -87319,6 +88337,43 @@ const Drills = {
     return Drills.cache[key];
   },
 
+  predictionHtml: function (d) {
+    const p = d.predict;
+    if (!p) return "";
+    return '<div class="dr-predict"><p><strong>Сначала предположите</strong></p><p>' + esc(p.q) + '</p>' +
+      '<div class="q-opts" role="group" aria-label="Ваше предположение">' + p.opts.map(function (x, i) {
+        return '<button class="q-opt" type="button" data-choice="' + i + '"><span class="mk">' +
+          "АБВГД".charAt(i) + "</span><span>" + esc(x) + "</span></button>";
+      }).join("") + '</div><p class="dr-predict-why" role="status" hidden></p></div>';
+  },
+
+  prediction: function (id, i, d, det, onReady) {
+    const box = $(".dr-predict", det), work = $(".dr-work", det), p = d.predict;
+    const key = id + ":d" + i + ":predict", saved = Store.get("seen", key, null);
+    const buttons = Array.prototype.slice.call(box.querySelectorAll("[data-choice]"));
+    function show(choice) {
+      buttons.forEach(function (b, n) {
+        b.disabled = true;
+        b.classList.toggle("right", n === p.right);
+        b.classList.toggle("wrong", n === choice && n !== p.right);
+      });
+      const why = $(".dr-predict-why", box);
+      why.hidden = false;
+      why.textContent = (choice === p.right ? "Верно. " : "Предположение не подтвердилось. ") + p.why + " Теперь исправьте запрос.";
+      work.hidden = false;
+    }
+    if (saved && Number.isInteger(saved.choice) && saved.choice >= 0 && saved.choice < p.opts.length) {
+      show(saved.choice); return true;
+    }
+    buttons.forEach(function (b, choice) {
+      b.addEventListener("click", function () {
+        Store.set("seen", key, { choice: choice }); show(choice); onReady();
+        $(".dr-run", work).focus({ preventScroll: true });
+      });
+    });
+    return false;
+  },
+
   itemHtml: function (L, d, i) {
     const k = Drills.kind(L, d);
     if (k === "nums") {
@@ -87336,13 +88391,14 @@ const Drills = {
           '<button class="btn dr-no" type="button">Нет</button></div>' +
         '<div class="status dr-status"></div></div>';
     }
-    return '<div class="dr-work">' +
+    return Drills.predictionHtml(d) + '<div class="dr-work"' + (d.predict ? " hidden" : "") + '>' +
       '<div class="editor-shell st-ed"><div class="editor-h"><span>задача ' + (i + 1) +
         (k === "sql" ? ".sql" : ".py") + "</span></div><textarea class=\"dr-ta\"></textarea></div>" +
       '<div class="st-actions">' +
         '<button class="btn primary dr-run" type="button">' + ICON.play + "Запустить</button>" +
         '<button class="btn check dr-check" type="button">' + ICON.check + "Проверить</button>" +
       "</div>" +
+      (d.sqlCases ? '<p class="muted">Проверка: исходные данные и ' + d.sqlCases.length + ' дополнительных варианта. Запрос должен работать и после изменения данных.</p>' : '') +
       '<div class="status dr-status"></div>' +
       '<div class="io-box st-out"><div class="io-h"><span>ваш вывод</span></div>' +
         '<div class="io-body dr-res"><div class="empty">Пока пусто — нажмите «Запустить».</div></div></div>' +
@@ -87359,7 +88415,10 @@ const Drills = {
     counter();
     Array.prototype.forEach.call(root.querySelectorAll(".drill"), function (det) {
       const i = +det.dataset.i;
+      det.addEventListener("focusin", function () { Place.remember(id, "s-drills", "drill", i, C.drills.length); });
       det.addEventListener("toggle", function () {
+        if (det.open) Place.remember(id, "s-drills", "drill", i, C.drills.length);
+        else if (Place.get(id) && Place.get(id).index === i) Place.section(id, "s-drills");
         if (det.open && !det.dataset.ready) {
           det.dataset.ready = "1";
           Drills.mountOne(L, C, det, i, counter);
@@ -87368,8 +88427,11 @@ const Drills = {
     });
   },
 
-  mountOne: function (L, C, det, i, counter) {
+  mountOne: function (L, C, det, i, counter, predicted) {
     const id = L.id, d = C.drills[i], k = Drills.kind(L, d);
+    if (d.predict && !predicted && !Drills.prediction(id, i, d, det, function () {
+      Drills.mountOne(L, C, det, i, counter, true);
+    })) return;
     const q = function (sel) { return $(sel, det); };
     const codeKey = id + ":d" + i, triesKey = id + ":d" + i;
     const reveal = q(".d-reveal");
@@ -87441,12 +88503,14 @@ const Drills = {
     /* эталон и движок — заранее, пока ученик читает условие */
     idle(function () { Drills.expected(L, C, i).catch(function () {}); });
 
-    mountEditor(q(".dr-ta"), py ? "python" : "sql", Store.get("code", codeKey, "") || "",
+    const saved = Store.get("code", codeKey, null);
+    mountEditor(q(".dr-ta"), py ? "python" : "sql", saved !== null ? saved : (d.starter || ""),
       function (v) { Store.set("code", codeKey, v); }, function () { run(); },
       function () {}).then(function (ed) { editor = ed; });
 
     async function run() {
       status(null);
+      const epoch = CodeReview.epoch();
       const code = editor ? editor.get() : q(".dr-ta").value;
       if (!code.trim()) { status("warn", "Пусто", py ? "Сначала напишите код." : "Сначала напишите запрос."); return null; }
       const rb = q(".dr-run");
@@ -87455,7 +88519,9 @@ const Drills = {
         : !py ? Engine.wait(code) : "Выполняю…") + "</div>";
       try {
         const r = py ? await Run.python(code, C, Drills.pre(C, d)) : await Run.sql(code);
+        if (!CodeReview.current(epoch, det)) return null;
         if (r.err) {
+          CodeReview.record(py ? "python" : "sql", r.err, code, { lesson: id, section: "s-drills", kind: "drill", index: i, starter: d.starter, reset: epoch });
           last = null;
           res.innerHTML = '<pre><span class="err">' + esc(r.err) + "</span></pre>";
           status("bad", py ? "Код упал с ошибкой" : sqlFail(r.err),
@@ -87464,6 +88530,7 @@ const Drills = {
           return null;
         }
         last = r;
+        r.code = code;
         if (py) {
           res.innerHTML = (r.out.trim() ? "<pre>" + esc(r.out) + "</pre>" : "") + Plots.html(r.figs || []) ||
             '<div class="empty">Код отработал без ошибок, но ничего не ' + (k === "plot" ? "нарисовал." : "напечатал. Нужен print().") + "</div>";
@@ -87476,6 +88543,7 @@ const Drills = {
         }
         return r;
       } catch (e) {
+        if (!CodeReview.current(epoch, det)) return null;
         res.innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
         status("bad", py ? "Python не загрузился" : "База не загрузилась", "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
         return null;
@@ -87483,6 +88551,7 @@ const Drills = {
     }
 
     async function check() {
+      const epoch = CodeReview.epoch();
       const cb = q(".dr-check");
       cb.disabled = true;
       try {
@@ -87490,7 +88559,8 @@ const Drills = {
         if (!r) return;
         let want;
         try { want = await Drills.expected(L, C, i); }
-        catch (e) { status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        catch (e) { if (CodeReview.current(epoch, det)) status("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
+        if (!CodeReview.current(epoch, det)) return;
         tried();
         if (want.err) {
           status("warn", "Эту задачу проверить не получилось", "Сравните свой ответ с разбором ниже.");
@@ -87511,8 +88581,23 @@ const Drills = {
           else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
           return;
         }
-        const c = Check.drillSql(r.res, want.exp, editor ? editor.get() : q(".dr-ta").value);
-        if (c.ok) { solve(); status("ok", "Решено", c.note || "Столбцы и строки сошлись с разбором."); }
+        const c = Check.drillSql(r.res, want.exp, r.code);
+        if (c.ok) {
+          let variants = null;
+          if (d.sqlCases) {
+            try { variants = SqlCases.check(r.code, Drills.code(d), d.sqlCases); }
+            catch (e) { status("warn", "Дополнительная проверка не выполнилась", "Зачёт пока не поставлен. Попробуйте проверить ещё раз."); return; }
+            if (!variants.ok) {
+              status("bad", "На исходных данных сошлось", variants.blocked
+                ? "Для проверки вариантов нужен запрос на чтение данных. Уберите команды изменения таблиц."
+                : "На изменённых данных ответ отличается. Откройте контрпример и проверьте логику запроса." + SqlCases.html(variants));
+              return;
+            }
+          }
+          solve(); status("ok", "Решено", variants
+            ? "Ответ сошёлся на исходных данных и на всех дополнительных вариантах: " + variants.total + " из " + variants.total + "."
+            : c.note || "Столбцы и строки сошлись с разбором.");
+        }
         else {
           if (r.res && c.marks) res.innerHTML = renderTable(r.res.columns, r.res.values, c.marks) +
             '<div class="st-rows">' + r.res.values.length + " " + plural(r.res.values.length, "строка", "строки", "строк") + "</div>";
@@ -87667,7 +88752,7 @@ function renderLesson(app, id) {
     C.quiz.forEach(function (q, i) {
       quizHtml += '<div class="q" data-q="' + i + '">' +
         '<div class="q-t"><span class="q-n">' + (i + 1) + " / " + C.quiz.length + "</span><span>" + q.q + "</span></div>" +
-        '<div class="q-opts">';
+        Confidence.html() + '<div class="q-opts">';
       /* Варианты тасуются при каждой отрисовке: без этого позиция верного
          ответа в исходнике складывается в угадываемый цикл. data-i хранит исходный
          номер, по нему и сверяется ответ.                                        */
@@ -87723,7 +88808,7 @@ function renderLesson(app, id) {
       (isSheet
         ? Nums.html(C.fields, "nm-" + id)
         : isText
-        ? '<textarea class="answer" id="answer" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
+        ? '<textarea class="answer" id="answer" aria-label="Ваш ответ" placeholder="Пишите так, как ответили бы вслух на собеседовании..."></textarea>'
         : '<div class="editor-shell">' +
             '<div class="editor-h"><span>' + (L.kind === "sql" ? "запрос.sql" : "решение.py") + "</span>" +
             '<span class="spacer"></span>' +
@@ -87731,6 +88816,7 @@ function renderLesson(app, id) {
             '<textarea id="editor"></textarea>' +
           "</div>") +
 
+      (isText && C.rubric ? Rubric.html(C.rubric) : '') +
       '<div class="actions">' +
         (noCode ? "" : '<button class="btn primary" id="runBtn" type="button">' + ICON.play +
           "Запустить<span class=\"bl\"> код</span><span class=\"k\">Cmd+Enter</span></button>") +
@@ -87776,6 +88862,7 @@ function renderLesson(app, id) {
   Terms.mark($("#s-theory .theory"));
   Figs.mount($("#s-theory .theory"));
   if (window.Tinker) Tinker.mount($("#s-theory .theory"));
+  SqlTrace.mount($("#s-theory .theory"), C.sqlTrace, L.id);
   Terms.mark($(".ticket-b"));
   Array.prototype.forEach.call(document.querySelectorAll(".drill-body, .q"), function (n) { Terms.mark(n); });
   focusScrollers(main);
@@ -87790,13 +88877,15 @@ function renderLesson(app, id) {
     Array.prototype.forEach.call(document.querySelectorAll(".q"), function (card) {
       const qi = +card.dataset.q;
       const q = C.quiz[qi];
+      const confidence = Confidence.mount(card);
       const opts = Array.prototype.slice.call(card.querySelectorAll(".q-opt"));
       opts.forEach(function (btn) {
         btn.addEventListener("click", function () {
           if (answered[qi]) return;
           answered[qi] = true;
           const picked = +btn.dataset.i;
-          Review.record(id, qi, picked === q.right, true);
+          Review.record(id, qi, picked === q.right, true, confidence.value());
+          confidence.lock();
           opts.forEach(function (b) {
             b.disabled = true;
             const oi = +b.dataset.i;
@@ -87826,7 +88915,7 @@ function renderLesson(app, id) {
       pfin.innerHTML = '<span class="s-ico' + (fresh ? " s-pen" : "") + '">' +
           (fresh ? penTick(id + ":p", "draw") : ICON.ok) + "</span>" +
         '<span class="s-body"><b>Практикум пройден</b>' + (P.done || "Все шаги решены.") +
-          '<br><a href="#s-task">Перейти к основной задаче</a></span>';
+          '<br><a href="#' + id + '/s-task">Перейти к основной задаче</a></span>';
     }, "p");
   }
 
@@ -87920,6 +89009,7 @@ function renderLesson(app, id) {
     answerEl = $("#answer");
     answerEl.value = savedCode || "";
     answerEl.addEventListener("input", function () { Store.set("code", id, answerEl.value); });
+    if (C.rubric) Rubric.mount($("#answerRubric"), answerEl, C.rubric, id);
   } else {
     mountEditor($("#editor"), L.kind, savedCode !== null ? savedCode : (C.starter || ""),
       function (v) { Store.set("code", id, v); }, run,
@@ -87946,6 +89036,7 @@ function renderLesson(app, id) {
   const notes = $("#notes");
   notes.value = Store.get("notes", id, "");
   let noteT = null;
+  Router.cleanup.push(function () { clearTimeout(noteT); });
   notes.addEventListener("input", function () {
     Store.set("notes", id, notes.value);
     clearTimeout(noteT);
@@ -87969,31 +89060,39 @@ function renderLesson(app, id) {
   let lastStdout = "", lastFigs = [];
 
   async function run() {
+    const epoch = CodeReview.epoch();
     clearStatus();
     const code = getCode();
     if (!code.trim()) { setStatus("warn", "Пусто", "Сначала напишите код."); return; }
     $("#runBtn").disabled = true;
     try {
-      if (L.kind === "sql") await runSQL(code);
-      else await runPython(code);
+      if (L.kind === "sql") await runSQL(code, epoch);
+      else await runPython(code, epoch);
     } catch (e) {
+      if (!CodeReview.current(epoch, main)) return;
       /* сюда попадает только незагрузившийся движок: ошибки кода разбирают runSQL и runPython */
       $("#outBox").innerHTML = '<pre><span class="err">' + esc(String(e && e.message ? e.message : e)) + "</span></pre>";
       setStatus("bad", L.kind === "sql" ? "База не загрузилась" : "Python не загрузился",
         "Похоже, пропал интернет. Попробуйте ещё раз, когда связь вернётся.");
     } finally {
-      const rb = $("#runBtn");
-      if (rb) rb.disabled = false;
-      loader(false);
+      if (CodeReview.current(epoch, main)) {
+        const rb = $("#runBtn");
+        if (rb) rb.disabled = false;
+        loader(false);
+      }
     }
   }
 
-  async function runSQL(code) {
+  async function runSQL(code, epoch) {
     loader(true, Engine.wait(code));
     const r = await Run.sql(code);
+    if (!CodeReview.current(epoch, main)) return;
     loader(false);
     lastSqlResult = r.err ? null : r.res;
-    if (r.err) { showError(r.err, Check.sqlErr(r.err, code)); return; }
+    if (r.err) {
+      CodeReview.record("sql", r.err, code, { lesson: id, section: "s-task", starter: C.starter, reset: epoch });
+      showError(r.err, Check.sqlErr(r.err, code)); return;
+    }
     const last = r.res;
     if (!last) {
       $("#outBox").innerHTML = r.changed !== undefined ? wroteHtml(r, false)
@@ -88010,13 +89109,16 @@ function renderLesson(app, id) {
      поможет и не помешает — сохранённый код сработает и после перезагрузки.
      С эталоном сравнивается только stdout; предупреждения библиотек
      (stderr) показываются мелко под выводом и проверку не ломают. */
-  async function runPython(code) {
+  async function runPython(code, epoch) {
     loader(true, Engine.pyHas(C.packages) ? "Выполняю..." : "Первый запуск: качаю Python в браузер, 15-40 секунд...");
     await Engine.python(C.packages || []);
+    if (!CodeReview.current(epoch, main)) return;
     loader(true, "Выполняю...");
     const r = await Run.python(code, C);
+    if (!CodeReview.current(epoch, main)) return;
     if (r.err) {
       lastStdout = ""; lastFigs = [];
+      CodeReview.record("python", r.err, code, { lesson: id, section: "s-task", starter: C.starter, reset: epoch });
       showError(r.err, Check.pyErr(r.err, code));
       return;
     }
@@ -88416,6 +89518,7 @@ const Find = {
   },
 
   open: function () {
+    modal.close();
     const bg = $("#findBg") || Find.build();
     if (!bg.classList.contains("show")) Find.back = document.activeElement;
     bg.classList.add("show");
@@ -88507,6 +89610,38 @@ const Router = {
   cleanup: [],
   current: null,          /* какой урок сейчас отрисован (null — главная) */
 
+  route: function (hash) {
+    const raw = hash.replace(/^#\/?/, "").trim();
+    const m = /^(m\d+l\d+)\/(s-[\w-]+)(?:\/(step|drill)-([1-9]\d*))?$/.exec(raw);
+    if (m) return { id: m[1], section: m[2], kind: m[3] || null, index: m[4] ? +m[4] - 1 : null };
+    if (/^s-[\w-]+$/.test(raw)) {
+      const id = Router.current || Store.get("seen", "last", "");
+      if (Course.byId(id)) return { id: id, section: raw };
+    }
+    return { id: raw, section: null };
+  },
+
+  scroll: function (route) {
+    const root = route.section && document.getElementById(route.section);
+    let target = root;
+    if (root && route.kind === "drill" && route.section === "s-drills") {
+      const det = root.querySelector('.drill[data-i="' + route.index + '"]');
+      if (det) { det.open = true; target = det; }
+    }
+    if (root && route.kind === "step" && (route.section === "s-practice" || route.section === "s-steps")) {
+      const li = root.querySelector('.st[data-n="' + route.index + '"]');
+      if (li && li.classList.contains("done")) {
+        if (!li.classList.contains("peek")) $("button.st-h", li).click();
+        target = root.querySelector('.st[data-n="' + route.index + '"]');
+      } else target = root.querySelector(".st.open") || root;
+    }
+    if (target) {
+      target.scrollIntoView({ behavior: "instant", block: "start" });
+      Place.section(route.id, route.section);
+    }
+    else window.scrollTo(0, 0);
+  },
+
   go: function (hash) {
     const h = hash || "#";
     if (location.hash === h) Router.render(true);
@@ -88516,8 +89651,10 @@ const Router = {
   /* force — перерисовать, даже если адрес не менялся (например, после
      переноса прогресса, когда поменялись отметки о пройденном).      */
   render: function (force) {
-    const id = location.hash.replace(/^#\/?/, "").trim();
+    const route = Router.route(location.hash), id = route.id;
     const lesson = id ? Course.byId(id) : null;
+    if (lesson && route.section && /^#\/?s-/.test(location.hash))
+      history.replaceState(null, "", "#" + id + "/" + route.section);
 
     /* Хэш — не только адрес урока. Навигация по секциям внутри урока
        (#s-task, #s-quiz) работает обычными якорями, и такой переход
@@ -88530,7 +89667,7 @@ const Router = {
     /* Возврат к адресу урока, который и так открыт (например, кнопкой
        «назад» после перехода по якорю), — просто подъём наверх.      */
     if (!force && lesson && Router.current === id) {
-      window.scrollTo(0, 0);
+      Router.scroll(route);
       return;
     }
 
@@ -88540,8 +89677,7 @@ const Router = {
     /* Окно и поиск живут вне страницы и пережили бы переход: открытая
        подсказка поверх новой страницы выглядит как сбой. */
     Find.close();
-    const open = $("#modalBg");
-    if (open) open.classList.remove("show");
+    modal.close(false);
 
     const hdr = $(".hdr"); if (hdr) hdr.remove();
     const bar = $("#storeBar"); if (bar) bar.remove();
@@ -88556,7 +89692,7 @@ const Router = {
     else if (id) renderLesson(app, id);
     else renderHome(app);
 
-    window.scrollTo(0, 0);
+    Router.scroll(route);
   }
 };
 

@@ -364,3 +364,46 @@ P = np.column_stack([(feat["platform"] == p).to_numpy(float) for p in PLATFORMS]
 y  = feat["rev90"].to_numpy(float)
 yb = feat["converted"].to_numpy(float)
 `;
+
+/* Короткие самостоятельные повторы после распознанной ошибки запуска.
+   Их зачёт не меняет прохождение уроков и шагов. */
+window.SH.codePractice = {
+  "sql-schema": {
+    body: "<p>Выведите <code>user_id</code> и <code>city</code> первых трёх пользователей по <code>user_id</code>. В заготовке перепутаны имена таблицы и столбца. Сверьтесь со схемой и исправьте их.</p>",
+    starter: "SELECT id, city\nFROM user\nORDER BY id\nLIMIT 3;",
+    hint: "Имя таблицы — users. Имя идентификатора посмотрите в её схеме; после SELECT и в ORDER BY оно должно совпадать.",
+    solution: "SELECT user_id, city\nFROM users\nORDER BY user_id\nLIMIT 3;",
+    expected: { columns: ["user_id", "city"], rows: [[1, "Новосибирск"], [2, "Казань"], [3, "Москва"]], ordered: true }
+  },
+  "sql-aggregate": {
+    body: "<p>Найдите города, в которых больше 40 зарегистрированных пользователей. Выведите <code>city</code> и <code>users_cnt</code>, сортировка по городу. В заготовке условие по числу пользователей поставлено до группировки.</p>",
+    starter: "SELECT city, COUNT(*) AS users_cnt\nFROM users\nWHERE COUNT(*) > 40\nGROUP BY city\nORDER BY city;",
+    hint: "WHERE отбирает отдельные строки. Условие по COUNT(*) поставьте после GROUP BY, используя HAVING.",
+    solution: "SELECT city, COUNT(*) AS users_cnt\nFROM users\nGROUP BY city\nHAVING COUNT(*) > 40\nORDER BY city;",
+    expected: { columns: ["city", "users_cnt"], rows: [["Екатеринбург", 43], ["Казань", 47], ["Москва", 53], ["Санкт-Петербург", 42]], ordered: true }
+  },
+  "py-name": {
+    body: "<p>Переменные <code>paid</code> и <code>total</code> должны существовать до печати. Исправьте порядок строк и допишите <code>print</code>, чтобы получить строку <code>Оплачено: 189 из 215</code>. В печати используйте обе переменные.</p>",
+    env: { packages: [], data: [] },
+    starter: 'print("Оплачено:", paid)\npaid = 189\ntotal = 215',
+    hint: "Сначала выполните присваивания paid и total. Ниже напечатайте текст и обе переменные через запятые.",
+    solution: 'paid = 189\ntotal = 215\nprint("Оплачено:", paid, "из", total)',
+    expected: { stdout: "Оплачено: 189 из 215", uses: [["print\\([^\\n]*\\bpaid\\b[^\\n]*\\btotal\\b", "В print используйте paid и total, чтобы строка брала числа из переменных."]] }
+  },
+  "py-column": {
+    body: "<p>В таблице <code>orders</code> посчитайте сумму <code>revenue</code> по всем заказам, округлите до двух знаков и напечатайте. В заготовке опечатка в имени столбца.</p>",
+    env: { packages: ["pandas"], data: window.SH.pyData, prelude: window.SH.pyPrelude },
+    starter: 'print(round(orders["revenu"].sum(), 2))',
+    hint: 'Имя столбца пишется revenue. Его берут у orders в квадратных скобках с кавычками.',
+    solution: 'print(round(orders["revenue"].sum(), 2))',
+    expected: { stdout: "765476.25" }
+  },
+  "py-condition": {
+    body: "<p>Отберите оплаченные заказы с <code>revenue &gt; 5000</code> и напечатайте их число. Условия в заготовке верны по отдельности, но соединены оператором для одного значения.</p>",
+    env: { packages: ["pandas"], data: window.SH.pyData, prelude: window.SH.pyPrelude },
+    starter: 'big = orders[(orders["status"] == "paid") and (orders["revenue"] > 5000)]\nprint(len(big))',
+    hint: "Условия по целым столбцам соединяют через &, каждое условие берут в скобки.",
+    solution: 'big = orders[(orders["status"] == "paid") & (orders["revenue"] > 5000)]\nprint(len(big))',
+    expected: { stdout: "28" }
+  }
+};
