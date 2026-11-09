@@ -407,3 +407,98 @@ window.SH.codePractice = {
     expected: { stdout: "28" }
   }
 };
+
+/* Готовые расчёты для первого прохода статистики. Полные реализации
+   остаются в разборах уроков; здесь нет данных задачи или печати ответа.
+   Нормальное приближение t-теста — учебное ограничение, см. урок 3.4. */
+window.SH.ciTools = `def norm_cdf(x):
+    """Функция нормального распределения — нужна для p-value."""
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
+
+def ci(c, n):
+    """Границы 95% доверительного интервала для доли."""
+    p = c / n
+    se = math.sqrt(p * (1 - p) / n)   # стандартная ошибка доли
+    return p - 1.96 * se, p + 1.96 * se
+
+
+def conversion_z(c_a, n_a, c_b, n_b):
+    """z и двусторонний p-value для конверсии B минус A."""
+    p_pool = (c_a + c_b) / (n_a + n_b)
+    se = math.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))
+    z = (c_b / n_b - c_a / n_a) / se
+    return z, 2 * (1 - norm_cdf(abs(z)))
+`;
+
+window.SH.testTools = `def welch(x, y):
+    nx, ny = len(x), len(y)
+    vx, vy = var(x) / nx, var(y) / ny          # вклад каждой группы в шум
+    t = (mean(x) - mean(y)) / math.sqrt(vx + vy)
+    # формула Уэлча-Саттертуэйта: степени свободы получаются дробными
+    df = (vx + vy) ** 2 / (vx ** 2 / (nx - 1) + vy ** 2 / (ny - 1))
+    return t, df, 2 * (1 - norm_cdf(abs(t)))
+
+
+def mann_whitney(x, y):
+    pool = sorted(x + y)
+    rank, ties = {}, 0
+    i = 0
+    while i < len(pool):
+        # находим группу одинаковых значений: им положен средний ранг
+        j = i
+        while j + 1 < len(pool) and pool[j + 1] == pool[i]:
+            j += 1
+        rank[pool[i]] = (i + j) / 2 + 1
+        g = j - i + 1
+        ties += g ** 3 - g          # поправка на связки
+        i = j + 1
+
+    nx, ny = len(x), len(y)
+    n = nx + ny
+    u = sum(rank[v] for v in x) - nx * (nx + 1) / 2
+    s = math.sqrt(nx * ny / 12 * ((n + 1) - ties / (n * (n - 1))))
+    z = (u - nx * ny / 2) / s
+    return u, z, 2 * (1 - norm_cdf(abs(z)))`;
+
+window.SH.designTools = `def norm_ppf(q):
+    """Квантиль нормального распределения: подбираем бинарным поиском."""
+    lo, hi = -10.0, 10.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if norm_cdf(mid) < q:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def group_size(p1, p2):
+    """Сколько человек нужно в каждой группе, чтобы различить p1 и p2."""
+    d = abs(p2 - p1)
+    pb = (p1 + p2) / 2          # объединённая доля при нулевой гипотезе
+    n = (norm_ppf(1 - ALPHA / 2) * math.sqrt(2 * pb * (1 - pb))
+         + norm_ppf(POWER) * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2))) ** 2 / d ** 2
+    return math.ceil(n)`;
+
+window.SH.projectTools = `def conversion_test(control, test):
+    """Возвращает доли, разницу, её стандартную ошибку, z и p-value."""
+    k1, m1 = int(control["converted"].sum()), len(control)
+    k2, m2 = int(test["converted"].sum()), len(test)
+    q1, q2 = k1 / m1, k2 / m2
+
+    # интервал строится по раздельным дисперсиям: он описывает разницу
+    se = math.sqrt(q1 * (1 - q1) / m1 + q2 * (1 - q2) / m2)
+    # критерий использует объединённую долю: он проверяет гипотезу равенства
+    qb = (k1 + k2) / (m1 + m2)
+    se0 = math.sqrt(qb * (1 - qb) * (1 / m1 + 1 / m2))
+    z = (q2 - q1) / se0
+    return (k1, m1, q1), (k2, m2, q2), q2 - q1, se, z, 2 * (1 - norm_cdf(abs(z)))
+
+
+def welch(x, y):
+    """Разница средних, её стандартная ошибка и двусторонний p-value."""
+    vx, vy = var(x) / len(x), var(y) / len(y)
+    s = math.sqrt(vx + vy)
+    stat = (mean(y) - mean(x)) / s
+    return mean(y) - mean(x), s, 2 * (1 - norm_cdf(abs(stat)))`;
