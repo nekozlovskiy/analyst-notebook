@@ -7,7 +7,7 @@ const base = path.resolve(__dirname, ".."), src = fs.readFileSync(path.join(base
 const ctx = { window: { CONTENT: {}, SH: {} } };
 vm.createContext(ctx);
 vm.runInContext(src.slice(src.indexOf("function esc("), src.indexOf("/* Перемешанные индексы")), ctx);
-for (const f of ["data.js", "content-core.js", "content-m1.js"]) vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), ctx);
+for (const f of ["data.js", "content-core.js", "content-m1.js", "content-m4.js"]) vm.runInContext(fs.readFileSync(path.join(base, f), "utf8"), ctx);
 for (const name of ["Engine", "Check", "SqlCases"]) {
   const start = src.indexOf("const " + name + " = {");
   if (start >= 0) vm.runInContext(src.slice(start, src.indexOf("\n};", start) + 3) + "\nthis." + name + " = " + name + ";", ctx);
@@ -37,8 +37,8 @@ ctx.Engine.sqlModule = { Database };
 let passed = 0, failed = 0;
 function test(name, fn) { try { fn(); passed++; console.log("✓ " + name); } catch (e) { failed++; console.error("✗ " + name + ": " + e.message); } }
 test("доступна проверка на отдельной базе", () => assert.equal(typeof ctx.SqlCases?.check, "function"));
-const selected = [["m1l1", 2], ["m1l9", 4], ["m1l9", 8]];
-test("в трёх задачах есть проверяемые варианты данных", () => {
+const selected = [["m1l1", 2], ["m1l9", 4], ["m1l9", 8], ["m4l2", 5]];
+test("у выбранных задач есть проверяемые варианты данных", () => {
   for (const [id, i] of selected) assert.ok(ctx.window.CONTENT[id].drills[i].sqlCases?.length >= 2, id + ":" + i);
 });
 if (ctx.SqlCases && !failed) {
@@ -51,6 +51,16 @@ if (ctx.SqlCases && !failed) {
     });
   }
   const orphan = ctx.window.CONTENT.m1l1.drills[2], neg = ctx.window.CONTENT.m1l9.drills[4], nul = ctx.window.CONTENT.m1l9.drills[8];
+  const funnel = ctx.window.CONTENT.m4l2.drills[5];
+  test("воронка проверяет порядок, повторную покупку и границу окна", () => {
+    const anyPurchaseInWindow = funnel.solution.replace("BETWEEN c.cart_day", "BETWEEN v.visit_day");
+    const first = S.check(anyPurchaseInWindow, funnel.solution, [funnel.sqlCases[0]]);
+    assert.equal(first.ok, false);
+    assert.deepEqual(Array.from(first.expected.values[0]), [221, 123, 32]);
+    const second = S.check("SELECT 220, 122, 32", funnel.solution, [funnel.sqlCases[1]]);
+    assert.equal(second.ok, false);
+    assert.deepEqual(Array.from(second.expected.values[0]), [222, 124, 33]);
+  });
   test("константа 0 совпадает на базе, но отвергается после появления сироты", () => {
     const r = S.check("SELECT 0 AS orphan_orders", orphan.solution, orphan.sqlCases);
     assert.equal(r.ok, false); assert.deepEqual(JSON.parse(JSON.stringify(r.expected.values)), [[1]]);
