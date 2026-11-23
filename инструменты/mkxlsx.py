@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Собирает delta-market.xlsx (урок 6.6), app-journal.xlsx (урок 4.7) и vilka.xlsx
-(модуль 7) из data.js и data-vilka.js.
+"""Собирает учебные книги из data.js, data-vilka.js и запроса модуля 8.
 
     python3 инструменты/mkxlsx.py           # записать файлы в корень сайта
     python3 инструменты/mkxlsx.py --check   # сверить с файлами в ветке
@@ -12,7 +11,7 @@ Excel, revenue — числом. Сверка идёт по
 распакованному содержимому листов, а не по байтам: zlib на разных
 системах сжимает по-разному.
 """
-import csv, datetime, io, pathlib, re, sys, zipfile
+import csv, datetime, io, pathlib, re, sqlite3, sys, zipfile
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
@@ -54,14 +53,36 @@ BOOKS = {
     ),
 }
 
+OPERATIONS = (
+    ("sales", (int, day, str, int, day), ((2, "yyyy-mm-dd"), (5, "yyyy-mm-dd"))),
+    ("costs", (int, int), ()),
+    ("raw_refunds", (str, int, day, int), ((3, "yyyy-mm-dd"),)),
+    ("plan", (str, int, int), ()),
+    ("ledger", (str, int), ()),
+)
 
-def build(sheets, src):
+
+def operation_sheets():
+    content = (ROOT / "content-m8.js").read_text(encoding="utf-8")
+    sources = re.search(r'  const sources = `(.*?)`;', content, re.S).group(1)
+    ordering = {"sales": "order_date, order_id", "costs": "order_id",
+                "raw_refunds": "refund_id", "plan": "month", "ledger": "month"}
+    db = sqlite3.connect(":memory:")
+    try:
+        db.executescript(re.search(r"\n  shopSQL: `(.*?)`", SRC, re.S).group(1))
+        for name, cast, fmts in OPERATIONS:
+            cur = db.execute(sources + "\nSELECT * FROM " + name + " ORDER BY " + ordering[name])
+            yield name, [[c[0] for c in cur.description], *cur.fetchall()], cast, fmts
+    finally:
+        db.close()
+
+
+def build(sheets):
     wb = Workbook()
     wb.properties.creator = "Тетрадь аналитика"
     wb.properties.created = wb.properties.modified = STAMP
     wb.remove(wb.active)
-    for name, key, cast, fmts in sheets:
-        data = rows(key, src)
+    for name, data, cast, fmts in sheets:
         ws = wb.create_sheet(name)
         ws.append(data[0])
         for c in ws[1]:
@@ -96,15 +117,19 @@ def parts(blob):
 
 if __name__ == "__main__":
     stale = []
-    for name, sheets in BOOKS.items():
-        # у «Вилки» свои orders и customers — ключи совпадают с data.js, источник задаёт книга
-        out, blob = ROOT / name, build(sheets, VILKA if name == "vilka.xlsx" else SRC)
+    for name in (*BOOKS, "operations.xlsx"):
+        if name == "operations.xlsx":
+            sheets = operation_sheets()
+        else:
+            src = VILKA if name == "vilka.xlsx" else SRC
+            sheets = ((sheet, rows(key, src), cast, fmts) for sheet, key, cast, fmts in BOOKS[name])
+        out, blob = ROOT / name, build(sheets)
         if "--check" in sys.argv:
             if not out.exists() or parts(out.read_bytes()) != parts(blob):
                 stale.append(name)
             else:
                 print("%s совпадает с данными" % name)
-        else:
+        elif not out.exists() or parts(out.read_bytes()) != parts(blob):
             out.write_bytes(blob)
             print("Готово: %s — %.0f КБ" % (name, out.stat().st_size / 1024))
     if stale:

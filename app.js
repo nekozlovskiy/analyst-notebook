@@ -704,7 +704,8 @@ const Offline = {
   /* Что докачать, чтобы курс открывался без интернета целиком. */
   files: function () {
     const own = ["content-m0.js", "content-m1.js", "content-m2.js", "content-m3.js",
-                 "content-m4.js", "content-m5.js", "content-m6.js", "content-m7.js", "data.js", "cheats.js", "delta-market.xlsx", "app-journal.xlsx", "vilka.xlsx", "data-taxi.js", "interview.js"]
+                 "content-m4.js", "content-m5.js", "content-m6.js", "content-m7.js", "content-m8.js", "data.js", "cheats.js",
+                 "delta-market.xlsx", "app-journal.xlsx", "vilka.xlsx", "operations.xlsx", "data-taxi.js", "interview.js"]
       /* шрифты — все наборы: в пути может попасться урок с α или ₽ */
       .concat([
         "bad-script-cyrillic", "bad-script-latin-ext", "bad-script-latin",
@@ -3019,16 +3020,16 @@ const Route = {
   wide: {
     w: 964, h: 250,
     at: { m0l1: [0, 10], m0l2: [0, 100], m1: [200, 10], m2: [200, 100], m3: [400, 100],
-          m4: [600, 100], m5: [600, 192], m6: [800, 100], m7: [800, 10] },
+          m4: [600, 100], m5: [600, 192], m6: [800, 100], m7: [800, 10], m8: [800, 192] },
     via: { "m1>m4": ["r", "t", "hv"], "m3>m5": ["b", "l", "vh"] },
     dflt: ["r", "l", "mid"]
   },
   tall: {
-    w: 368, h: 402,
+    w: 368, h: 486,
     at: { m0l1: [2, 10], m0l2: [202, 10], m1: [2, 94], m2: [202, 94], m3: [202, 178],
-          m4: [2, 262], m5: [202, 262], m6: [202, 346], m7: [2, 346] },
-    /* m6 справа, m7 слева: две самостоятельные ветки после модуля 4 */
-    via: { "m3>m4": ["l", "t", "hv"], "m4>m6": ["r", "l", "mid"] },
+          m4: [2, 262], m5: [202, 262], m6: [202, 346], m7: [2, 346], m8: [102, 430] },
+    /* Стрелка к m8 проходит в зазоре между m6 и m7. */
+    via: { "m3>m4": ["l", "t", "hv"], "m4>m6": ["r", "l", "mid"], "m4>m8": ["r", "t", "hv"] },
     dflt: ["b", "t", "mid"]
   },
 
@@ -3648,8 +3649,8 @@ const PLOT_PY = [
   "def _axes(ax):",
   "    lines = []",
   "    for l in ax.get_lines():",
-  "        xs = [_num(x) for x in l.get_xdata()]; ys = [_num(y) for y in l.get_ydata()]",
-  "        if len(ys) > 1: lines.append({'x': xs, 'y': ys})",
+  "        xs = [str(x) for x in l.get_xdata()]; ys = [_num(y) for y in l.get_ydata()]",
+  "        if len(ys): lines.append({'x': xs, 'y': ys})",
   "    bars = [{'x': float(p.get_x()), 'y': float(p.get_y()), 'w': float(p.get_width()), 'h': float(p.get_height())}",
   "            for p in ax.patches if isinstance(p, Rectangle)]",
   "    pts = 0",
@@ -3657,8 +3658,8 @@ const PLOT_PY = [
   "        try: pts += len(c.get_offsets())",
   "        except Exception: pass",
   "    return {'title': ax.get_title(), 'xlabel': ax.get_xlabel(), 'ylabel': ax.get_ylabel(),",
-  "            'xticks': [t.get_text() for t in ax.get_xticklabels()],",
-  "            'yticks': [t.get_text() for t in ax.get_yticklabels()],",
+  "            'xlabels': [[t.get_position()[0], t.get_text()] for t in ax.get_xticklabels()],",
+  "            'ylabels': [[t.get_position()[1], t.get_text()] for t in ax.get_yticklabels()],",
   "            'xlim': list(ax.get_xlim()), 'ylim': list(ax.get_ylim()),",
   "            'lines': lines, 'bars': bars, 'points': pts,",
   "            'pie': sum(1 for p in ax.patches if isinstance(p, Wedge))}",
@@ -4353,7 +4354,7 @@ const Check = {
       if (flat(xs) && !flat(ws)) return "barh";
       const byX = a.bars.slice().sort(function (p, q) { return p.x - q.x; });
       const touch = byX.every(function (b, i) { return i === 0 || Math.abs(byX[i - 1].x + byX[i - 1].w - b.x) < 1e-6 * Math.max(1, Math.abs(b.x)); });
-      return touch && flat(ws) && !flat(hs) && a.bars.length > 3 && !a.xticks.some(function (t) { return /[A-Za-zА-Яа-я]/.test(t); }) ? "hist" : "bar";
+      return touch && flat(ws) && !flat(hs) && a.bars.length > 3 && !a.xlabels.some(function (t) { return /[A-Za-zА-Яа-я]/.test(t[1]); }) ? "hist" : "bar";
     }
     if (a.pie) return "pie";
     if (a.lines.length) return "line";
@@ -4362,9 +4363,20 @@ const Check = {
   },
   plotValues: function (a, kind) {
     if (kind === "line") return a.lines[0].y;
-    if (kind === "barh") return a.bars.map(function (b) { return b.w; });
+    if (kind === "bar" || kind === "barh") return Check.plotBars(a, kind).map(function (b) { return b.value; });
     if (kind === "hist") return a.bars.slice().sort(function (p, q) { return p.x - q.x; }).map(function (b) { return b.h; });
     return a.bars.map(function (b) { return b.h; });
+  },
+  plotBars: function (a, kind) {
+    const horizontal = kind === "barh";
+    const labels = horizontal ? a.ylabels : a.xlabels;
+    const limits = horizontal ? a.ylim : a.xlim;
+    const direction = Math.sign(limits[1] - limits[0]);
+    return a.bars.map(function (b) {
+      const center = horizontal ? b.y + b.h / 2 : b.x + b.w / 2;
+      const tick = labels.find(function (t) { return Math.abs(t[0] - center) < 1e-6; });
+      return { center: center, label: tick ? tick[1].trim().toLowerCase() : "", value: horizontal ? b.w : b.h };
+    }).sort(function (p, q) { return direction * (p.center - q.center); });
   },
   plot: function (got, exp) {
     const KIND = { line: "линейный график", bar: "столбчатая диаграмма", barh: "горизонтальные столбцы",
@@ -4387,21 +4399,22 @@ const Check = {
         hint: gk === "pie" ? "Углы глаз сравнивает плохо: близкие доли на круге не различить. Горизонтальные столбцы: plt.barh(категории, значения)."
             : ek === "line" ? "Для динамики — plt.plot(x, y)." : ek === "barh" ? "Горизонтальные столбцы — plt.barh(категории, значения)."
             : ek === "hist" ? "Распределение — plt.hist(значения, bins=…)." : ek === "bar" ? "Столбцы — plt.bar(категории, значения)." : "" };
-      const gv = Check.plotValues(g, gk), ev = Check.plotValues(e, ek);
+      if (ek === "line" && g.lines.length !== e.lines.length) return { ok: false, why: where + "другое число линий",
+        hint: "Оставьте на каждой оси только ряд, который просят построить." };
+      const gv = Check.plotValues(g, ek), ev = Check.plotValues(e, ek);
       if (gv.length !== ev.length) return { ok: false,
         why: where + (ek === "line" ? "точек " : "столбцов ") + gv.length + ", а нужно " + ev.length,
         hint: ek === "hist" ? "Проверьте границы корзин: bins задаёт число или сами границы."
             : ek === "line" && gv.length === ev.length + 1 ? "Одна точка лишняя. Не попал ли на график последний месяц, который ещё не закончился? Его срезают: s.loc[:\"ГГГГ-ММ\"]."
             : "Проверьте, по каким строкам и как сгруппированы данные." };
-      /* столбцы, отсортированные в обратную сторону, — тоже сортировка */
-      const rev = gk === "bar" || gk === "barh" ? gv.slice().reverse() : null;
-      const eq = gv.every(function (v, j) { return same(v, ev[j]); }) ||
-                 (rev && rev.every(function (v, j) { return same(v, ev[j]); }));
+      const eq = gv.every(function (v, j) { return same(v, ev[j]); });
       if (!eq) {
         const gs = gv.slice().sort(function (x, y) { return x - y; }), es = ev.slice().sort(function (x, y) { return x - y; });
         if (gs.every(function (v, j) { return same(v, es[j]); })) return { ok: false,
           why: where + "данные верные, но в другом порядке",
-          hint: ek === "line" ? "Точки линии должны идти по времени: отсортируйте по дате." : "Отсортируйте категории по величине — у каналов нет естественного порядка. У barh первая строка рисуется внизу." };
+          hint: ek === "line" ? "Точки линии должны идти по времени: отсортируйте по дате."
+            : ek === "hist" ? "Проверьте, сколько заказов попадает в каждый интервал слева направо."
+            : "Сверьте порядок столбцов с условием. У barh первая строка по умолчанию рисуется внизу." };
         const ratio = gv.map(function (v, j) { return ev[j] ? v / ev[j] : NaN; });
         const flat = ratio.every(function (r) { return isFinite(r) && Math.abs(r / ratio[0] - 1) < 0.01; });
         return { ok: false, why: where + "данные на графике не те",
@@ -4410,6 +4423,31 @@ const Check = {
                 flat && Math.abs(ratio[0] - 1000) < 10 ? "Значения в 1000 раз больше: нужны тысячи рублей — разделите на 1000." :
                 flat && Math.abs(ratio[0] - 0.001) < 1e-5 ? "Значения в 1000 раз меньше: здесь нужны рубли, а не тысячи." :
                 "Сверьте, что именно рисуете: тот ли столбец, те ли строки (только оплаченные?), та ли группировка." };
+      }
+      if (ek === "line") {
+        /* Все линейные задания урока сравнивают месяцы, включая даты pandas. */
+        const period = function (x) {
+          const month = /^(\d{4}-\d{2})(?:-\d{2}(?:[ T].*)?)?$/.exec(x);
+          return month ? month[1] : x;
+        };
+        if (!g.lines[0].x.every(function (x, j) { return period(x) === period(e.lines[0].x[j]); }))
+          return { ok: false, why: where + "периоды по оси X не сошлись",
+            hint: "Передайте месяцы по оси X вместе со значениями, например plt.plot(ряд.index, ряд.values)." };
+      }
+      if (ek === "bar" || ek === "barh") {
+        const labels = Check.plotBars(e, ek).map(function (b) { return b.label; });
+        if (!Check.plotBars(g, ek).every(function (b, j) { return b.label === labels[j]; }))
+          return { ok: false, why: where + "подписи категорий не сошлись",
+            hint: "Передайте названия и значения из одного отсортированного ряда." };
+      }
+      if (ek === "hist") {
+        const edges = function (a) {
+          return a.bars.slice().sort(function (p, q) { return p.x - q.x; }).flatMap(function (b) { return [b.x, b.x + b.w]; });
+        };
+        const want = edges(e);
+        if (!edges(g).every(function (x, j) { return Math.abs(x - want[j]) < 1e-6; }))
+          return { ok: false, why: where + "границы интервалов не сошлись",
+            hint: "Передайте в bins сами границы из условия." };
       }
       if (e.xlabel && !g.xlabel) return { ok: false, why: where + "не подписана ось X", hint: "plt.xlabel(\"…\") — что по оси и в каких единицах." };
       if (e.ylabel && !g.ylabel) return { ok: false, why: where + "не подписана ось Y", hint: "plt.ylabel(\"…\") — единицы прямо на оси: рубли, заказы, процент." };
@@ -4423,6 +4461,11 @@ const Check = {
          вывод стоит в общем заголовке фигуры: его и оцениваем */
       if (ea.length > 1 && ea[i].sup && !ga[i].sup) return { ok: false, why: "нет общего заголовка у фигуры",
         hint: "fig.suptitle(\"…\") — один вывод на всю сетку; у маленьких графиков заголовки остаются названиями." };
+      if (ea.length > 1 && g.title.trim().toLowerCase() !== e.title.trim().toLowerCase())
+        return { ok: false, why: where + "название канала не сошлось", hint: "Подпишите каждый график названием его канала." };
+      if (ea.length > 1 && !g.ylim.every(function (v, j) { return Math.abs(v - ga[0].a.ylim[j]) < 1e-6; }))
+        return { ok: false, why: where + "масштаб оси Y отличается",
+          hint: "Используйте sharey=True или задайте одинаковые пределы оси Y." };
       const concl = ea.length > 1 ? ga[i].sup : gt;
       if (concl && !note && concl.split(/\s+/).length <= 4 && !/\d/.test(concl) && !/(ет|ит|ут|ют|ат|ят|ла|ло|ли|ся|сь|ёт)\b/i.test(concl)) {
         note = "Заголовок «" + concl + "» похож на тему. Перепишите его выводом: что должен понять читатель, даже не глядя на график.";
@@ -7047,9 +7090,11 @@ const Drills = {
           return;
         }
         if (py) {
-          const c = Check.numbers(r.out, want.out);
+          const c = d.stdout ? Check.python(r.out, want.out) : Check.numbers(r.out, want.out);
           if (c.ok) { solve(); status("ok", "Решено", c.total ? "Все " + c.total + " " + plural(c.total, "число", "числа", "чисел") + " из разбора нашлись в вашем выводе." : "Вывод сошёлся с разбором."); }
-          else status("bad", "Пока не сходится", c.why + " Разбор уже открыт ниже — но сначала попробуйте найти расхождение сами.");
+          else status("bad", "Пока не сходится", esc(c.why) + "." +
+            (c.hint ? '<br><span class="s-hint">' + esc(c.hint) + "</span>" : "") +
+            " Разбор уже открыт ниже — попробуйте найти расхождение сами.");
           return;
         }
         const c = Check.drillSql(r.res, want.exp, r.code);
@@ -7529,16 +7574,24 @@ function renderLesson(app, id) {
   /* ---------- запуск ---------- */
   let lastSqlResult = null;
   let lastStdout = "", lastFigs = [];
+  let lastRunCode = null;
 
   async function run() {
+    const runBtn = $("#runBtn");
+    if (runBtn.disabled) return;
     const epoch = CodeReview.epoch();
     clearStatus();
     const code = getCode();
+    lastRunCode = null;
+    lastSqlResult = null;
+    lastStdout = "";
+    lastFigs = [];
     if (!code.trim()) { setStatus("warn", "Пусто", "Сначала напишите код."); return; }
-    $("#runBtn").disabled = true;
+    runBtn.disabled = true;
     try {
       if (L.kind === "sql") await runSQL(code, epoch);
       else await runPython(code, epoch);
+      if (CodeReview.current(epoch, main)) lastRunCode = code;
     } catch (e) {
       if (!CodeReview.current(epoch, main)) return;
       /* сюда попадает только незагрузившийся движок: ошибки кода разбирают runSQL и runPython */
@@ -7717,6 +7770,10 @@ function renderLesson(app, id) {
     clearStatus();
     if (isSheet) return checkNums();
     if (isText) return checkText();
+    if (lastRunCode !== null && lastRunCode !== getCode()) {
+      setStatus("warn", "Код изменился после последнего запуска", "Запустите текущий код, затем проверьте результат.");
+      return;
+    }
     if (L.kind === "sql") return checkSQL();
     if (C.expected.plot) return checkPlot();
     return checkPy();
@@ -7740,10 +7797,19 @@ function renderLesson(app, id) {
       setStatus("warn", "Сначала запустите код", "Нажмите «Запустить код», потом «Проверить».");
       return;
     }
+    const epoch = CodeReview.epoch(), code = lastRunCode, figs = lastFigs;
     let exp;
     try { exp = await solutionFigs(); }
-    catch (e) { setStatus("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз."); return; }
-    const r = Check.plot(lastFigs, exp);
+    catch (e) {
+      if (CodeReview.current(epoch, main)) setStatus("bad", "Эталон не посчитался", "Похоже, пропал интернет. Попробуйте ещё раз.");
+      return;
+    }
+    if (!CodeReview.current(epoch, main) || figs !== lastFigs) return;
+    if (code !== getCode()) {
+      setStatus("warn", "Код изменился после последнего запуска", "Запустите текущий код, затем проверьте результат.");
+      return;
+    }
+    const r = Check.plot(figs, exp);
     if (r.ok) pass(r.note ? "Тип, данные и подписи сошлись с эталоном.<br><span class=\"s-hint\">" + esc(r.note) + "</span>"
                           : "Тип графика, данные, подписи осей и заголовок сошлись с эталоном.");
     else fail(r.why, r.hint ? '<br><span class="s-hint">' + esc(r.hint) + "</span>" : "");

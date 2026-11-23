@@ -36,13 +36,35 @@ function scan(value, at) {
       const l = lessons.get(match[1]);
       if (!l) { bad(at + ": ссылка на отсутствующий урок " + match[1]); continue; }
       const label = match[2].replace(/<[^>]*>/g, "");
-      const nums = [...label.matchAll(/\b([0-7]\.\d{1,2})\b/g)].map(x => x[1]);
+      const nums = [...label.matchAll(/\b(\d+\.\d{1,2})\b/g)].map(x => x[1]);
       if (nums.length === 1 && nums[0] !== l.num) bad(at + ": подпись " + nums[0] + " ведёт в " + l.num);
     }
   } else if (Array.isArray(value)) value.forEach((x, i) => scan(x, at + "[" + i + "]"));
   else if (value && typeof value === "object") Object.entries(value).forEach(([k, x]) => scan(x, at + "." + k));
 }
 Object.entries(CONTENT).forEach(([id, C]) => scan(C, id));
+const hasText = value => typeof value === "string" && value.trim().length > 0;
+let tasks = 0, questions = 0;
+for (const [id, C] of Object.entries(CONTENT)) {
+  if (!lessons.has(id)) bad(id + ": содержание без урока в карте курса");
+  if (!C.steps) {
+    tasks++;
+    if (!hasText(C.ticket?.body) || !C.hints?.length || !C.hints.every(hasText))
+      bad(id + ": основной задаче нужны условие и подсказки");
+  }
+  for (const [i, drill] of (C.drills || []).entries()) {
+    tasks++;
+    if (![drill.title, drill.body, drill.solution].every(hasText))
+      bad(id + ": тренажёр " + (i + 1) + " без названия, условия или разбора");
+  }
+  for (const [i, q] of (C.quiz || []).entries()) {
+    questions++;
+    const validOptions = Array.isArray(q.opts) && q.opts.length >= 2 && q.opts.every(hasText) &&
+      new Set(q.opts.map(x => x.trim())).size === q.opts.length;
+    if (!hasText(q.q) || !hasText(q.why) || !validOptions || !Number.isInteger(q.right) || !q.opts[q.right])
+      bad(id + ": вопрос " + (i + 1) + " без условия, уникальных вариантов, верного ответа или разбора");
+  }
+}
 for (const b of COURSE.entry) for (const x of b.qs) {
   const [id, n] = x.ref ? x.ref.split(":") : [x.lesson, null];
   if (!lessons.has(id) || (n !== null && !CONTENT[id]?.quiz?.[+n])) bad("Входной тест: нет вопроса " + (x.ref || id));
@@ -56,5 +78,6 @@ for (const id of ["m3l9", "m3l5", "m3l8"]) {
   if (lessons.get(id)?.fast !== false) bad(id + ": углубление снова включено в первый проход A/B");
 }
 console.log("Уроков: " + lessons.size + ", модулей: " + modules.size + ", внутренних ссылок: " + links + ".");
+console.log("Условия и разборы: " + tasks + " задач, " + questions + " вопросов самопроверки.");
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Зависимости, ссылки, входной тест и первый проход A/B согласованы.");
